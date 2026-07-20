@@ -1,0 +1,150 @@
+Segredos: 
+Senha Projeto Supabase: CVp9dmdQ57p5BD2u
+
+========================================
+
+Prompt: 
+
+Criar um aplicativo de sommelieria de cervejas, vinhos, drinks e destilados. Servirá para que os usuários possa catalogar as bebidas degustadas, com foto e dados de cada uma.
+
+A. Definições Gerais
+1. Nome do projeto e do sistema: Toastrack
+2. Slogam: Seu aplicativo completo de Sommelieria
+3. Pasta de Fontes: C:\Claude\Toastrack
+4. Repositório GitHub: https://github.com/cribeirox7i/toastrack
+5. Projeto Supabase: https://supabase.com/dashboard/project/ngcsfrhxivipkabsised
+
+B. Definições técnicas:
+1. Linguagem de front: TypeScript, React com o framework Next.js e Tailwind CSS
+2. Linguagem de back-end: Rust
+2. Hospedagem (front e back): GitHub Pages
+3. Banco de dados: Supabase
+4. Armazenamento de imagens de perfil e imagens gerais da aplicação: Supabase Storage
+
+C. Segurança e Acesso
+1. App deve ter tela de login com e-mail e senha. Opção de ocultar e exibir senha digitada.
+2. Senha deve ter complexidade mínima (8 caracteres, letra maiúscula, letra minúscula, número e caracter especial)
+3. Deve ter duplo fator de autenticação, com token por e-mail;
+4. Deve ter opção de cadastro (Criar Conta), para usuários não cadastrados;
+5. Deve ter opção de Esqueci Minha Senha, com envio de e-mail para o e-mail cadastrado.
+6. Usuário terá um campo de status (ativo / inativo).
+7. Todos os acessos e modificações devem ser logados em tabela de log.
+8. Deve manter a seção logada por 15 dias sem acesso. Após isso, logout.
+
+D. Definições de usabilidade
+1. Criar um dashboard na tela inicial contendo estatísticas sobre quantidade geral de cervejas, vinhos, drinks e destilados, e quantidade por categoria;
+2. Criar um pequeno carrossel de 3 páginas com Destaque do Dia, onde vai aparecer uma cerveja, um vinho e um drink ou destilado cadastrados, randomicamente.
+3. Criar menus principais (barra inferior): Home, Cervejas, Vinhos, Drinks e Destilados.
+4. Criar telas de login e acesso conforme descrito na seção C. Segurança e Acesso
+5. As telas de listagem de Cervejas, Vinhos e Drinks devem ter 3 opções de vizualização (deck, tabela e galeria).
+6. Deve ter opções de inclusão de itens, exclusão, edição, e duplicação de registro.
+7. Sistema deve ser multi-idioma, com seletor (espanhol, inglês e português)
+8. Deve haver gestão de perfil. Dentro do perfil, opção de troca senha, seleção de idiomas e seleção de perfil de cores (paleta verde, paleta azul, paleta vermelha, paleta laranja, paleta amarela, dark-mode, light-mode).
+9. Na gestão de perfil, opção de nome amigável de usuário;
+10. Na gestão de perfil, opção de foto de perfil;
+11. Na gestão de perfil, mostrar e-mail associado à conta.
+
+E. Definições de tabelas de dados (abas Google Sheets)
+ABA (TABELA) - USER
+FUNÇÃO - Tabela de usuários
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+user_id - ID do registro - Autoincrement - N - N
+user_nome - Nome do usuário - Texto Livre - S - S
+user_mail - Nome do usuário - E-mail - S - S
+user_pwd - Senha do usuário - Hash - S - S
+user_img - Foto do usuário - Foto - S - S
+user_idioma - Idioma do usuário - Enum (PT, EN, ES) - S - S
+user_paleta - Paleta de Cores Selecionada - Enum (Verde, Vermelho, Amarelo, Azul, Roxo, Rosa) - S - S
+user_modo - Modo de fundo (light ou dark) - Enum (light ou dark) - S - S
+user_url_img - URL / ID da pasta de imagens - URL / ID - N - N
+user_status - Status do usuário - Enum (S/N) - N - N
+user_ult_login - Data do último login - Data - N - N
+
+ABA (TABELA) - RELAC
+FUNÇÃO - Relacionamento entre usuários (seguidores)
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+relac_id - ID do registro - Autoincrement - N - N
+user_id_seguido - ID do usuário seguido - Numero - N - N
+user_id_seguidor - ID do usuário seguidor - Numero - N - N
+
+ABA (TABELA) - BEER
+FUNÇÃO - Tabela de cervejas
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+beer_id - ID do registro - Autoincrement - N - N
+beer_nome - Nome - Texto Livre - S - S
+beer_produtor - Nome do Produtor - Texto Livre - S - S
+pais_id - Pais do Produor (join com aba LIST_PAISES pelo campo de mesmo nome) - Drop-down - S - S
+beer_ibu - IBU - Numero - S - S
+beer_abv - ABV - Numero - S - S
+beer_nota - Nota - Estrelas (1 a 5, escala 0,5) - S - S
+beer_estilo_livre - Estilo Livre - Texto Livre - S - S
+bjcp21_id - Estilo BJCP  (join com aba LIST_BJCP_21 pelo campo de mesmo nome) - Enum (S/N) - S - S
+beer_data - Data de Degustação - Data - S - S
+beer_img_nome - Nome/ID do arquivo de imagem - Imagem - S - S
+beer_img_url - URL do arquivo de imagem - URL - N - N
+user_id - ID do usuário dono do registro (usuário logado) - Numero - N - N
+
+ABA (TABELA) - WINE
+FUNÇÃO - Tabela de vinhos
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+wine_id - ID do registro - Autoincrement - N - N
+wine_nome - Nome - Texto Livre - S - S
+wine_safra - Ano da Safra - Numero - S - S
+wine_cor - Cor do Vinho - Enum (Tinto, Branco, Rosé, Verde, Laranja) - S - S
+wine_tipo - Tipo do Vinho - Enum (Seco, Semi-Seco, Suave, Brut) - S - S
+wine_produtor - Nome do Produtor - Texto Livre - S - S
+pais_id - Pais do Produor (join com aba LIST_PAISES pelo campo de mesmo nome) - Drop-down - S - S
+wine_regiao - Região do Produtor - Texto Livre - S - S
+wine_uva - Uvas do Vinho - Texto Livre - S - S
+wine_abv - ABV - Numero - S - S
+wine_nota - Nota - Estrelas (1 a 5, escala 0,5) - S - S
+wine_data_degustacao - Data de Degustação - Data - S - S
+wine_img_nome - Nome/ID do arquivo de imagem - Imagem - S - S
+wine_img_url - URL do arquivo de imagem - URL - N - N
+user_id - ID do usuário dono do registro (usuário logado) - Numero - N - N
+
+ABA (TABELA) - DEST
+FUNÇÃO - Tabela de destilados
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+dest_id - ID do registro - Autoincrement - N - N
+dest_nome - Nome - Texto Livre - S - S
+dest_tipo - Tipo de Destilado - Enum (Cachaça, Vodka, Gin, Whisky, Rum, Tequila, Brandy, Pisco, Shochu, Saque, Vermute, Bitter) - S - S
+dest_safra - Ano da Safra - Numero - S - S
+dest_produtor - Nome do Produtor - Texto Livre - S - S
+pais_id - Pais do Produor (join com aba LIST_PAISES pelo campo de mesmo nome) - Drop-down - S - S
+dest_regiao - Região do Produtor - Texto Livre - S - S
+dest_nota - ABV - Numero - S - S
+dest_data_degustacao - Nota - Estrelas (1 a 5, escala 0,5) - S - S
+dest_img_nome - Data de Degustação - Data - S - S
+dest_img_url - Nome/ID do arquivo de imagem - Imagem - S - S
+user_id - URL do arquivo de imagem - URL - N - N
+user_id - ID do usuário dono do registro (usuário logado) - Numero - N - N
+
+ABA (TABELA) - DRINK
+FUNÇÃO - Tabela de drinks
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+drink_id - ID do registro - Autoincrement - N - N
+drink_nome - Nome - Texto Livre - S - S
+drink_produtor - Nome do Produtor - Texto Livre - S - S
+pais_id - Pais do Produor (join com aba LIST_PAISES pelo campo de mesmo nome) - Drop-down - S - S
+drink_regiao - Região do Produtor - Texto Livre - S - S
+drink_abv - ABV - Numero - S - S
+drink_nota - Nota - Estrelas (1 a 5, escala 0,5) - S - S
+drink_data_degustacao - Data de Degustação - Data - S - S
+drink_img_nome - Nome/ID do arquivo de imagem - Imagem - S - S
+drink_img_url - URL do arquivo de imagem - URL - N - N
+user_id - ID do usuário dono do registro (usuário logado) - Numero - N - N
+
+ABA (TABELA) - LIST_PAIS
+FUNÇÃO - Listagem de Paises (sem tela, lista interna)
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+pais_id - ID do registro - Autoincrement - N - N
+pais_nome - Nome do País - Texto Livre - N - N
+pais_img - Imagem da Bandeira do Pais - Imagem - N - N
+
+ABA (TABELA) - list_bjcp_21
+FUNÇÃO - Listagem BJCP (sem tela, lista interna)
+CAMPO - FUNÇÃO - TIPO / FORMATO - EDITÁVEL - VISIVEL
+bjcp21_id - ID do registro - Autoincrement - N - N
+bjcp21_cod - Código BJCP - Numero - N - N
+bjcp21_subestilo - Nome do Estilo Detalhado BJCP - Texto Livre - N - N

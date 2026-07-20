@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <style>
+    @keyframes toastIn { from { opacity:0; transform: translate(-50%, 10px); } to { opacity:1; transform: translate(-50%, 0); } }
+    * { box-sizing: border-box; }
+    html, body { margin:0; overflow-x:hidden; max-width:100%; }
+    body { font-family: 'Manrope', sans-serif; -webkit-font-smoothing:antialiased; }
+    input, select, textarea, button { font-family: 'Manrope', sans-serif; }
+    ::-webkit-scrollbar { width: 0px; height: 0px; }
+  </style>
+</helmet>
+
+<div style="{{ appShellStyle }}">
+<div style="{{ frameStyle }}">
+
+  <!-- DEV/PREVIEW ONLY: force mobile/desktop layout regardless of actual window width -->
+  <div style="{{ previewSwitcherStyle }}">
+    <sc-for list="{{ previewSwitcherOptions }}" as="pv" hint-placeholder-count="3">
+      <button onClick="{{ pv.onClick }}" style="{{ pv.style }}">{{ pv.label }}</button>
+    </sc-for>
+  </div>
+
+  <!-- ===================== AUTH SCREENS ===================== -->
+  <sc-if value="{{ isAuthScreen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ authWrapStyle }}">
+      <div style="{{ authCardStyle }}">
+        <div style="display:flex; flex-direction:column; align-items:center; gap:6px; margin-bottom:28px;">
+          <div style="{{ logoDotStyle }}"></div>
+          <div style="font-size:22px; font-weight:800; letter-spacing:-0.02em; color:{{ theme.text }};">Toastrack</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }};">{{ t.tagline }}</div>
+        </div>
+
+        <!-- LOGIN -->
+        <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:18px; font-weight:700; color:{{ theme.text }}; margin-bottom:4px;">{{ t.welcomeBack }}</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-bottom:20px;">{{ t.loginSubtitle }}</div>
+          <label style="{{ fieldLabelStyle }}">{{ t.email }}</label>
+          <input type="email" value="{{ form.email }}" onChange="{{ onEmailChange }}" placeholder="voce@email.com" style="{{ inputStyle }}">
+          <label style="{{ fieldLabelStyle }}">{{ t.password }}</label>
+          <div style="position:relative;">
+            <input type="{{ passwordInputType }}" value="{{ form.password }}" onChange="{{ onPasswordChange }}" placeholder="••••••••" style="{{ inputStyle }}">
+            <button onClick="{{ toggleShowPassword }}" style="{{ eyeButtonStyle }}">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ eyeIconPath }}"></path></svg>
+            </button>
+          </div>
+          <sc-if value="{{ authError }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ errorTextStyle }}">{{ authError }}</div>
+          </sc-if>
+          <button onClick="{{ doLogin }}" style="{{ primaryButtonStyle }}">{{ t.enter }}</button>
+          <div style="display:flex; justify-content:space-between; margin-top:14px;">
+            <button onClick="{{ goToForgot }}" style="{{ linkButtonStyle }}">{{ t.forgotPassword }}</button>
+            <button onClick="{{ goToSignup }}" style="{{ linkButtonStyle }}">{{ t.createAccount }}</button>
+          </div>
+          <div style="{{ demoHintStyle }}">{{ t.demoHint }}</div>
+        </sc-if>
+
+        <!-- SIGNUP -->
+        <sc-if value="{{ isSignup }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:18px; font-weight:700; color:{{ theme.text }}; margin-bottom:4px;">{{ t.createYourAccount }}</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-bottom:20px;">{{ t.signupSubtitle }}</div>
+          <label style="{{ fieldLabelStyle }}">{{ t.friendlyName }}</label>
+          <input value="{{ form.name }}" onChange="{{ onNameChange }}" placeholder="Ex: Ana" style="{{ inputStyle }}">
+          <label style="{{ fieldLabelStyle }}">{{ t.email }}</label>
+          <input type="email" value="{{ form.email }}" onChange="{{ onEmailChange }}" placeholder="voce@email.com" style="{{ inputStyle }}">
+          <label style="{{ fieldLabelStyle }}">{{ t.password }}</label>
+          <div style="position:relative;">
+            <input type="{{ passwordInputType }}" value="{{ form.password }}" onChange="{{ onPasswordChange }}" placeholder="••••••••" style="{{ inputStyle }}">
+            <button onClick="{{ toggleShowPassword }}" style="{{ eyeButtonStyle }}">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ eyeIconPath }}"></path></svg>
+            </button>
+          </div>
+          <div style="{{ hintTextStyle }}">{{ t.passwordRequirements }}</div>
+          <sc-if value="{{ authError }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ errorTextStyle }}">{{ authError }}</div>
+          </sc-if>
+          <button onClick="{{ doSignup }}" style="{{ primaryButtonStyle }}">{{ t.createAccount }}</button>
+          <div style="text-align:center; margin-top:14px;">
+            <button onClick="{{ goToLogin }}" style="{{ linkButtonStyle }}">{{ t.alreadyHaveAccount }}</button>
+          </div>
+        </sc-if>
+
+        <!-- FORGOT PASSWORD -->
+        <sc-if value="{{ isForgot }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:18px; font-weight:700; color:{{ theme.text }}; margin-bottom:4px;">{{ t.forgotPassword }}</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-bottom:20px;">{{ t.forgotSubtitle }}</div>
+          <sc-if value="{{ forgotSent }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ successBoxStyle }}">{{ t.resetSent }}</div>
+          </sc-if>
+          <label style="{{ fieldLabelStyle }}">{{ t.email }}</label>
+          <input type="email" value="{{ form.email }}" onChange="{{ onEmailChange }}" placeholder="voce@email.com" style="{{ inputStyle }}">
+          <button onClick="{{ doForgot }}" style="{{ primaryButtonStyle }}">{{ t.sendLink }}</button>
+          <div style="text-align:center; margin-top:14px;">
+            <button onClick="{{ goToLogin }}" style="{{ linkButtonStyle }}">{{ t.backToLogin }}</button>
+          </div>
+        </sc-if>
+
+        <!-- 2FA -->
+        <sc-if value="{{ isVerify }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:18px; font-weight:700; color:{{ theme.text }}; margin-bottom:4px;">{{ t.twoFactorTitle }}</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-bottom:6px;">{{ t.twoFactorSubtitle }}</div>
+          <div style="{{ successBoxStyle }}">{{ t.codeSentTo }} {{ form.email }} — <b>{{ mockCode }}</b></div>
+          <label style="{{ fieldLabelStyle }}">{{ t.code }}</label>
+          
+          <sc-if value="{{ authError }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ errorTextStyle }}">{{ authError }}</div>
+          </sc-if>
+          
+          <input value="{{ form.code }}" onChange="{{ onCodeChange }}" placeholder="000000" maxlength="6" style="{{ codeInputStyle }}"><button onClick="{{ doVerify }}" style="{{ primaryButtonStyle }}">{{ t.verify }}</button><div style="text-align:center; margin-top:14px;">
+            <button onClick="{{ resendCode }}" style="{{ linkButtonStyle }}">{{ t.resendCode }}</button>
+          </div>
+        </sc-if>
+
+        <!-- INACTIVE NOTICE -->
+        <sc-if value="{{ isInactiveNotice }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:18px; font-weight:700; color:{{ theme.text }}; margin-bottom:4px;">{{ t.pendingActivation }}</div>
+          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-bottom:20px; line-height:1.5;">{{ t.pendingActivationDesc }}</div>
+          <button onClick="{{ goToLogin }}" style="{{ primaryButtonStyle }}">{{ t.backToLogin }}</button>
+        </sc-if>
+
+      </div>
+      <div style="{{ langSwitchWrapStyle }}">
+        <sc-for list="{{ langOptions }}" as="lo" hint-placeholder-count="3">
+          <button onClick="{{ lo.onClick }}" style="{{ lo.style }}">{{ lo.label }}</button>
+        </sc-for>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <sc-if value="{{ isAppScreen }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ mainWrapStyle }}">
+
+      <!-- DESKTOP TOP NAV (site-style header, replaces bottom tab bar) -->
+      <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ topNavOuterStyle }}">
+          <div style="{{ topNavInnerStyle }}">
+            <div style="{{ topNavBrandStyle }}" onClick="{{ goHome }}">
+              <div style="{{ topNavLogoDotStyle }}"></div>
+              <div style="{{ topNavWordmarkStyle }}">Toastrack</div>
+            </div>
+            <div style="{{ topNavLinksWrapStyle }}">
+              <sc-for list="{{ topNavItems }}" as="nav" hint-placeholder-count="5">
+                <button onClick="{{ nav.onClick }}" style="{{ nav.style }}">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ nav.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ nav.iconPath }}"></path></svg>
+                  {{ nav.label }}
+                </button>
+              </sc-for>
+            </div>
+            <div style="{{ accountMenuWrapStyle }}">
+              <button onClick="{{ toggleAccountMenu }}" style="{{ headerAvatarStyle }}">{{ avatarInitials }}</button>
+              <sc-if value="{{ accountMenuOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ accountMenuOverlayStyle }}" onClick="{{ closeAccountMenu }}"></div>
+                <div style="{{ accountMenuStyle }}">
+                  <sc-for list="{{ accountMenuItems }}" as="am" hint-placeholder-count="3">
+                    <button onClick="{{ am.onClick }}" style="{{ am.style }}">
+                      <sc-if value="{{ am.iconPath }}" hint-placeholder-val="{{ false }}">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="{{ am.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ am.iconPath }}"></path></svg>
+                      </sc-if>
+                      {{ am.label }}
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- HEADER: search mode (home/list) -->
+      <sc-if value="{{ isSearchHeader }}" hint-placeholder-val="{{ true }}">
+        <div style="{{ headerSearchStyle }}">
+          <input value="{{ searchQuery }}" onChange="{{ onSearchChange }}" placeholder="{{ t.searchPlaceholder }}" style="{{ searchInputStyle }}">
+          <select value="{{ searchField }}" onChange="{{ onSearchFieldChange }}" style="{{ searchFieldSelectStyle }}">
+            <sc-for list="{{ searchFieldOptions }}" as="sf" hint-placeholder-count="5">
+              <option value="{{ sf.value }}">{{ sf.label }}</option>
+            </sc-for>
+          </select>
+          <sc-if value="{{ isMobileShell }}" hint-placeholder-val="{{ true }}">
+            <div style="{{ accountMenuWrapStyle }}">
+              <button onClick="{{ toggleAccountMenu }}" style="{{ headerAvatarStyle }}">{{ avatarInitials }}</button>
+              <sc-if value="{{ accountMenuOpen }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ accountMenuOverlayStyle }}" onClick="{{ closeAccountMenu }}"></div>
+                <div style="{{ accountMenuStyle }}">
+                  <sc-for list="{{ accountMenuItems }}" as="am" hint-placeholder-count="3">
+                    <button onClick="{{ am.onClick }}" style="{{ am.style }}">
+                      <sc-if value="{{ am.iconPath }}" hint-placeholder-val="{{ false }}">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="{{ am.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ am.iconPath }}"></path></svg>
+                      </sc-if>
+                      {{ am.label }}
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+      <!-- HEADER: back mode (detail/stats/profile) -->
+      <sc-if value="{{ isBackHeader }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ headerBackStyle }}">
+          <button onClick="{{ backButtonHandler }}" style="{{ backLinkStyle }}">← {{ t.back }}</button>
+          <div style="font-size:16px; font-weight:800; color:{{ theme.text }};">{{ headerTitle }}</div>
+          <sc-if value="{{ isEditing }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ saveDraft }}" style="{{ saveLinkStyle }}">{{ t.save }}</button>
+          </sc-if>
+          <sc-if value="{{ isNotEditingBackHeader }}" hint-placeholder-val="{{ true }}">
+            <div style="width:60px;"></div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ toastStyle }}">{{ toast }}</div>
+      </sc-if>
+
+      <div style="{{ scrollAreaStyle }}">
+
+        <!-- HOME / DASHBOARD -->
+        <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+
+          <!-- GLOBAL SEARCH RESULTS -->
+          <sc-if value="{{ isSearching }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:16px 20px;">
+              <div style="{{ itemCountStyle }}">{{ searchResultsCountLabel }}</div>
+              <sc-for list="{{ searchResults }}" as="item" hint-placeholder-count="4">
+                <div style="{{ item.searchRowStyle }}" onClick="{{ item.onOpen }}">
+                  <div style="{{ item.thumbStyle }}">{{ item.thumbLabel }}</div>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:11px; font-weight:700; color:{{ theme.accent }}; text-transform:uppercase;">{{ item.typeLabel }}</div>
+                    <div style="font-size:14px; font-weight:700; color:{{ theme.text }}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.name }}</div>
+                    <div style="font-size:12px; color:{{ theme.textMuted }};">{{ item.manufacturer }}</div>
+                  </div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ isSearchEmpty }}" hint-placeholder-val="{{ false }}">
+                <div style="padding:40px 0; text-align:center; color:{{ theme.textMuted }}; font-size:14px;">{{ t.noResults }}</div>
+              </sc-if>
+            </div>
+          </sc-if>
+
+          <!-- NORMAL DASHBOARD -->
+          <sc-if value="{{ isNotSearching }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:16px 20px 8px;">
+              <div style="{{ sectionLabelStyle }}">{{ t.featuredToday }}</div>
+              <div style="{{ carouselOuterStyle }}">
+                <sc-for list="{{ featuredSlides }}" as="slide" hint-placeholder-count="3">
+                  <sc-if value="{{ slide.active }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ slide.cardStyle }}">
+                      <div style="{{ slide.bgImageStyle }}"></div>
+                      <div style="{{ slide.scrimStyle }}"></div>
+                      <div style="{{ slide.contentRowStyle }}">
+                        <div style="{{ slide.photoStyle }}">{{ slide.imageLabel }}</div>
+                        <div style="{{ slide.textWrapStyle }}">
+                          <div style="font-size:11px; font-weight:700; color:{{ theme.accent }}; text-transform:uppercase; letter-spacing:0.05em;">{{ slide.typeLabel }}</div>
+                          <div style="font-size:19px; font-weight:800; color:{{ theme.text }}; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ slide.item.name }}</div>
+                          <div style="font-size:13px; color:{{ theme.textMuted }}; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ slide.item.manufacturer }} · {{ slide.item.category }}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </sc-if>
+                </sc-for>
+                <div style="{{ dotsRowStyle }}">
+                  <sc-for list="{{ featuredSlides }}" as="slide" hint-placeholder-count="3">
+                    <button onClick="{{ slide.onDot }}" style="{{ slide.dotStyle }}"></button>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:20px 20px 40px;">
+              <div style="{{ sectionLabelStyle }}">{{ t.overview }}</div>
+              <div style="{{ statsGridStyle }}">
+                <sc-for list="{{ statCards }}" as="card" hint-placeholder-count="4">
+                  <div style="{{ card.style }}" onClick="{{ card.onClick }}">
+                    <div style="{{ card.iconWrapStyle }}">
+                      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="{{ card.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ card.iconPath }}"></path></svg>
+                    </div>
+                    <div style="font-size:28px; font-weight:800; color:{{ theme.text }}; margin-top:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ card.count }}</div>
+                    <div style="font-size:13px; font-weight:600; color:{{ theme.textMuted }}; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ card.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+        </sc-if>
+
+        <!-- STATS DRILLDOWN SCREEN -->
+        <sc-if value="{{ isStats }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 20px 40px;">
+            <div style="{{ statHeroStyle }}">
+              <div style="font-size:36px; font-weight:800; color:{{ theme.text }};">{{ statsData.total }}</div>
+              <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:600;">{{ statsTypeLabel }}</div>
+              <div style="font-size:20px; color:{{ theme.text }}; margin-top:8px;">{{ statsData.avgStars }}</div>
+              <div style="font-size:12px; color:{{ theme.textMuted }};">{{ t.avgRating }} · {{ statsData.avgRatingNum }}</div>
+            </div>
+
+            <div style="{{ sectionLabelStyle }}">{{ t.byCountry }}</div>
+            <div style="{{ categoryListCardStyle }}">
+              <sc-for list="{{ countrySection.rows }}" as="row" hint-placeholder-count="4">
+                <div style="{{ categoryRowStyle }}">
+                  <div style="font-size:16px; margin-right:8px;">{{ row.flag }}</div>
+                  <div style="font-size:13px; color:{{ theme.text }}; font-weight:600; min-width:90px;">{{ row.country }}</div>
+                  <div style="flex:1; margin:0 12px; height:6px; border-radius:3px; background:{{ theme.trackBg }}; overflow:hidden;">
+                    <div style="{{ row.barStyle }}"></div>
+                  </div>
+                  <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; min-width:18px; text-align:right;">{{ row.count }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ countrySection.hasMore }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ countrySection.onToggle }}" style="{{ viewAllButtonStyle }}">{{ countrySection.toggleLabel }}</button>
+              </sc-if>
+            </div>
+
+            <div style="{{ sectionLabelStyle }}; margin-top:18px;">{{ t.byCategory }}</div>
+            <div style="{{ categoryListCardStyle }}">
+              <sc-for list="{{ categorySection.rows }}" as="row" hint-placeholder-count="4">
+                <div style="{{ categoryRowStyle }}">
+                  <div style="font-size:13px; color:{{ theme.text }}; font-weight:600; min-width:90px;">{{ row.name }}</div>
+                  <div style="flex:1; margin:0 12px; height:6px; border-radius:3px; background:{{ theme.trackBg }}; overflow:hidden;">
+                    <div style="{{ row.barStyle }}"></div>
+                  </div>
+                  <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; min-width:18px; text-align:right;">{{ row.count }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ categorySection.hasMore }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ categorySection.onToggle }}" style="{{ viewAllButtonStyle }}">{{ categorySection.toggleLabel }}</button>
+              </sc-if>
+            </div>
+
+            <div style="{{ sectionLabelStyle }}; margin-top:18px;">{{ t.byManufacturer }}</div>
+            <div style="{{ categoryListCardStyle }}">
+              <sc-for list="{{ manufacturerSection.rows }}" as="row" hint-placeholder-count="4">
+                <div style="{{ categoryRowStyle }}">
+                  <div style="font-size:13px; color:{{ theme.text }}; font-weight:600; min-width:90px;">{{ row.name }}</div>
+                  <div style="flex:1; margin:0 12px; height:6px; border-radius:3px; background:{{ theme.trackBg }}; overflow:hidden;">
+                    <div style="{{ row.barStyle }}"></div>
+                  </div>
+                  <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; min-width:18px; text-align:right;">{{ row.count }}</div>
+                </div>
+              </sc-for>
+              <sc-if value="{{ manufacturerSection.hasMore }}" hint-placeholder-val="{{ false }}">
+                <button onClick="{{ manufacturerSection.onToggle }}" style="{{ viewAllButtonStyle }}">{{ manufacturerSection.toggleLabel }}</button>
+              </sc-if>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- LIST SCREEN -->
+        <sc-if value="{{ isList }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:14px 20px 0;">
+            <div style="{{ viewModeRowStyle }}">
+              <sc-if value="{{ hasSecondaryProfiles }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ profileMenuWrapStyle }}">
+                  <button onClick="{{ toggleProfileMenu }}" style="{{ profileTriggerStyle }}" title="{{ t.profile }}">
+                    <div style="{{ activeProfileAvatarStyle }}">{{ activeProfileInitials }}</div>
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="{{ theme.textMuted }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ chevronDownIconPath }}"></path></svg>
+                  </button>
+                  <sc-if value="{{ profileMenuOpen }}" hint-placeholder-val="{{ false }}">
+                    <div style="{{ profileMenuOverlayStyle }}" onClick="{{ closeProfileMenu }}"></div>
+                    <div style="{{ profileMenuStyle }}">
+                      <sc-for list="{{ profileMenuOptions }}" as="p" hint-placeholder-count="2">
+                        <button onClick="{{ p.onClick }}" style="{{ p.rowStyle }}">
+                          <div style="{{ p.avatarStyle }}">{{ p.initials }}</div>
+                          <div style="{{ p.nameStyle }}">{{ p.name }}</div>
+                          <sc-if value="{{ p.isSelected }}" hint-placeholder-val="{{ false }}">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="{{ p.checkColor }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ checkIconPath }}"></path></svg>
+                          </sc-if>
+                        </button>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                </div>
+                <div style="{{ viewModeSeparatorStyle }}"></div>
+              </sc-if>
+              <sc-for list="{{ viewModeOptions }}" as="vm" hint-placeholder-count="3">
+                <button onClick="{{ vm.onClick }}" style="{{ vm.style }}" title="{{ vm.label }}">
+                  <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="{{ vm.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ vm.iconPath }}"></path></svg>
+                </button>
+              </sc-for>
+              <sc-if value="{{ isOwnListProfileView }}" hint-placeholder-val="{{ true }}">
+                <div style="{{ viewModeSeparatorStyle }}"></div>
+                <button onClick="{{ openNewItem }}" style="{{ addButtonStyle }}" title="{{ t.add }}">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="{{ addIconPath }}"></path></svg>
+                </button>
+              </sc-if>
+            </div>
+            <div style="{{ itemCountStyle }}">{{ itemCountLabel }}</div>
+            <sc-if value="{{ viewingProfileLabel }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ viewingBadgeStyle }}">{{ viewingProfileLabel }} · {{ secondaryProfileReadOnlyLabel }}</div>
+            </sc-if>
+          </div>
+
+          <!-- DECK VIEW: vertical rows, thumbnail left -->
+          <sc-if value="{{ isDeckView }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:8px 20px 24px; display:flex; flex-direction:column; gap:10px;">
+              <sc-for list="{{ filteredItems }}" as="item" hint-placeholder-count="4">
+                <div style="{{ item.deckRowStyle }}" onClick="{{ item.onOpen }}">
+                  <div style="{{ item.deckThumbStyle }}">{{ item.thumbLabel }}</div>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:15px; font-weight:800; color:{{ theme.text }}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.name }}</div>
+                    <div style="font-size:12.5px; color:{{ theme.textMuted }}; margin-top:1px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.manufacturer }}</div>
+                    <div style="font-size:12.5px; color:{{ theme.text }}; margin-top:6px;">{{ item.starsDisplay }} <span style="color:{{ theme.textMuted }}; font-weight:600;">{{ item.dateDisplay }}</span></div>
+                  </div>
+                  <sc-if value="{{ item.canEdit }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                      <button onClick="{{ item.onEdit }}" style="{{ item.rowIconStyle }}">✎</button>
+                      <button onClick="{{ item.onDuplicate }}" style="{{ item.rowIconStyle }}">⧉</button>
+                      <button onClick="{{ item.onDelete }}" style="{{ item.rowIconStyleDanger }}">✕</button>
+                    </div>
+                  </sc-if>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <!-- TABLE VIEW -->
+          <sc-if value="{{ isTableView }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:0 20px 20px;">
+              <div style="{{ tableScrollOuterStyle }}">
+                <div style="{{ tableWrapStyle }}">
+                  <div style="{{ tableHeaderRowStyle }}">
+                    <sc-for list="{{ sortableColumns }}" as="col" hint-placeholder-count="4">
+                      <div style="{{ col.style }}" onClick="{{ col.onClick }}">{{ col.label }}{{ col.arrow }}</div>
+                    </sc-for>
+                    <div style="{{ tableActionsHeaderStyle }}">{{ t.actions }}</div>
+                  </div>
+                  <sc-for list="{{ sortedItems }}" as="item" hint-placeholder-count="6">
+                    <div style="{{ tableRowStyle }}">
+                      <div style="{{ tableColNameStyle }}" onClick="{{ item.onOpen }}">{{ item.name }}</div>
+                      <div style="{{ tableColManufacturerStyle }}">{{ item.manufacturer }}</div>
+                      <div style="{{ tableColCategoryStyle }}">{{ item.category }}</div>
+                      <div style="{{ tableColDateStyle }}">{{ item.dateDisplay }}</div>
+                      <div style="{{ tableColRatingStyle }}">{{ item.starsDisplay }}</div>
+                      <div style="{{ tableColActionsStyle }}">
+                        <sc-if value="{{ item.canEdit }}" hint-placeholder-val="{{ true }}">
+                          <button onClick="{{ item.onDuplicate }}" style="{{ item.tableIconStyle }}">⧉</button>
+                          <button onClick="{{ item.onDelete }}" style="{{ item.tableIconStyleDanger }}">✕</button>
+                        </sc-if>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
+          <!-- GALLERY VIEW -->
+          <sc-if value="{{ isGalleryView }}" hint-placeholder-val="{{ false }}">
+            <div style="{{ galleryGridStyle }}">
+              <sc-for list="{{ filteredItems }}" as="item" hint-placeholder-count="6">
+                <div style="{{ item.galleryCardStyle }}" onClick="{{ item.onOpen }}">
+                  <div style="{{ item.galleryImageStyle }}">{{ item.thumbLabel }}</div>
+                  <div style="padding:10px;">
+                    <div style="font-size:13px; font-weight:700; color:{{ theme.text }}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.name }}</div>
+                    <div style="font-size:11px; color:{{ theme.textMuted }}; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.manufacturer }}</div>
+                    <div style="font-size:11px; color:{{ theme.text }}; margin-top:4px;">{{ item.starsDisplay }} <span style="color:{{ theme.textMuted }};">{{ item.dateDisplay }}</span></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isListEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:60px 20px; text-align:center; color:{{ theme.textMuted }}; font-size:14px;">{{ t.noResults }}</div>
+          </sc-if>
+        </sc-if>
+
+        <!-- DETAIL / EDIT SCREEN -->
+        <sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:16px 20px 40px;">
+
+            <sc-if value="{{ isEditing }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ detailCardStyle }}">
+                <div style="{{ uploadBoxStyle }}" onClick="{{ simulateUpload }}">{{ draft.imageLabel }}</div>
+
+                <div style="{{ ratingWidgetOuterStyle }}">
+                  <div style="{{ ratingInputWrapStyle }}" onPointerDown="{{ onRatingPointerDown }}" onPointerMove="{{ onRatingPointerMove }}" onPointerUp="{{ onRatingPointerUp }}" onPointerLeave="{{ onRatingPointerUp }}">
+                    <sc-if value="{{ ratingHintVisible }}" hint-placeholder-val="{{ false }}">
+                      <div style="{{ ratingHintStyle }}">{{ ratingHintText }}</div>
+                    </sc-if>
+                    <sc-for list="{{ draftRatingStars }}" as="star" hint-placeholder-count="5">
+                      <svg viewBox="0 0 24 24" width="{{ star.size }}" height="{{ star.size }}" style="pointer-events:none;">
+                        <path d="{{ starPath }}" fill="none" stroke="{{ theme.border }}" stroke-width="1.5"></path>
+                        <clipPath id="{{ star.clipId }}"><rect x="0" y="0" width="{{ star.clipWidth }}" height="24"></rect></clipPath>
+                        <path d="{{ starPath }}" fill="{{ theme.accent }}" clip-path="url(#{{ star.clipId }})"></path>
+                      </svg>
+                    </sc-for>
+                  </div>
+                  <div style="{{ ratingNumberStyle }}">{{ draftRatingLabel }}</div>
+                </div>
+                <div style="{{ idTagStyle }}">{{ t.idLabel }} {{ draft.seq }}</div>
+
+                <!-- BEER-SPECIFIC FIELDS -->
+                <sc-if value="{{ isBeerDraft }}" hint-placeholder-val="{{ false }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.beerNome }}</label>
+                  <input value="{{ draft.name }}" onChange="{{ onDraftName }}" style="{{ inputStyle }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.beerCervejaria }}</label>
+                  <input value="{{ draft.manufacturer }}" onChange="{{ onDraftManufacturer }}" style="{{ inputStyle }}">
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.paisId }}</label>
+                      <select value="{{ draft.country }}" onChange="{{ onDraftCountry }}" style="{{ selectStyle }}">
+                        <sc-for list="{{ paisOptionsWithFlag }}" as="p" hint-placeholder-count="4">
+                          <option value="{{ p.value }}">{{ p.label }}</option>
+                        </sc-for>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.tastingDate }}</label>
+                      <input type="date" value="{{ draft.tastingDate }}" onChange="{{ onDraftDate }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.beerIbu }}</label>
+                      <input value="{{ draft.ibu }}" onChange="{{ onDraftIbu }}" style="{{ inputStyle }}">
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.abv }}</label>
+                      <input value="{{ draft.abv }}" onChange="{{ onDraftAbv }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <label style="{{ fieldLabelStyle }}">{{ t.beerEstiloLivre }}</label>
+                  <input value="{{ draft.estiloLivre }}" onChange="{{ onDraftEstiloLivre }}" style="{{ inputStyle }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.bjcp21 }}</label>
+                  <select value="{{ draft.category }}" onChange="{{ onDraftCategory }}" style="{{ selectStyle }}">
+                    <sc-for list="{{ bjcp21Options }}" as="c" hint-placeholder-count="4">
+                      <option value="{{ c }}">{{ c }}</option>
+                    </sc-for>
+                  </select>
+                  <div style="{{ hintTextStyle }}">{{ t.bjcpNote }}</div>
+                </sc-if>
+
+                <!-- WINE-SPECIFIC FIELDS -->
+                <sc-if value="{{ isWineDraft }}" hint-placeholder-val="{{ false }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.name }}</label>
+                  <input value="{{ draft.name }}" onChange="{{ onDraftName }}" style="{{ inputStyle }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.wineProdutor }}</label>
+                  <input value="{{ draft.manufacturer }}" onChange="{{ onDraftManufacturer }}" style="{{ inputStyle }}">
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.paisId }}</label>
+                      <select value="{{ draft.country }}" onChange="{{ onDraftCountry }}" style="{{ selectStyle }}">
+                        <sc-for list="{{ paisOptionsWithFlag }}" as="p" hint-placeholder-count="4">
+                          <option value="{{ p.value }}">{{ p.label }}</option>
+                        </sc-for>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.tastingDate }}</label>
+                      <input type="date" value="{{ draft.tastingDate }}" onChange="{{ onDraftDate }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineSafra }}</label>
+                      <input value="{{ draft.vintage }}" onChange="{{ onDraftVintage }}" style="{{ inputStyle }}">
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineCor }}</label>
+                      <select value="{{ draft.category }}" onChange="{{ onDraftCategory }}" style="{{ selectStyle }}">
+                        <sc-for list="{{ wineCorOptions }}" as="c" hint-placeholder-count="4">
+                          <option value="{{ c }}">{{ c }}</option>
+                        </sc-for>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineTipo }}</label>
+                      <select value="{{ draft.wineType }}" onChange="{{ onDraftWineType }}" style="{{ selectStyle }}">
+                        <sc-for list="{{ wineTipoOptions }}" as="wt" hint-placeholder-count="4">
+                          <option value="{{ wt }}">{{ wt }}</option>
+                        </sc-for>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.abv }}</label>
+                      <input value="{{ draft.abv }}" onChange="{{ onDraftAbv }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <label style="{{ fieldLabelStyle }}">{{ t.wineRegiao }}</label>
+                  <input value="{{ draft.region }}" onChange="{{ onDraftRegion }}" style="{{ inputStyle }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.wineUva }}</label>
+                  <input value="{{ draft.grape }}" onChange="{{ onDraftGrape }}" style="{{ inputStyle }}">
+                </sc-if>
+
+                <!-- DRINK / SPIRIT FIELDS -->
+                <sc-if value="{{ isDrinkSpiritDraft }}" hint-placeholder-val="{{ true }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.name }}</label>
+                  <input value="{{ draft.name }}" onChange="{{ onDraftName }}" style="{{ inputStyle }}">
+                  <label style="{{ fieldLabelStyle }}">{{ t.wineProdutor }}</label>
+                  <input value="{{ draft.manufacturer }}" onChange="{{ onDraftManufacturer }}" style="{{ inputStyle }}">
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.paisId }}</label>
+                      <select value="{{ draft.country }}" onChange="{{ onDraftCountry }}" style="{{ selectStyle }}">
+                        <sc-for list="{{ paisOptionsWithFlag }}" as="p" hint-placeholder-count="4">
+                          <option value="{{ p.value }}">{{ p.label }}</option>
+                        </sc-for>
+                      </select>
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.tastingDate }}</label>
+                      <input type="date" value="{{ draft.tastingDate }}" onChange="{{ onDraftDate }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineSafra }}</label>
+                      <input value="{{ draft.vintage }}" onChange="{{ onDraftVintage }}" style="{{ inputStyle }}">
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineCor }}</label>
+                      <input value="{{ draft.category }}" onChange="{{ onDraftCategory }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <div style="{{ sideBySideRowStyle }}">
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.wineTipo }}</label>
+                      <input value="{{ draft.wineType }}" onChange="{{ onDraftWineType }}" style="{{ inputStyle }}">
+                    </div>
+                    <div style="flex:1;">
+                      <label style="{{ fieldLabelStyle }}">{{ t.abv }}</label>
+                      <input value="{{ draft.abv }}" onChange="{{ onDraftAbv }}" style="{{ inputStyle }}">
+                    </div>
+                  </div>
+
+                  <label style="{{ fieldLabelStyle }}">{{ t.wineRegiao }}</label>
+                  <input value="{{ draft.region }}" onChange="{{ onDraftRegion }}" style="{{ inputStyle }}">
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isViewingDetail }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ detailCardStyle }}">
+                <div style="{{ detailActionsRowStyle }}">
+                  <button onClick="{{ searchSelectedOnGoogle }}" style="{{ detailIconButtonStyle }}" title="{{ t.searchGoogle }}">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ theme.textMuted }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ starPathSearch }}"></path></svg>
+                  </button>
+                  <button onClick="{{ shareSelected }}" style="{{ detailIconButtonStyle }}" title="{{ t.shareItem }}">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ theme.textMuted }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ shareIconPath }}"></path></svg>
+                  </button>
+                  <sc-if value="{{ isSelectedEditable }}" hint-placeholder-val="{{ true }}">
+                    <button onClick="{{ startEdit }}" style="{{ detailIconButtonStyle }}" title="{{ t.edit }}">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ theme.textMuted }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ editIconPath }}"></path></svg>
+                    </button>
+                    <button onClick="{{ duplicateSelected }}" style="{{ detailIconButtonStyle }}" title="{{ t.duplicate }}">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ theme.textMuted }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ duplicateIconPath }}"></path></svg>
+                    </button>
+                    <button onClick="{{ deleteSelected }}" style="{{ detailIconButtonStyleDanger }}" title="{{ t.delete }}">
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="{{ theme.danger }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ deleteIconPath }}"></path></svg>
+                    </button>
+                  </sc-if>
+                </div>
+
+                <div style="{{ detailImageStyle }}" onClick="{{ openPhotoViewer }}">{{ selected.thumbLabel }}</div>
+
+                <div style="font-size:22px; font-weight:800; color:{{ theme.text }}; margin-top:2px;">{{ selected.name }}</div>
+
+                <sc-if value="{{ isBeerSelected }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:14px; color:{{ theme.textMuted }}; margin-top:4px;">{{ selected.manufacturer }} · {{ selected.flag }} {{ selected.country }}</div>
+                  <div style="{{ readOnlyStarsRowStyle }}">
+                    <sc-for list="{{ selectedRatingStars }}" as="star" hint-placeholder-count="5">
+                      <svg viewBox="0 0 24 24" width="{{ star.size }}" height="{{ star.size }}">
+                        <path d="{{ starPath }}" fill="none" stroke="{{ theme.border }}" stroke-width="1.5"></path>
+                        <clipPath id="{{ star.clipId }}"><rect x="0" y="0" width="{{ star.clipWidth }}" height="24"></rect></clipPath>
+                        <path d="{{ starPath }}" fill="{{ theme.accent }}" clip-path="url(#{{ star.clipId }})"></path>
+                      </svg>
+                    </sc-for>
+                    <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; margin-left:4px;">{{ selected.rating }}</div>
+                  </div>
+                  <div style="{{ specRowStyle }}">
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">IBU</div><div style="{{ specValueStyle }}">{{ selected.ibu }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.abv }}</div><div style="{{ specValueStyle }}">{{ selected.abv }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.tastingDate }}</div><div style="{{ specValueStyle }}">{{ selected.dateDisplay }}</div></div>
+                  </div>
+                  <sc-if value="{{ selected.estiloLivre }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:14px; color:{{ theme.text }}; margin-top:14px;">{{ t.beerEstiloLivre }}: {{ selected.estiloLivre }}</div>
+                  </sc-if>
+                  <div style="font-size:13px; color:{{ theme.textMuted }}; margin-top:6px;">{{ t.bjcp21 }}: {{ selected.category }}</div>
+                  <div style="{{ idTagStyle }}">{{ t.idLabel }} {{ selected.seq }}</div>
+                </sc-if>
+
+                <sc-if value="{{ isWineSelected }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:14px; color:{{ theme.textMuted }}; margin-top:4px;">{{ selected.manufacturer }} · {{ selected.flag }} {{ selected.country }}</div>
+                  <div style="{{ readOnlyStarsRowStyle }}">
+                    <sc-for list="{{ selectedRatingStars }}" as="star" hint-placeholder-count="5">
+                      <svg viewBox="0 0 24 24" width="{{ star.size }}" height="{{ star.size }}">
+                        <path d="{{ starPath }}" fill="none" stroke="{{ theme.border }}" stroke-width="1.5"></path>
+                        <clipPath id="{{ star.clipId }}"><rect x="0" y="0" width="{{ star.clipWidth }}" height="24"></rect></clipPath>
+                        <path d="{{ starPath }}" fill="{{ theme.accent }}" clip-path="url(#{{ star.clipId }})"></path>
+                      </svg>
+                    </sc-for>
+                    <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; margin-left:4px;">{{ selected.rating }}</div>
+                  </div>
+                  <div style="{{ specRowStyle }}">
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineSafra }}</div><div style="{{ specValueStyle }}">{{ selected.vintage }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineCor }}</div><div style="{{ specValueStyle }}">{{ selected.category }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineTipo }}</div><div style="{{ specValueStyle }}">{{ selected.wineType }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.abv }}</div><div style="{{ specValueStyle }}">{{ selected.abv }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.tastingDate }}</div><div style="{{ specValueStyle }}">{{ selected.dateDisplay }}</div></div>
+                  </div>
+                  <sc-if value="{{ selected.region }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:14px; color:{{ theme.text }}; margin-top:14px;">{{ t.wineRegiao }}: {{ selected.region }}</div>
+                  </sc-if>
+                  <sc-if value="{{ selected.grape }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:14px; color:{{ theme.text }}; margin-top:4px;">{{ t.wineUva }}: {{ selected.grape }}</div>
+                  </sc-if>
+                  <div style="{{ idTagStyle }}">{{ t.idLabel }} {{ selected.seq }}</div>
+                </sc-if>
+
+                <sc-if value="{{ isDrinkSpiritSelected }}" hint-placeholder-val="{{ true }}">
+                  <div style="font-size:14px; color:{{ theme.textMuted }}; margin-top:4px;">{{ selected.manufacturer }} · {{ selected.flag }} {{ selected.country }}</div>
+                  <div style="{{ readOnlyStarsRowStyle }}">
+                    <sc-for list="{{ selectedRatingStars }}" as="star" hint-placeholder-count="5">
+                      <svg viewBox="0 0 24 24" width="{{ star.size }}" height="{{ star.size }}">
+                        <path d="{{ starPath }}" fill="none" stroke="{{ theme.border }}" stroke-width="1.5"></path>
+                        <clipPath id="{{ star.clipId }}"><rect x="0" y="0" width="{{ star.clipWidth }}" height="24"></rect></clipPath>
+                        <path d="{{ starPath }}" fill="{{ theme.accent }}" clip-path="url(#{{ star.clipId }})"></path>
+                      </svg>
+                    </sc-for>
+                    <div style="font-size:13px; color:{{ theme.textMuted }}; font-weight:700; margin-left:4px;">{{ selected.rating }}</div>
+                  </div>
+                  <div style="{{ specRowStyle }}">
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineSafra }}</div><div style="{{ specValueStyle }}">{{ selected.vintage }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineCor }}</div><div style="{{ specValueStyle }}">{{ selected.category }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.wineTipo }}</div><div style="{{ specValueStyle }}">{{ selected.wineType }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.abv }}</div><div style="{{ specValueStyle }}">{{ selected.abv }}</div></div>
+                    <div style="{{ specCellStyle }}"><div style="{{ specLabelStyle }}">{{ t.tastingDate }}</div><div style="{{ specValueStyle }}">{{ selected.dateDisplay }}</div></div>
+                  </div>
+                  <sc-if value="{{ selected.region }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:14px; color:{{ theme.text }}; margin-top:14px;">{{ t.wineRegiao }}: {{ selected.region }}</div>
+                  </sc-if>
+                  <div style="{{ idTagStyle }}">{{ t.idLabel }} {{ selected.seq }}</div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <!-- FULLSCREEN PHOTO VIEWER -->
+            <sc-if value="{{ photoViewerOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ photoViewerOverlayStyle }}">
+                <div style="{{ photoViewerTopBarStyle }}">
+                  <button onClick="{{ zoomOutPhoto }}" style="{{ photoViewerIconButtonStyle }}">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ zoomOutIconPath }}"></path></svg>
+                  </button>
+                  <button onClick="{{ zoomInPhoto }}" style="{{ photoViewerIconButtonStyle }}">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ zoomInIconPath }}"></path></svg>
+                  </button>
+                  <button onClick="{{ shareSelected }}" style="{{ photoViewerIconButtonStyle }}">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ shareIconPath }}"></path></svg>
+                  </button>
+                  <div style="flex:1;"></div>
+                  <button onClick="{{ closePhotoViewer }}" style="{{ photoViewerIconButtonStyle }}">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ closeIconPath }}"></path></svg>
+                  </button>
+                </div>
+                <div style="{{ photoViewerImageWrapStyle }}">
+                  <div style="{{ photoViewerImageStyle }}">{{ selected.thumbLabel }}</div>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- PROFILE SCREEN -->
+        <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:20px 20px 40px;">
+            <div style="{{ profileTabsRowStyle }}">
+              <sc-for list="{{ profileTabs }}" as="pt" hint-placeholder-count="2">
+                <button onClick="{{ pt.onClick }}" style="{{ pt.style }}">{{ pt.label }}</button>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ isProfileSettingsTab }}" hint-placeholder-val="{{ true }}">
+              <div style="display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:24px;">
+                <div style="{{ avatarStyle }}" onClick="{{ simulateAvatarUpload }}">{{ avatarInitials }}</div>
+                <button onClick="{{ simulateAvatarUpload }}" style="{{ linkButtonStyle }}">{{ t.changePhoto }}</button>
+              </div>
+
+              <div style="{{ profileSectionStyle }}">
+                <div style="{{ profileSectionTitleStyle }}">{{ t.friendlyName }}</div>
+                <input value="{{ profileForm.name }}" onChange="{{ onProfileNameChange }}" style="{{ inputStyle }}">
+                <button onClick="{{ saveProfileName }}" style="{{ secondaryButtonSmallStyle }}">{{ t.save }}</button>
+              </div>
+
+              <div style="{{ profileSectionStyle }}">
+                <div style="{{ profileSectionTitleStyle }}">{{ t.language }}</div>
+                <div style="display:flex; gap:8px;">
+                  <sc-for list="{{ langOptions }}" as="lo" hint-placeholder-count="3">
+                    <button onClick="{{ lo.onClick }}" style="{{ lo.style }}">{{ lo.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="{{ profileSectionStyle }}">
+                <div style="{{ profileSectionTitleStyle }}">{{ t.colorPalette }}</div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                  <sc-for list="{{ hueOptions }}" as="ho" hint-placeholder-count="7">
+                    <button onClick="{{ ho.onClick }}" style="{{ ho.style }}"></button>
+                  </sc-for>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:12px;">
+                  <sc-for list="{{ modeOptions }}" as="mo" hint-placeholder-count="2">
+                    <button onClick="{{ mo.onClick }}" style="{{ mo.style }}">{{ mo.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isProfileSecurityTab }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ profileSectionStyle }}">
+                <div style="{{ profileSectionTitleStyle }}">{{ t.changePassword }}</div>
+                <label style="{{ fieldLabelStyle }}">{{ t.currentPassword }}</label>
+                <input type="password" value="{{ pwForm.current }}" onChange="{{ onPwCurrent }}" style="{{ inputStyle }}">
+                <label style="{{ fieldLabelStyle }}">{{ t.newPassword }}</label>
+                <input type="password" value="{{ pwForm.next }}" onChange="{{ onPwNext }}" style="{{ inputStyle }}">
+                <label style="{{ fieldLabelStyle }}">{{ t.confirmPassword }}</label>
+                <input type="password" value="{{ pwForm.confirm }}" onChange="{{ onPwConfirm }}" style="{{ inputStyle }}">
+                <sc-if value="{{ pwError }}" hint-placeholder-val="{{ false }}">
+                  <div style="{{ errorTextStyle }}">{{ pwError }}</div>
+                </sc-if>
+                <button onClick="{{ savePassword }}" style="{{ secondaryButtonSmallStyle }}">{{ t.save }}</button>
+              </div>
+
+              <div style="{{ profileSectionStyle }}">
+                <div style="{{ profileSectionTitleStyle }}">{{ t2faLabel }}</div>
+                <div style="display:flex; gap:8px;">
+                  <sc-for list="{{ twoFAOptions }}" as="tf" hint-placeholder-count="2">
+                    <button onClick="{{ tf.onClick }}" style="{{ tf.style }}">{{ tf.label }}</button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <sc-if value="{{ isAdmin }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ profileSectionStyle }}">
+                  <div style="{{ profileSectionTitleStyle }}">{{ t.manageUsers }}</div>
+                  <sc-for list="{{ usersDisplay }}" as="u" hint-placeholder-count="3">
+                    <div style="{{ userRowStyle }}">
+                      <div>
+                        <div style="font-size:13px; font-weight:700; color:{{ theme.text }};">{{ u.name }}</div>
+                        <div style="font-size:12px; color:{{ theme.textMuted }};">{{ u.email }}</div>
+                      </div>
+                      <div style="display:flex; align-items:center; gap:8px;">
+                        <div style="{{ u.statusPillStyle }}">{{ u.statusLabel }}</div>
+                        <button onClick="{{ u.onToggle }}" style="{{ secondaryButtonSmallStyle }}">{{ u.toggleLabel }}</button>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div style="{{ profileSectionStyle }}">
+                  <div style="{{ profileSectionTitleStyle }}">{{ t.accessLog }}</div>
+                  <sc-for list="{{ logsDisplay }}" as="lg" hint-placeholder-count="4">
+                    <div style="{{ logRowStyle }}">
+                      <div style="font-size:12px; color:{{ theme.textMuted }}; min-width:110px;">{{ lg.ts }}</div>
+                      <div style="font-size:12px; color:{{ theme.text }};">{{ lg.text }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+            </sc-if>
+
+            <button onClick="{{ doLogout }}" style="{{ dangerButtonStyle }}">{{ t.logout }}</button>
+          </div>
+        </sc-if>
+
+      </div>
+
+      <!-- BOTTOM NAV (mobile only — desktop uses the top site nav) -->
+      <sc-if value="{{ isMobileShell }}" hint-placeholder-val="{{ true }}">
+        <div style="{{ bottomNavStyle }}">
+          <sc-for list="{{ navItems }}" as="nav" hint-placeholder-count="5">
+            <button onClick="{{ nav.onClick }}" style="{{ nav.style }}">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="{{ nav.iconColor }}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="{{ nav.iconPath }}"></path></svg>
+              <div style="{{ nav.labelStyle }}">{{ nav.label }}</div>
+            </button>
+          </sc-for>
+        </div>
+      </sc-if>
+
+      <!-- CONFIRM MODAL -->
+      <sc-if value="{{ hasConfirm }}" hint-placeholder-val="{{ false }}">
+        <div style="{{ confirmOverlayStyle }}">
+          <div style="{{ confirmCardStyle }}">
+            <div style="font-size:15px; font-weight:700; color:{{ theme.text }}; line-height:1.5; margin-bottom:18px;">{{ confirmMessage }}</div>
+            <div style="display:flex; gap:10px;">
+              <button onClick="{{ confirmNo }}" style="{{ secondaryButtonStyle }}">{{ confirmCancelLabel }}</button>
+              <button onClick="{{ confirmYes }}" style="{{ confirmYesButtonStyle }}">{{ confirmConfirmLabel }}</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+</div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const I18N = {
+  pt: {
+    tagline: "Seu aplicativo completo de Sommelieria",
+    welcomeBack: "Bem-vindo de volta", loginSubtitle: "Entre com sua conta para continuar",
+    email: "E-mail", password: "Senha", enter: "Entrar", forgotPassword: "Esqueci minha senha",
+    createAccount: "Criar conta", createYourAccount: "Criar sua conta", signupSubtitle: "Leva menos de um minuto",
+    friendlyName: "Nome de exibição", passwordRequirements: "Mín. 8 caracteres, maiúscula, minúscula, número e símbolo",
+    alreadyHaveAccount: "Já tenho uma conta", forgotSubtitle: "Enviaremos um link de redefinição para seu e-mail",
+    sendLink: "Enviar link", resetSent: "Link de redefinição enviado! Verifique seu e-mail.", backToLogin: "Voltar ao login",
+    twoFactorTitle: "Verificação em duas etapas", twoFactorSubtitle: "Digite o código enviado por e-mail",
+    codeSentTo: "Código enviado para", code: "Código", verify: "Verificar", resendCode: "Reenviar código",
+    pendingActivation: "Conta em análise", pendingActivationDesc: "Seu cadastro foi criado e está aguardando ativação manual por um administrador. Você receberá um e-mail quando estiver liberado.",
+    invalidCredentials: "E-mail ou senha inválidos", invalidCode: "Código inválido, tente novamente",
+    home: "Home", beers: "Cervejas", wines: "Vinhos", drinks: "Drinks", spirits: "Destilados", profile: "Perfil",
+    myProfile: "meu perfil", viewingProfileOf: "Vendo perfil de", secondaryProfileReadOnly: "Somente visualização",
+    demoHint: "Contas de teste (qualquer senha, código 482913): admin@toastrack.com (perfil principal, com perfis seguidos), rafael@email.com, marina@email.com, camila@email.com, diego@email.com, bianca@email.com.",
+    featuredToday: "Destaque do dia", overview: "Visão geral", byCategory: "Por categoria", byCountry: "Por país", byManufacturer: "Por fabricante",
+    totalBeers: "Cervejas", totalWines: "Vinhos", totalDrinks: "Drinks", totalSpirits: "Destilados",
+    add: "Adicionar", view: "Ver", edit: "Editar", duplicate: "Duplicar", delete: "Excluir", save: "Salvar", cancel: "Cancelar",
+    view_deck: "Deck", view_table: "Tabela", view_gallery: "Galeria", all: "Todas",
+    name: "Nome", category: "Categoria", rating: "Avaliação", actions: "Ações", origin: "Origem", country: "País", abv: "ABV",
+    manufacturer: "Fabricante", tastingDate: "Data da degustação",
+    description: "Descrição", back: "Voltar", noResults: "Nenhum item encontrado",
+    changePhoto: "Alterar foto", language: "Idioma", colorPalette: "Paleta de cores", changePassword: "Trocar senha",
+    currentPassword: "Senha atual", newPassword: "Nova senha", confirmPassword: "Confirmar senha",
+    pwMismatch: "As senhas não coincidem", pwWeak: "Senha não atende aos requisitos mínimos",
+    manageUsers: "Gestão de usuários", accessLog: "Log de acesso", logout: "Sair",
+    settingsMenuItem: "Configurações", securityMenuItem: "Segurança", twoFactorAuth: "Autenticação de dois fatores (2FA)",
+    viewAll: "Ver tudo", viewLess: "Ver menos",
+    previewAuto: "Auto", previewMobile: "Mobile", previewDesktop: "Desktop",
+    active: "Ativo", inactive: "Inativo", activate: "Ativar", deactivate: "Desativar",
+    itemSaved: "Item salvo", itemDeleted: "Item excluído", itemDuplicated: "Item duplicado",
+    lightMode: "Claro", darkMode: "Escuro", searchPlaceholder: "Buscar por nome, fabricante...",
+    itemsShown: "itens exibidos", searchResultsFor: "resultados para", avgRating: "Nota média",
+    confirmDeleteMsg: 'Tem certeza que deseja excluir "{name}"?', confirmDuplicateMsg: 'Duplicar "{name}"?', confirmYes: "Confirmar",
+    beerNome: "Nome", beerCervejaria: "Cervejaria", paisId: "País", beerIbu: "IBU", beerEstiloLivre: "Estilo (livre)",
+    bjcp21: "Estilo BJCP 2021", bjcpNote: "Listas de país e estilo BJCP são placeholder — serão substituídas pelas abas list_pais e list_bjcp_21 da planilha.",
+    searchAll: "Todos", shareItem: "Compartilhar", searchGoogle: "Pesquisar no Google", beerIdTag: "ID", idLabel: "#ID:",
+    keepChangesMsg: "Deseja manter as alterações?", discard: "Descartar",
+    wineSafra: "Safra", wineCor: "Cor", wineTipo: "Tipo", wineProdutor: "Produtor", wineRegiao: "Região", wineUva: "Uva",
+  },
+  en: {
+    tagline: "Your complete Sommelieria app",
+    welcomeBack: "Welcome back", loginSubtitle: "Sign in to your account to continue",
+    email: "Email", password: "Password", enter: "Sign in", forgotPassword: "Forgot password",
+    createAccount: "Create account", createYourAccount: "Create your account", signupSubtitle: "Takes less than a minute",
+    friendlyName: "Display name", passwordRequirements: "Min. 8 chars, uppercase, lowercase, number and symbol",
+    alreadyHaveAccount: "I already have an account", forgotSubtitle: "We'll send a reset link to your email",
+    sendLink: "Send link", resetSent: "Reset link sent! Check your email.", backToLogin: "Back to login",
+    twoFactorTitle: "Two-factor verification", twoFactorSubtitle: "Enter the code sent by email",
+    codeSentTo: "Code sent to", code: "Code", verify: "Verify", resendCode: "Resend code",
+    pendingActivation: "Account under review", pendingActivationDesc: "Your account was created and is awaiting manual activation by an administrator. You'll get an email once approved.",
+    invalidCredentials: "Invalid email or password", invalidCode: "Invalid code, try again",
+    home: "Home", beers: "Beers", wines: "Wines", drinks: "Drinks", spirits: "Spirits", profile: "Profile",
+    myProfile: "my profile", viewingProfileOf: "Viewing profile of", secondaryProfileReadOnly: "View only",
+    demoHint: "Test accounts (any password, code 482913): admin@toastrack.com (primary profile, with followed profiles), rafael@email.com, marina@email.com, camila@email.com, diego@email.com, bianca@email.com.",
+    featuredToday: "Today's picks", overview: "Overview", byCategory: "By category", byCountry: "By country", byManufacturer: "By manufacturer",
+    totalBeers: "Beers", totalWines: "Wines", totalDrinks: "Drinks", totalSpirits: "Spirits",
+    add: "Add", view: "View", edit: "Edit", duplicate: "Duplicate", delete: "Delete", save: "Save", cancel: "Cancel",
+    view_deck: "Deck", view_table: "Table", view_gallery: "Gallery", all: "All",
+    name: "Name", category: "Category", rating: "Rating", actions: "Actions", origin: "Origin", country: "Country", abv: "ABV",
+    manufacturer: "Manufacturer", tastingDate: "Tasting date",
+    description: "Description", back: "Back", noResults: "No items found",
+    changePhoto: "Change photo", language: "Language", colorPalette: "Color palette", changePassword: "Change password",
+    currentPassword: "Current password", newPassword: "New password", confirmPassword: "Confirm password",
+    pwMismatch: "Passwords don't match", pwWeak: "Password doesn't meet minimum requirements",
+    manageUsers: "User management", accessLog: "Access log", logout: "Log out",
+    settingsMenuItem: "Settings", securityMenuItem: "Security", twoFactorAuth: "Two-factor authentication (2FA)",
+    viewAll: "View all", viewLess: "View less",
+    previewAuto: "Auto", previewMobile: "Mobile", previewDesktop: "Desktop",
+    active: "Active", inactive: "Inactive", activate: "Activate", deactivate: "Deactivate",
+    itemSaved: "Item saved", itemDeleted: "Item deleted", itemDuplicated: "Item duplicated",
+    lightMode: "Light", darkMode: "Dark", searchPlaceholder: "Search by name, manufacturer...",
+    itemsShown: "items shown", searchResultsFor: "results for", avgRating: "Average rating",
+    confirmDeleteMsg: 'Are you sure you want to delete "{name}"?', confirmDuplicateMsg: 'Duplicate "{name}"?', confirmYes: "Confirm",
+    beerNome: "Name", beerCervejaria: "Brewery", paisId: "Country", beerIbu: "IBU", beerEstiloLivre: "Free-text style",
+    bjcp21: "BJCP 2021 style", bjcpNote: "Country and BJCP style lists are placeholders — will be replaced by the list_pais and list_bjcp_21 sheet tabs.",
+    searchAll: "Any field", shareItem: "Share", searchGoogle: "Search on Google", beerIdTag: "ID", idLabel: "#ID:",
+    keepChangesMsg: "Keep your changes?", discard: "Discard",
+    wineSafra: "Vintage", wineCor: "Color", wineTipo: "Type", wineProdutor: "Winery", wineRegiao: "Region", wineUva: "Grape",
+  },
+  es: {
+    tagline: "Tu aplicación completa de Sommelieria",
+    welcomeBack: "Bienvenido de nuevo", loginSubtitle: "Inicia sesión para continuar",
+    email: "Correo electrónico", password: "Contraseña", enter: "Entrar", forgotPassword: "Olvidé mi contraseña",
+    createAccount: "Crear cuenta", createYourAccount: "Crea tu cuenta", signupSubtitle: "Toma menos de un minuto",
+    friendlyName: "Nombre de usuario", passwordRequirements: "Mín. 8 caracteres, mayúscula, minúscula, número y símbolo",
+    alreadyHaveAccount: "Ya tengo una cuenta", forgotSubtitle: "Enviaremos un enlace de restablecimiento a tu correo",
+    sendLink: "Enviar enlace", resetSent: "¡Enlace enviado! Revisa tu correo.", backToLogin: "Volver al inicio",
+    twoFactorTitle: "Verificación en dos pasos", twoFactorSubtitle: "Ingresa el código enviado por correo",
+    codeSentTo: "Código enviado a", code: "Código", verify: "Verificar", resendCode: "Reenviar código",
+    pendingActivation: "Cuenta en revisión", pendingActivationDesc: "Tu cuenta fue creada y espera activación manual de un administrador. Recibirás un correo cuando esté aprobada.",
+    invalidCredentials: "Correo o contraseña inválidos", invalidCode: "Código inválido, intenta de nuevo",
+    home: "Inicio", beers: "Cervezas", wines: "Vinos", drinks: "Tragos", spirits: "Destilados", profile: "Perfil",
+    myProfile: "mi perfil", viewingProfileOf: "Viendo perfil de", secondaryProfileReadOnly: "Solo lectura",
+    demoHint: "Cuentas de prueba (cualquier contraseña, código 482913): admin@toastrack.com (perfil principal, con perfiles seguidos), rafael@email.com, marina@email.com, camila@email.com, diego@email.com, bianca@email.com.",
+    featuredToday: "Destacados de hoy", overview: "Resumen", byCategory: "Por categoría", byCountry: "Por país", byManufacturer: "Por fabricante",
+    totalBeers: "Cervezas", totalWines: "Vinos", totalDrinks: "Tragos", totalSpirits: "Destilados",
+    add: "Agregar", view: "Ver", edit: "Editar", duplicate: "Duplicar", delete: "Eliminar", save: "Guardar", cancel: "Cancelar",
+    view_deck: "Mazo", view_table: "Tabla", view_gallery: "Galería", all: "Todas",
+    name: "Nombre", category: "Categoría", rating: "Calificación", actions: "Acciones", origin: "Origen", country: "País", abv: "ABV",
+    manufacturer: "Fabricante", tastingDate: "Fecha de cata",
+    description: "Descripción", back: "Volver", noResults: "No se encontraron ítems",
+    changePhoto: "Cambiar foto", language: "Idioma", colorPalette: "Paleta de colores", changePassword: "Cambiar contraseña",
+    currentPassword: "Contraseña actual", newPassword: "Nueva contraseña", confirmPassword: "Confirmar contraseña",
+    pwMismatch: "Las contraseñas no coinciden", pwWeak: "La contraseña no cumple los requisitos mínimos",
+    manageUsers: "Gestión de usuarios", accessLog: "Registro de acceso", logout: "Cerrar sesión",
+    settingsMenuItem: "Configuración", securityMenuItem: "Seguridad", twoFactorAuth: "Autenticación de dos factores (2FA)",
+    viewAll: "Ver todo", viewLess: "Ver menos",
+    previewAuto: "Auto", previewMobile: "Móvil", previewDesktop: "Escritorio",
+    active: "Activo", inactive: "Inactivo", activate: "Activar", deactivate: "Desactivar",
+    itemSaved: "Ítem guardado", itemDeleted: "Ítem eliminado", itemDuplicated: "Ítem duplicado",
+    lightMode: "Claro", darkMode: "Oscuro", searchPlaceholder: "Buscar por nombre, fabricante...",
+    itemsShown: "ítems mostrados", searchResultsFor: "resultados para", avgRating: "Calificación media",
+    confirmDeleteMsg: '¿Seguro que deseas eliminar "{name}"?', confirmDuplicateMsg: '¿Duplicar "{name}"?', confirmYes: "Confirmar",
+    beerNome: "Nombre", beerCervejaria: "Cervecería", paisId: "País", beerIbu: "IBU", beerEstiloLivre: "Estilo (libre)",
+    bjcp21: "Estilo BJCP 2021", bjcpNote: "Las listas de país y estilo BJCP son provisionales — se reemplazarán por las pestañas list_pais y list_bjcp_21 de la hoja.",
+    searchAll: "Todos", shareItem: "Compartir", searchGoogle: "Buscar en Google", beerIdTag: "ID", idLabel: "#ID:",
+    keepChangesMsg: "¿Deseas conservar los cambios?", discard: "Descartar",
+    wineSafra: "Cosecha", wineCor: "Color", wineTipo: "Tipo", wineProdutor: "Bodega", wineRegiao: "Región", wineUva: "Uva",
+  },
+};
+
+const HUES = { green: 150, blue: 245, red: 22, orange: 55, yellow: 95, purple: 300, pink: 350 };
+// Placeholder lists — swap for the real "list_pais" and "list_bjcp_21" sheet tabs when provided.
+const PAIS_LIST = ['Brasil', 'EUA', 'Irlanda', 'República Tcheca', 'Alemanha', 'Argentina', 'Chile', 'França', 'Nova Zelândia', 'Escócia', 'Rússia', 'México', 'Cuba', 'Inglaterra', 'Itália'];
+const BJCP21_LIST = [
+  '1 - American Light Lager', '2 - International Lager', '3 - Czech Lager', '4 - Pale Malty European Lager',
+  '5 - Pale Bitter European Beer', '6 - Amber Malty European Lager', '7 - Amber Bitter European Lager', '8 - Dark European Lager',
+  '9 - Strong European Lager', '10 - German Wheat Beer', '11 - British Bitter', '12 - Pale Commonwealth Beer',
+  '13 - Brown British Beer', '14 - Scottish Ale', '15 - Irish Beer', '16 - Dark British Beer', '17 - Strong British Ale',
+  '18 - Pale American Ale', '19 - Amber and Brown American Beer', '20 - American Porter and Stout', '21 - IPA',
+  '22 - Strong American Ale', '23 - European Sour Ale', '24 - Belgian Ale', '25 - Strong Belgian Ale', '26 - Trappist Ale',
+  '27 - Historical Beer', '28 - American Wild Ale', '29 - Fruit Beer', '30 - Spiced Beer', '31 - Alternative Fermentables Beer',
+  '32 - Specialty Beer', '33 - Alternative Fermentation Beer', '34 - Wood Beer',
+];
+const WINE_COR_LIST = ['Tinto', 'Branco', 'Verde', 'Laranja', 'Rosê'];
+const WINE_TIPO_LIST = ['Seco', 'Semi-Seco', 'Suave', 'Brut'];
+const FLAGS = {
+  'Brasil': '🇧🇷', 'EUA': '🇺🇸', 'Irlanda': '🇮🇪', 'República Tcheca': '🇨🇿', 'Alemanha': '🇩🇪',
+  'Argentina': '🇦🇷', 'Chile': '🇨🇱', 'França': '🇫🇷', 'Nova Zelândia': '🇳🇿', 'Escócia': '🏴',
+  'Rússia': '🇷🇺', 'México': '🇲🇽', 'Cuba': '🇨🇺', 'Inglaterra': '🏴', 'Itália': '🇮🇹', 'Casa': '🏠',
+};
+
+const ICON_PATHS = {
+  home: 'M4 11 L12 4 L20 11 M6 9.5 V20 H18 V9.5',
+  beer: 'M6 4 H15 V20 H6 Z M15 8 H18 A2 2 0 0 1 18 14 H15 M8 4 V2 M13 4 V2',
+  wine: 'M7 3 H17 L15.3 11 A3.3 3.3 0 0 1 8.7 11 Z M12 11 V20 M8 20 H16',
+  drink: 'M4 4 H20 L12 13 Z M12 13 V20 M8 20 H16',
+  spirit: 'M10 3 H14 V7 L16.5 10.5 V20 H7.5 V10.5 L10 7 Z M9 14 H15',
+  deck: 'M4 4 H15 V14 H4 Z M8 8 H20 V18 H8 Z',
+  plus: 'M12 4 V20 M4 12 H20',
+  chevronDown: 'M5 8 L12 15 L19 8',
+  check: 'M4 12 L9 17 L20 6',
+  eyeOpen: 'M2 12 C4.5 6.5 9 4 12 4 C15 4 19.5 6.5 22 12 C19.5 17.5 15 20 12 20 C9 20 4.5 17.5 2 12 Z M12 15.5 C13.933 15.5 15.5 13.933 15.5 12 C15.5 10.067 13.933 8.5 12 8.5 C10.067 8.5 8.5 10.067 8.5 12 C8.5 13.933 10.067 15.5 12 15.5 Z',
+  eyeOff: 'M2 12 C4.5 6.5 9 4 12 4 C15 4 19.5 6.5 22 12 C19.5 17.5 15 20 12 20 C9 20 4.5 17.5 2 12 Z M12 15.5 C13.933 15.5 15.5 13.933 15.5 12 C15.5 10.067 13.933 8.5 12 8.5 C10.067 8.5 8.5 10.067 8.5 12 C8.5 13.933 10.067 15.5 12 15.5 Z M3 3 L21 21',
+  gear: 'M12 8 a4 4 0 1 0 0.01 0 Z M12 2 L12 5 M12 19 L12 22 M4.2 4.2 L6.3 6.3 M17.7 17.7 L19.8 19.8 M2 12 L5 12 M19 12 L22 12 M4.2 19.8 L6.3 17.7 M17.7 6.3 L19.8 4.2',
+  shield: 'M12 3 L19 6 V11 C19 16 16 19.5 12 21 C8 19.5 5 16 5 11 V6 Z M8.5 12 L11 14.5 L16 9',
+  logoutIcon: 'M15 3 H6 V21 H15 M10 12 H21 M21 12 L17 8 M21 12 L17 16',
+  table: 'M3 4 H21 V20 H3 Z M3 12 H21 M10 4 V20',
+  gallery: 'M3 3 H10 V10 H3 Z M14 3 H21 V10 H14 Z M3 14 H10 V21 H3 Z M14 14 H21 V21 H14 Z',
+  edit: 'M4 20 L4.7 16.6 L15.5 5.8 A2 2 0 0 1 18.3 5.8 L18.2 5.9 A2 2 0 0 1 18.2 8.7 L7.4 19.4 Z M14 7.5 L16.5 10',
+  duplicate: 'M8 8 H18 V18 H8 Z M6 16 V6 H16',
+  delete: 'M5 6 H19 M9 6 V4 H15 V6 M7 6 L8 20 H16 L17 6',
+  share: 'M18 8 A2.5 2.5 0 1 0 15.6 5 A2.5 2.5 0 0 0 18 8 Z M6 14.5 A2.5 2.5 0 1 0 3.6 11.5 A2.5 2.5 0 0 0 6 14.5 Z M18 21 A2.5 2.5 0 1 0 15.6 18 A2.5 2.5 0 0 0 18 21 Z M8.2 13.2 L15.8 9.3 M8.2 12.8 L15.8 16.7',
+  search: 'M11 4 A7 7 0 1 0 11 18 A7 7 0 0 0 11 4 Z M16.2 16.2 L21 21',
+  close: 'M5 5 L19 19 M19 5 L5 19',
+  zoomIn: 'M11 4 A7 7 0 1 0 11 18 A7 7 0 0 0 11 4 Z M16.2 16.2 L21 21 M11 8 V14 M8 11 H14',
+  zoomOut: 'M11 4 A7 7 0 1 0 11 18 A7 7 0 0 0 11 4 Z M16.2 16.2 L21 21 M8 11 H14',
+};
+
+const STAR_PATH = 'M12 2.5 L14.9 9.1 L22 9.8 L16.6 14.6 L18.2 21.5 L12 17.8 L5.8 21.5 L7.4 14.6 L2 9.8 L9.1 9.1 Z';
+
+function makeId(prefix) { return prefix + '_' + Math.random().toString(36).slice(2, 9); }
+function fmtDate(iso) {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+class Component extends DCLogic {
+  state = {
+    screen: 'login', // login, signup, forgot, verify2fa, inactive, home, list, detail, profile, stats
+    prevScreen: 'home',
+    lang: 'pt',
+    hue: 'green',
+    mode: 'light',
+    form: { email: '', password: '', name: '', code: '' },
+    showPassword: false,
+    authError: '',
+    forgotSent: false,
+    mockCode: '482913',
+    pendingLogin: null,
+
+    loggedInUser: null,
+    toast: '',
+    searchQuery: '',
+
+    listType: 'beer',
+    statsType: 'beer',
+    viewMode: 'deck',
+    filterCategory: 'all',
+    sortField: 'name',
+    sortDir: 'asc',
+
+    selectedItemId: null,
+    isEditing: false,
+    draft: null,
+    featuredIdx: 0,
+
+    profileForm: { name: '' },
+    pwForm: { current: '', next: '', confirm: '' },
+    pwError: '',
+    profileTab: 'settings', // settings | security
+    accountMenuOpen: false,
+    twoFAEnabled: true,
+    expandCountry: false, expandCategory: false, expandManufacturer: false,
+    previewMode: 'auto', // auto | mobile | desktop — manual override for previewing layouts regardless of actual window width
+
+    // ---- Secondary profiles (followed) ----
+    viewedProfileId: null, // null = viewing own/primary profile
+    profileMenuOpen: false,
+    // RELAC: maps a user id to the ids of secondary profiles they follow / can view.
+    // Only profiles listed here for the logged-in user may ever appear as switchable.
+    relac: {
+      u1: ['u2', 'u3', 'u4', 'u5', 'u6'],
+      u2: ['u1'],
+      u3: [],
+      u4: ['u1'],
+      u5: [],
+      u6: [],
+    },
+    confirm: null,
+    isDraggingRating: false,
+    searchField: 'all',
+    photoViewerOpen: false,
+    photoZoom: 1,
+
+    beers: [
+      { id: 'b1', seq: 1, type: 'beer', ownerId: 'u1', name: 'Weiss Dourada', category: '10 - German Wheat Beer', estiloLivre: 'Weiss', manufacturer: 'Cervejaria Bierland', country: 'Brasil', abv: '5.2%', ibu: '14', rating: 4, tastingDate: '2026-03-14' },
+      { id: 'b2', seq: 2, type: 'beer', ownerId: 'u2', name: 'IPA Cascade', category: '21 - IPA', estiloLivre: 'American IPA', manufacturer: 'Cascade Brewing', country: 'EUA', abv: '6.8%', ibu: '65', rating: 5, tastingDate: '2026-05-02' },
+      { id: 'b3', seq: 3, type: 'beer', ownerId: 'u3', name: 'Stout Imperial', category: '20 - American Porter and Stout', estiloLivre: 'Imperial Stout', manufacturer: 'Guinness Craft', country: 'Irlanda', abv: '8.0%', ibu: '55', rating: 4, tastingDate: '2026-01-20' },
+      { id: 'b4', seq: 4, type: 'beer', ownerId: 'u1', name: 'Pilsen Clássica', category: '3 - Czech Lager', estiloLivre: 'Pilsen', manufacturer: 'Pilsner Urquell', country: 'República Tcheca', abv: '4.4%', ibu: '32', rating: 3, tastingDate: '2025-11-11' },
+      { id: 'b5', seq: 5, type: 'beer', ownerId: 'u2', name: 'Lager Session', category: '2 - International Lager', estiloLivre: 'Lager', manufacturer: 'Paulaner', country: 'Alemanha', abv: '4.8%', ibu: '18', rating: 4, tastingDate: '2026-02-08' },
+      { id: 'b6', seq: 6, type: 'beer', ownerId: 'u3', name: 'IPA Tropical', category: '21 - IPA', estiloLivre: 'New England IPA', manufacturer: 'Cervejaria Tropical', country: 'Brasil', abv: '6.2%', ibu: '48', rating: 4, tastingDate: '2026-04-27' },
+      { id: 'b7', seq: 7, type: 'beer', ownerId: 'u4', name: 'Saison Rústica', category: '16 - Belgian Ale', estiloLivre: 'Saison', manufacturer: 'Cervejaria Colonial', country: 'Bélgica', abv: '6.5%', ibu: '28', rating: 4, tastingDate: '2026-05-12' },
+      { id: 'b8', seq: 8, type: 'beer', ownerId: 'u5', name: 'Porter Defumada', category: '20 - American Porter and Stout', estiloLivre: 'Smoked Porter', manufacturer: 'Fumaça Brewing', country: 'Brasil', abv: '5.9%', ibu: '30', rating: 4, tastingDate: '2026-04-03' },
+      { id: 'b9', seq: 9, type: 'beer', ownerId: 'u6', name: 'Gose Cítrica', category: '17 - Sour Ale', estiloLivre: 'Gose', manufacturer: 'Cervejaria Salinas', country: 'Brasil', abv: '4.2%', ibu: '9', rating: 3, tastingDate: '2026-03-19' },
+    ],
+    wines: [
+      { id: 'w1', seq: 1, type: 'wine', ownerId: 'u1', name: 'Malbec Reserva', category: 'Tinto', wineType: 'Seco', vintage: '2021', manufacturer: 'Bodega Catena', country: 'Argentina', region: 'Mendoza', grape: 'Malbec', abv: '13.5%', rating: 5, tastingDate: '2026-06-01' },
+      { id: 'w2', seq: 2, type: 'wine', ownerId: 'u2', name: 'Chardonnay Barrica', category: 'Branco', wineType: 'Seco', vintage: '2022', manufacturer: 'Viña Casablanca', country: 'Chile', region: 'Casablanca Valley', grape: 'Chardonnay', abv: '12.8%', rating: 4, tastingDate: '2026-03-30' },
+      { id: 'w3', seq: 3, type: 'wine', ownerId: 'u3', name: 'Rosé Provençal', category: 'Rosê', wineType: 'Seco', vintage: '2023', manufacturer: 'Château Provence', country: 'França', region: 'Provence', grape: 'Grenache', abv: '12.0%', rating: 4, tastingDate: '2026-01-15' },
+      { id: 'w4', seq: 4, type: 'wine', ownerId: 'u1', name: 'Espumante Brut', category: 'Branco', wineType: 'Brut', vintage: '2020', manufacturer: 'Casa Valduga', country: 'Brasil', region: 'Bento Gonçalves', grape: 'Chardonnay/Pinot Noir', abv: '12.5%', rating: 4, tastingDate: '2025-12-24' },
+      { id: 'w5', seq: 5, type: 'wine', ownerId: 'u2', name: 'Cabernet Sauvignon', category: 'Tinto', wineType: 'Seco', vintage: '2019', manufacturer: 'Napa Cellars', country: 'EUA', region: 'Napa Valley', grape: 'Cabernet Sauvignon', abv: '14.0%', rating: 5, tastingDate: '2026-04-10' },
+      { id: 'w6', seq: 6, type: 'wine', ownerId: 'u3', name: 'Sauvignon Blanc', category: 'Branco', wineType: 'Seco', vintage: '2023', manufacturer: 'Cloudy Bay', country: 'Nova Zelândia', region: 'Marlborough', grape: 'Sauvignon Blanc', abv: '13.0%', rating: 3, tastingDate: '2026-02-19' },
+      { id: 'w7', seq: 7, type: 'wine', ownerId: 'u4', name: 'Pinot Noir Reserva', category: 'Tinto', wineType: 'Seco', vintage: '2020', manufacturer: 'Casa Perini', country: 'Brasil', region: 'Vale dos Vinhedos', grape: 'Pinot Noir', abv: '13.2%', rating: 4, tastingDate: '2026-01-27' },
+      { id: 'w8', seq: 8, type: 'wine', ownerId: 'u5', name: 'Riesling Doce', category: 'Branco', wineType: 'Doce', vintage: '2022', manufacturer: 'Rheinhof', country: 'Alemanha', region: 'Mosel', grape: 'Riesling', abv: '9.5%', rating: 4, tastingDate: '2026-02-05' },
+      { id: 'w9', seq: 9, type: 'wine', ownerId: 'u6', name: 'Tempranillo Crianza', category: 'Tinto', wineType: 'Seco', vintage: '2019', manufacturer: 'Bodega Rioja Alta', country: 'Espanha', region: 'Rioja', grape: 'Tempranillo', abv: '13.8%', rating: 5, tastingDate: '2026-03-11' },
+    ],
+    drinksList: [
+      { id: 'd1', seq: 1, type: 'drink', ownerId: 'u1', name: 'Negroni Clássico', category: 'Âmbar', wineType: 'Clássico', vintage: '', manufacturer: 'Bar Autoral', country: 'Itália', region: 'Milão', abv: '24%', rating: 5, tastingDate: '2026-05-18' },
+      { id: 'd2', seq: 2, type: 'drink', ownerId: 'u2', name: 'Jardim Autoral', category: 'Verde', wineType: 'Autoral', vintage: '', manufacturer: 'Bar Autoral', country: 'Casa', region: 'Casa', abv: '14%', rating: 4, tastingDate: '2026-03-22' },
+      { id: 'd3', seq: 3, type: 'drink', ownerId: 'u3', name: 'Mojito', category: 'Transparente', wineType: 'Clássico', vintage: '', manufacturer: 'Casa', country: 'Cuba', region: 'Havana', abv: '12%', rating: 4, tastingDate: '2026-01-05' },
+      { id: 'd4', seq: 4, type: 'drink', ownerId: 'u1', name: 'Spritz sem Álcool', category: 'Laranja', wineType: 'Sem álcool', vintage: '', manufacturer: 'Casa', country: 'Casa', region: 'Casa', abv: '0%', rating: 3, tastingDate: '2026-04-02' },
+      { id: 'd5', seq: 5, type: 'drink', ownerId: 'u2', name: 'Old Fashioned', category: 'Âmbar', wineType: 'Clássico', vintage: '', manufacturer: 'Casa', country: 'EUA', region: 'Kentucky', abv: '32%', rating: 5, tastingDate: '2026-02-27' },
+      { id: 'd6', seq: 6, type: 'drink', ownerId: 'u3', name: 'Tônica Botânica', category: 'Transparente', wineType: 'Autoral', vintage: '', manufacturer: 'Bar Autoral', country: 'Casa', region: 'Casa', abv: '10%', rating: 4, tastingDate: '2026-05-30' },
+      { id: 'd7', seq: 7, type: 'drink', ownerId: 'u4', name: 'Caipirinha de Maracujá', category: 'Amarelo', wineType: 'Clássico', vintage: '', manufacturer: 'Casa', country: 'Brasil', region: 'Casa', abv: '15%', rating: 5, tastingDate: '2026-04-14' },
+      { id: 'd8', seq: 8, type: 'drink', ownerId: 'u5', name: 'Whisky Sour', category: 'Âmbar', wineType: 'Clássico', vintage: '', manufacturer: 'Bar Autoral', country: 'EUA', region: 'Casa', abv: '20%', rating: 4, tastingDate: '2026-02-22' },
+      { id: 'd9', seq: 9, type: 'drink', ownerId: 'u6', name: 'Espuma de Gengibre', category: 'Amarelo', wineType: 'Autoral', vintage: '', manufacturer: 'Bar Autoral', country: 'Casa', region: 'Casa', abv: '8%', rating: 3, tastingDate: '2026-01-09' },
+    ],
+    spiritsList: [
+      { id: 's1', seq: 1, type: 'spirit', ownerId: 'u1', name: 'Whisky Single Malt', category: 'Âmbar', wineType: 'Envelhecido', vintage: '12 anos', manufacturer: 'Glen Distillery', country: 'Escócia', region: 'Speyside', abv: '43%', rating: 5, tastingDate: '2026-01-30' },
+      { id: 's2', seq: 2, type: 'spirit', ownerId: 'u2', name: 'Vodka Premium', category: 'Transparente', wineType: 'Destilado simples', vintage: '', manufacturer: 'Stoli House', country: 'Rússia', region: 'Moscou', abv: '40%', rating: 4, tastingDate: '2026-02-14' },
+      { id: 's3', seq: 3, type: 'spirit', ownerId: 'u3', name: 'Tequila Reposado', category: 'Dourado', wineType: 'Reposado', vintage: '', manufacturer: 'Casa Herradura', country: 'México', region: 'Jalisco', abv: '38%', rating: 4, tastingDate: '2026-03-08' },
+      { id: 's4', seq: 4, type: 'spirit', ownerId: 'u1', name: 'Rum Añejo', category: 'Âmbar', wineType: 'Envelhecido', vintage: '8 anos', manufacturer: 'Havana Club', country: 'Cuba', region: 'Havana', abv: '40%', rating: 4, tastingDate: '2026-04-19' },
+      { id: 's5', seq: 5, type: 'spirit', ownerId: 'u2', name: 'Gin London Dry', category: 'Transparente', wineType: 'Destilado simples', vintage: '', manufacturer: 'London Dry Co', country: 'Inglaterra', region: 'Londres', abv: '45%', rating: 5, tastingDate: '2026-05-05' },
+      { id: 's6', seq: 6, type: 'spirit', ownerId: 'u3', name: 'Cachaça Envelhecida', category: 'Dourado', wineType: 'Envelhecido', vintage: '3 anos', manufacturer: 'Engenho Central', country: 'Brasil', region: 'Minas Gerais', abv: '42%', rating: 4, tastingDate: '2026-06-10' },
+      { id: 's7', seq: 7, type: 'spirit', ownerId: 'u4', name: 'Mezcal Artesanal', category: 'Transparente', wineType: 'Reposado', vintage: '', manufacturer: 'Casa Oaxaca', country: 'México', region: 'Oaxaca', abv: '46%', rating: 5, tastingDate: '2026-03-25' },
+      { id: 's8', seq: 8, type: 'spirit', ownerId: 'u5', name: 'Conhaque VSOP', category: 'Âmbar', wineType: 'Envelhecido', vintage: '10 anos', manufacturer: 'Maison Dubois', country: 'França', region: 'Cognac', abv: '40%', rating: 4, tastingDate: '2026-02-17' },
+      { id: 's9', seq: 9, type: 'spirit', ownerId: 'u6', name: 'Absinto Verde', category: 'Verde', wineType: 'Destilado simples', vintage: '', manufacturer: 'La Fée Verte', country: 'Suíça', region: 'Val-de-Travers', abv: '65%', rating: 3, tastingDate: '2026-01-31' },
+    ],
+
+    users: [
+      { id: 'u1', name: 'Você', email: 'admin@toastrack.com', status: 'active', role: 'admin' },
+      { id: 'u2', name: 'Rafael Souza', email: 'rafael@email.com', status: 'active', role: 'user' },
+      { id: 'u3', name: 'Marina Lopes', email: 'marina@email.com', status: 'inactive', role: 'user' },
+      { id: 'u4', name: 'Camila Torres', email: 'camila@email.com', status: 'active', role: 'user' },
+      { id: 'u5', name: 'Diego Fontes', email: 'diego@email.com', status: 'active', role: 'user' },
+      { id: 'u6', name: 'Bianca Ferraz', email: 'bianca@email.com', status: 'active', role: 'user' },
+    ],
+    logs: [
+      { ts: '08/07 09:12', text: 'admin@toastrack.com fez login' },
+      { ts: '07/07 21:40', text: 'admin@toastrack.com editou "Malbec Reserva"' },
+      { ts: '07/07 18:05', text: 'marina@email.com criou conta (pendente)' },
+    ],
+  };
+
+  componentDidMount() {
+    this._onResize = () => this.forceUpdate();
+    window.addEventListener('resize', this._onResize);
+    this._carouselTimer = setInterval(() => {
+      this.setState(s => ({ featuredIdx: (s.featuredIdx + 1) % 3 }));
+    }, 4000);
+  }
+  componentWillUnmount() {
+    window.removeEventListener('resize', this._onResize);
+    clearInterval(this._carouselTimer);
+  }
+
+  addLog(text) {
+    const ts = new Date().toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    this.setState(s => ({ logs: [{ ts, text }, ...s.logs] }));
+  }
+
+  showToast(msg) {
+    this.setState({ toast: msg });
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => this.setState({ toast: '' }), 2200);
+  }
+
+  // ---------- AUTH ----------
+  onEmailChange = (e) => this.setState(s => ({ form: { ...s.form, email: e.target.value } }));
+  onPasswordChange = (e) => this.setState(s => ({ form: { ...s.form, password: e.target.value } }));
+  onNameChange = (e) => this.setState(s => ({ form: { ...s.form, name: e.target.value } }));
+  onCodeChange = (e) => this.setState(s => ({ form: { ...s.form, code: e.target.value } }));
+  toggleShowPassword = () => this.setState(s => ({ showPassword: !s.showPassword }));
+
+  validatePassword(pw) {
+    return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(pw || '');
+  }
+
+  doLogin = () => {
+    const { email, password } = this.state.form;
+    if (!email || !password) { this.setState({ authError: this.t().invalidCredentials }); return; }
+    const existing = this.state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+    if (existing && existing.status === 'inactive') {
+      this.setState({ screen: 'inactive', authError: '' });
+      return;
+    }
+    this.setState({ authError: '', pendingLogin: { email, name: existing ? existing.name : email.split('@')[0] }, screen: 'verify2fa' });
+  };
+
+  doSignup = () => {
+    const { email, password, name } = this.state.form;
+    if (!email || !name) { this.setState({ authError: this.t().invalidCredentials }); return; }
+    if (!this.validatePassword(password)) { this.setState({ authError: this.t().passwordRequirements }); return; }
+    const id = makeId('u');
+    this.setState(s => ({
+      users: [...s.users, { id, name, email, status: 'inactive', role: 'user' }],
+      authError: '',
+    }));
+    this.addLog(`${email} criou conta (pendente)`);
+    this.setState({ screen: 'inactive' });
+  };
+
+  goToForgot = () => this.setState({ screen: 'forgot', authError: '', forgotSent: false });
+  goToSignup = () => this.setState({ screen: 'signup', authError: '' });
+  goToLogin = () => this.setState({ screen: 'login', authError: '', form: { ...this.state.form, password: '', code: '' } });
+
+  doForgot = () => {
+    if (!this.state.form.email) return;
+    this.addLog(`${this.state.form.email} solicitou redefinição de senha`);
+    this.setState({ forgotSent: true });
+  };
+
+  doVerify = () => {
+    if ((this.state.form.code || '').trim() === this.state.mockCode) {
+      const { email, name } = this.state.pendingLogin;
+      this.addLog(`${email} fez login`);
+      const existing = this.state.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      const id = existing ? existing.id : makeId('u');
+      const role = existing ? existing.role : (email.includes('admin') ? 'admin' : 'user');
+      this.setState(s => ({
+        loggedInUser: { id, name, email, role },
+        users: existing ? s.users : [...s.users, { id, name, email, status: 'active', role }],
+        screen: 'home', authError: '', form: { email: '', password: '', name: '', code: '' },
+        profileForm: { name },
+        viewedProfileId: null, profileMenuOpen: false,
+      }));
+    } else {
+      this.setState({ authError: this.t().invalidCode });
+    }
+  };
+
+  resendCode = () => this.showToast('Código reenviado');
+
+  doLogout = () => {
+    this.addLog(`${this.state.loggedInUser.email} fez logout`);
+    this.setState({ loggedInUser: null, screen: 'login', form: { email: '', password: '', name: '', code: '' }, viewedProfileId: null, profileMenuOpen: false });
+  };
+
+  setLang = (l) => this.setState({ lang: l });
+  setHue = (h) => this.setState({ hue: h });
+  setMode = (m) => this.setState({ mode: m });
+
+  t() { return I18N[this.state.lang]; }
+
+  theme() {
+    const hue = HUES[this.state.hue];
+    const dark = this.state.mode === 'dark';
+    return {
+      bg: dark ? `oklch(17% 0.012 ${hue})` : `oklch(98% 0.006 ${hue})`,
+      surface: dark ? `oklch(22% 0.014 ${hue})` : `oklch(100% 0 0)`,
+      text: dark ? `oklch(95% 0.01 ${hue})` : `oklch(22% 0.02 ${hue})`,
+      textMuted: dark ? `oklch(70% 0.02 ${hue})` : `oklch(48% 0.02 ${hue})`,
+      border: dark ? `oklch(32% 0.02 ${hue})` : `oklch(90% 0.012 ${hue})`,
+      trackBg: dark ? `oklch(30% 0.02 ${hue})` : `oklch(92% 0.012 ${hue})`,
+      accent: `oklch(58% 0.13 ${hue})`,
+      accentSoft: dark ? `oklch(30% 0.05 ${hue})` : `oklch(93% 0.03 ${hue})`,
+      danger: `oklch(55% 0.14 25)`,
+    };
+  }
+
+  // ---------- NAV ----------
+  goto = (screen) => this.setState(s => ({ screen, selectedItemId: null, isEditing: false, searchQuery: screen === 'home' ? s.searchQuery : '' }));
+  gotoList = (type) => this.setState({ screen: 'list', listType: type, viewMode: 'deck', filterCategory: 'all', searchQuery: '' });
+  openProfile = () => this.setState(s => ({ screen: 'profile', prevScreen: s.screen === 'list' ? 'list' : 'home' }));
+  toggleAccountMenu = () => this.setState(s => ({ accountMenuOpen: !s.accountMenuOpen }));
+  closeAccountMenu = () => this.setState({ accountMenuOpen: false });
+  goProfileTab = (tab) => this.setState(s => ({ screen: 'profile', profileTab: tab, prevScreen: s.screen === 'list' ? 'list' : 'home', accountMenuOpen: false }));
+  logoutFromMenu = () => { this.setState({ accountMenuOpen: false }); this.doLogout(); };
+  toggleTwoFA = () => this.setState(s => ({ twoFAEnabled: !s.twoFAEnabled }));
+  toggleExpandStat = (section) => this.setState(s => ({ [section]: !s[section] }));
+  openStats = (type) => this.setState({ screen: 'stats', statsType: type, prevScreen: 'home' });
+  goBack = () => {
+    const s = this.state;
+    if (s.screen === 'detail') { this.setState({ screen: 'list', selectedItemId: null, isEditing: false }); return; }
+    this.setState({ screen: s.prevScreen || 'home' });
+  };
+  setViewMode = (vm) => this.setState({ viewMode: vm });
+  onFilterChange = (e) => this.setState({ filterCategory: e.target.value });
+  onSearchChange = (e) => this.setState({ searchQuery: e.target.value });
+  onSearchFieldChange = (e) => this.setState({ searchField: e.target.value });
+  itemMatchesSearch(item, field, q) {
+    const name = (item.name || '').toLowerCase();
+    const manufacturer = (item.manufacturer || '').toLowerCase();
+    const country = (item.country || '').toLowerCase();
+    const style = `${item.category || ''} ${item.estiloLivre || ''}`.toLowerCase();
+    if (field === 'name') return name.includes(q);
+    if (field === 'manufacturer') return manufacturer.includes(q);
+    if (field === 'country') return country.includes(q);
+    if (field === 'style') return style.includes(q);
+    return name.includes(q) || manufacturer.includes(q) || country.includes(q) || style.includes(q);
+  }
+  openPhotoViewer = () => this.setState({ photoViewerOpen: true, photoZoom: 1 });
+  closePhotoViewer = () => this.setState({ photoViewerOpen: false });
+  zoomInPhoto = () => this.setState(s => ({ photoZoom: Math.min(3, s.photoZoom + 0.5) }));
+  zoomOutPhoto = () => this.setState(s => ({ photoZoom: Math.max(1, s.photoZoom - 0.5) }));
+
+  shareItem(item) {
+    const text = `${item.name} — ${item.manufacturer}${item.country ? ' · ' + item.country : ''}`;
+    const canvas = document.createElement('canvas');
+    canvas.width = 800; canvas.height = 600;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#f2f4ef'; ctx.fillRect(0, 0, 800, 600);
+    ctx.fillStyle = '#2f6b4f'; ctx.font = 'bold 36px sans-serif'; ctx.fillText(item.name || '', 40, 300);
+    ctx.font = '22px sans-serif'; ctx.fillStyle = '#555'; ctx.fillText(text, 40, 345);
+    canvas.toBlob(async (blob) => {
+      try {
+        const file = new File([blob], `${(item.name || 'item').replace(/\s+/g, '_')}.png`, { type: 'image/png' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: item.name, text });
+        } else if (navigator.share) {
+          await navigator.share({ title: item.name, text });
+        } else {
+          this.showToast('Compartilhamento não suportado neste navegador');
+        }
+      } catch (err) {
+        // user cancelled or unsupported — no-op
+      }
+    }, 'image/png');
+  }
+  searchGoogleForItem(item) {
+    const q = encodeURIComponent(`${item.name} ${item.manufacturer} ${item.country || ''}`.trim());
+    window.open(`https://www.google.com/search?q=${q}`, '_blank');
+  }
+  shareSelected = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    if (item) this.shareItem(item);
+  };
+  searchSelectedOnGoogle = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    if (item) this.searchGoogleForItem(item);
+  };
+  setSort = (field) => this.setState(s => ({ sortField: field, sortDir: s.sortField === field && s.sortDir === 'asc' ? 'desc' : 'asc' }));
+
+  listKeyFor(type) { return type === 'beer' ? 'beers' : type === 'wine' ? 'wines' : type === 'drink' ? 'drinksList' : 'spiritsList'; }
+  // ---------- SECONDARY PROFILES ----------
+  ownUserId() { return this.state.loggedInUser && this.state.loggedInUser.id; }
+  viewedUserId() { return this.state.viewedProfileId || this.ownUserId(); }
+  isOwnProfileView() { return !this.state.viewedProfileId || this.state.viewedProfileId === this.ownUserId(); }
+  initialsFor(name) {
+    return ((name) || '?').replace(/[^\p{L}\s]/gu, '').trim().split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+  }
+  // Secondary profiles the current logged-in user is allowed to switch into, per RELAC.
+  availableSecondaryProfiles() {
+    const ownId = this.ownUserId();
+    const followedIds = (this.state.relac && this.state.relac[ownId]) || [];
+    return followedIds.map(id => this.state.users.find(u => u.id === id)).filter(Boolean);
+  }
+  toggleProfileMenu = () => this.setState(s => ({ profileMenuOpen: !s.profileMenuOpen }));
+  closeProfileMenu = () => this.setState({ profileMenuOpen: false });
+  selectProfile = (id) => {
+    const ownId = this.ownUserId();
+    if (id !== ownId && !this.availableSecondaryProfiles().some(u => u.id === id)) return; // not in RELAC, ignore
+    this.setState({ viewedProfileId: id === ownId ? null : id, profileMenuOpen: false, filterCategory: 'all' });
+  };
+  canEditItem(item) { return !item || !item.ownerId || item.ownerId === this.ownUserId(); }
+  // Home stats are always scoped to the logged-in user's own items (USER_ID = logged user id),
+  // regardless of which secondary profile is currently being viewed in the list screens.
+  myOwnList(type) {
+    const key = this.listKeyFor(type);
+    const ownId = this.ownUserId();
+    return this.state[key].filter(i => (i.ownerId || ownId) === ownId);
+  }
+  currentList() {
+    const full = this.state[this.listKeyFor(this.state.listType)];
+    const viewerId = this.viewedUserId();
+    return full.filter(i => (i.ownerId || this.ownUserId()) === viewerId);
+  }
+  allLists() {
+    const s = this.state;
+    return { beer: s.beers, wine: s.wines, drink: s.drinksList, spirit: s.spiritsList };
+  }
+  findItemAnywhere(id) {
+    const all = this.allLists();
+    for (const k of Object.keys(all)) {
+      const found = all[k].find(i => i.id === id);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  openDetail = (id) => this.setState({ screen: 'detail', selectedItemId: id, isEditing: false });
+  closeDetail = () => this.setState({ screen: 'list', selectedItemId: null, isEditing: false });
+
+  startEdit = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    if (!this.canEditItem(item)) return;
+    this.setState({ isEditing: true, draft: { ...item, imageLabel: `Foto: ${item.name}` } });
+  };
+  openEdit = (item) => {
+    if (!this.canEditItem(item)) return;
+    this.setState({ screen: 'detail', selectedItemId: item.id, isEditing: true, draft: { ...item, imageLabel: `Foto: ${item.name}` } });
+  };
+  cancelDraft = () => this.setState({ isEditing: false, draft: null });
+
+  onDraftName = (e) => this.setState(s => ({ draft: { ...s.draft, name: e.target.value } }));
+  onDraftManufacturer = (e) => this.setState(s => ({ draft: { ...s.draft, manufacturer: e.target.value } }));
+  onDraftCategory = (e) => this.setState(s => ({ draft: { ...s.draft, category: e.target.value } }));
+  onDraftCountry = (e) => this.setState(s => ({ draft: { ...s.draft, country: e.target.value } }));
+  onDraftOrigin = (e) => this.setState(s => ({ draft: { ...s.draft, origin: e.target.value } }));
+  onDraftAbv = (e) => this.setState(s => ({ draft: { ...s.draft, abv: e.target.value } }));
+  onDraftIbu = (e) => this.setState(s => ({ draft: { ...s.draft, ibu: e.target.value } }));
+  onDraftEstiloLivre = (e) => this.setState(s => ({ draft: { ...s.draft, estiloLivre: e.target.value } }));
+  onDraftVintage = (e) => this.setState(s => ({ draft: { ...s.draft, vintage: e.target.value } }));
+  onDraftWineType = (e) => this.setState(s => ({ draft: { ...s.draft, wineType: e.target.value } }));
+  onDraftRegion = (e) => this.setState(s => ({ draft: { ...s.draft, region: e.target.value } }));
+  onDraftGrape = (e) => this.setState(s => ({ draft: { ...s.draft, grape: e.target.value } }));
+  onDraftDate = (e) => this.setState(s => ({ draft: { ...s.draft, tastingDate: e.target.value } }));
+  onDraftRating = (e) => this.setState(s => ({ draft: { ...s.draft, rating: Number(e.target.value) } }));
+
+  computeRatingFromEvent(e) {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clientX = e.clientX !== undefined ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : rect.left);
+    const fraction = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    return Math.round(fraction * 5 * 2) / 2;
+  }
+  onRatingPointerDown = (e) => {
+    e.preventDefault();
+    const val = this.computeRatingFromEvent(e);
+    this.setState(s => ({ draft: { ...s.draft, rating: val }, isDraggingRating: true }));
+  };
+  onRatingPointerMove = (e) => {
+    if (!this.state.isDraggingRating) return;
+    const val = this.computeRatingFromEvent(e);
+    this.setState(s => ({ draft: { ...s.draft, rating: val } }));
+  };
+  onRatingPointerUp = () => {
+    if (this.state.isDraggingRating) this.setState({ isDraggingRating: false });
+  };
+  onDraftDescription = (e) => this.setState(s => ({ draft: { ...s.draft, description: e.target.value } }));
+  simulateUpload = () => this.showToast('Imagem selecionada (simulado)');
+
+  saveDraft = () => {
+    const s = this.state;
+    const draft = { ...s.draft };
+    const key = this.listKeyFor(draft.type);
+    const isNew = !s[key].find(i => i.id === draft.id);
+    const list = isNew ? [draft, ...s[key]] : s[key].map(i => i.id === draft.id ? draft : i);
+    this.addLog(`${s.loggedInUser.email} ${isNew ? 'criou' : 'editou'} "${draft.name}"`);
+    this.setState({ [key]: list, isEditing: false, screen: 'detail', selectedItemId: draft.id, draft: null });
+    this.showToast(this.t().itemSaved);
+  };
+
+  openNewItem = () => {
+    if (!this.isOwnProfileView()) return; // can't add items to a secondary profile's collection
+    const type = this.state.listType;
+    const cats = { beer: BJCP21_LIST[0], wine: WINE_COR_LIST[0], drink: '', spirit: '' };
+    const draft = { id: makeId('i'), type, ownerId: this.ownUserId(), name: '', category: cats[type], manufacturer: '', country: PAIS_LIST[0], origin: '', abv: '', ibu: '', estiloLivre: '', vintage: '', wineType: type === 'wine' ? WINE_TIPO_LIST[0] : '', region: '', grape: '', rating: 3, tastingDate: '', description: '', imageLabel: 'Foto: novo item' };
+    const key = this.listKeyFor(type);
+    const maxSeq = Math.max(0, ...this.state[key].map(i => i.seq || 0));
+    draft.seq = maxSeq + 1;
+    this.setState({ screen: 'detail', selectedItemId: draft.id, isEditing: true, draft });
+  };
+
+  duplicateSelectedNow = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    const copy = { ...item, id: makeId('i'), name: item.name + ' (cópia)' };
+    const key = this.listKeyFor(item.type);
+    this.setState(s => ({ [key]: [copy, ...s[key]] }));
+    this.addLog(`${this.state.loggedInUser.email} duplicou "${item.name}"`);
+    this.showToast(this.t().itemDuplicated);
+  };
+  duplicateSelected = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    if (!this.canEditItem(item)) return;
+    this.requestConfirm(this.t().confirmDuplicateMsg.replace('{name}', item.name), this.duplicateSelectedNow);
+  };
+
+  deleteSelectedNow = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    const key = this.listKeyFor(item.type);
+    this.setState(s => ({ [key]: s[key].filter(i => i.id !== item.id), screen: 'list', selectedItemId: null }));
+    this.addLog(`${this.state.loggedInUser.email} excluiu "${item.name}"`);
+    this.showToast(this.t().itemDeleted);
+  };
+  deleteSelected = () => {
+    const item = this.findItemAnywhere(this.state.selectedItemId);
+    if (!this.canEditItem(item)) return;
+    this.requestConfirm(this.t().confirmDeleteMsg.replace('{name}', item.name), this.deleteSelectedNow, { danger: true });
+  };
+
+  quickDuplicate = (item) => {
+    if (!this.canEditItem(item)) return;
+    const copy = { ...item, id: makeId('i'), name: item.name + ' (cópia)' };
+    const key = this.listKeyFor(item.type);
+    this.setState(s => ({ [key]: [copy, ...s[key]] }));
+    this.addLog(`${this.state.loggedInUser.email} duplicou "${item.name}"`);
+    this.showToast(this.t().itemDuplicated);
+  };
+  quickDelete = (item) => {
+    if (!this.canEditItem(item)) return;
+    const key = this.listKeyFor(item.type);
+    this.setState(s => ({ [key]: s[key].filter(i => i.id !== item.id) }));
+    this.addLog(`${this.state.loggedInUser.email} excluiu "${item.name}"`);
+    this.showToast(this.t().itemDeleted);
+  };
+
+  // ---------- PROFILE ----------
+  onProfileNameChange = (e) => this.setState(s => ({ profileForm: { name: e.target.value } }));
+  saveProfileName = () => {
+    this.setState(s => ({ loggedInUser: { ...s.loggedInUser, name: s.profileForm.name } }));
+    this.showToast('Nome atualizado');
+  };
+  simulateAvatarUpload = () => this.showToast('Foto de perfil atualizada (simulado)');
+
+  onPwCurrent = (e) => this.setState(s => ({ pwForm: { ...s.pwForm, current: e.target.value } }));
+  onPwNext = (e) => this.setState(s => ({ pwForm: { ...s.pwForm, next: e.target.value } }));
+  onPwConfirm = (e) => this.setState(s => ({ pwForm: { ...s.pwForm, confirm: e.target.value } }));
+  savePassword = () => {
+    const { next, confirm } = this.state.pwForm;
+    if (!this.validatePassword(next)) { this.setState({ pwError: this.t().pwWeak }); return; }
+    if (next !== confirm) { this.setState({ pwError: this.t().pwMismatch }); return; }
+    this.addLog(`${this.state.loggedInUser.email} trocou a senha`);
+    this.setState({ pwError: '', pwForm: { current: '', next: '', confirm: '' } });
+    this.showToast('Senha alterada');
+  };
+
+  toggleUserStatus = (id) => {
+    const u = this.state.users.find(x => x.id === id);
+    this.setState(s => ({ users: s.users.map(u2 => u2.id === id ? { ...u2, status: u2.status === 'active' ? 'inactive' : 'active' } : u2) }));
+    this.addLog(`${this.state.loggedInUser.email} ${u.status === 'active' ? 'desativou' : 'ativou'} ${u.email}`);
+  };
+
+  requestConfirm = (message, action, opts) => this.setState({ confirm: { message, action, ...opts } });
+  confirmYes = () => {
+    const c = this.state.confirm;
+    this.setState({ confirm: null });
+    if (c && c.action) c.action();
+  };
+  confirmNo = () => {
+    const c = this.state.confirm;
+    this.setState({ confirm: null });
+    if (c && c.onCancel) c.onCancel();
+  };
+
+  discardEdit = () => {
+    const id = this.state.selectedItemId;
+    const exists = this.findItemAnywhere(id);
+    this.setState({ isEditing: false, draft: null, screen: exists ? 'detail' : 'list', selectedItemId: exists ? id : null });
+  };
+  goBackFromEdit = () => {
+    const t = this.t();
+    this.requestConfirm(t.keepChangesMsg, this.saveDraft, { confirmLabel: t.save, cancelLabel: t.discard, onCancel: this.discardEdit });
+  };
+
+  starsFor(n) {
+    const full = Math.floor(n);
+    const half = n - full >= 0.5;
+    const empty = Math.max(0, 5 - full - (half ? 1 : 0));
+    return '★'.repeat(full) + (half ? '⯪' : '') + '☆'.repeat(empty);
+  }
+
+  // Single <svg> per star with an internal <clipPath> reveals the filled path — this keeps the
+  // outline and fill perfectly pixel-aligned (no separate overlapping SVG/div-clip layers to drift
+  // out of sync, and no bottom-edge truncation at small sizes).
+  buildStarCells(value, size, prefix) {
+    const cells = [];
+    for (let i = 0; i < 5; i++) {
+      const frac = Math.max(0, Math.min(1, value - i));
+      cells.push({
+        size,
+        clipId: `${prefix}star${i}`,
+        clipWidth: (frac * 24).toFixed(2),
+      });
+    }
+    return cells;
+  }
+
+  placeholderStyle(theme) {
+    const c1 = theme.accentSoft, c2 = theme.border;
+    return {
+      background: `repeating-linear-gradient(135deg, ${c1}, ${c1} 10px, ${c2} 10px, ${c2} 20px)`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: '11px', fontFamily: 'monospace', color: theme.textMuted, textAlign: 'center', padding: '8px',
+    };
+  }
+
+  computeStats(type) {
+    const list = this.myOwnList(type);
+    const total = list.length;
+    const avg = total ? list.reduce((a, i) => a + i.rating, 0) / total : 0;
+    const avgRounded = Math.round(avg);
+    const byCountryMap = {};
+    list.forEach(i => { byCountryMap[i.country] = (byCountryMap[i.country] || 0) + 1; });
+    const maxCountry = Math.max(1, ...Object.values(byCountryMap), 0);
+    const byCountry = Object.keys(byCountryMap).map(c => ({ country: c, flag: FLAGS[c] || '🏳️', count: byCountryMap[c], barStyle: { width: `${(byCountryMap[c] / maxCountry) * 100}%`, height: '100%', background: this.theme().accent, borderRadius: '3px' } })).sort((a, b) => b.count - a.count);
+    const byCatMap = {};
+    list.forEach(i => { byCatMap[i.category] = (byCatMap[i.category] || 0) + 1; });
+    const maxCat = Math.max(1, ...Object.values(byCatMap));
+    const byCategory = Object.keys(byCatMap).map(c => ({ name: c, count: byCatMap[c], barStyle: { width: `${(byCatMap[c] / maxCat) * 100}%`, height: '100%', background: this.theme().accent, borderRadius: '3px' } }));
+    const byManMap = {};
+    list.forEach(i => { byManMap[i.manufacturer] = (byManMap[i.manufacturer] || 0) + 1; });
+    const maxMan = Math.max(1, ...Object.values(byManMap), 0);
+    const byManufacturer = Object.keys(byManMap).map(m => ({ name: m, count: byManMap[m], barStyle: { width: `${(byManMap[m] / maxMan) * 100}%`, height: '100%', background: this.theme().accent, borderRadius: '3px' } })).sort((a, b) => b.count - a.count);
+    return { total, avgStars: this.starsFor(avgRounded), avgRatingNum: avg.toFixed(1), byCountry, byCategory, byManufacturer };
+  }
+
+  renderVals() {
+    const s = this.state;
+    const t = this.t();
+    const theme = this.theme();
+    const dark = s.mode === 'dark';
+
+    const isAuthScreen = !s.loggedInUser;
+    const isAppScreen = !!s.loggedInUser;
+    const isLogin = s.screen === 'login';
+    const isSignup = s.screen === 'signup';
+    const isForgot = s.screen === 'forgot';
+    const isVerify = s.screen === 'verify2fa';
+    const isInactiveNotice = s.screen === 'inactive';
+
+    const isHome = s.screen === 'home';
+    const isList = s.screen === 'list';
+    const isDetail = s.screen === 'detail';
+    const isProfile = s.screen === 'profile';
+    const isStats = s.screen === 'stats';
+    const isEditing = isDetail && s.isEditing;
+    const isViewingDetail = isDetail && !s.isEditing;
+    const isAdmin = s.loggedInUser && s.loggedInUser.role === 'admin';
+    const isSearchHeader = isHome || isList;
+    const isBackHeader = isDetail || isProfile || isStats;
+    const isNotEditingBackHeader = isBackHeader && !s.isEditing;
+    const backButtonHandler = (isDetail && s.isEditing) ? this.goBackFromEdit : this.goBack;
+    const saveLinkStyle = { background: 'none', border: 'none', color: theme.accent, fontSize: '14px', fontWeight: 800, cursor: 'pointer', padding: '4px', minWidth: '60px', textAlign: 'right' };
+
+    const fieldLabelStyle = { display: 'block', fontSize: '12px', fontWeight: 700, color: theme.textMuted, marginBottom: '6px', marginTop: '14px' };
+    const inputStyle = { width: '100%', padding: '11px 13px', borderRadius: '10px', border: `1.5px solid ${theme.border}`, background: theme.surface, color: theme.text, fontSize: '14px', outline: 'none' };
+    const selectStyle = { ...inputStyle, flex: 1 };
+    const textareaStyle = { ...inputStyle, resize: 'vertical', fontFamily: 'inherit' };
+    const codeInputStyle = { ...inputStyle, textAlign: 'center', fontSize: '22px', letterSpacing: '0.3em', fontWeight: 700 };
+    const errorTextStyle = { color: theme.danger, fontSize: '12.5px', marginTop: '8px', fontWeight: 600 };
+    const hintTextStyle = { color: theme.textMuted, fontSize: '11.5px', marginTop: '6px', lineHeight: 1.4 };
+    const demoHintStyle = { color: theme.textMuted, fontSize: '11px', marginTop: '16px', lineHeight: 1.5, padding: '10px 12px', background: theme.accentSoft, borderRadius: '10px' };
+    const successBoxStyle = { background: theme.accentSoft, color: theme.text, fontSize: '12.5px', padding: '10px 12px', borderRadius: '10px', marginBottom: '14px' };
+    const primaryButtonStyle = { width: '100%', padding: '13px', borderRadius: '11px', border: 'none', background: theme.accent, color: dark ? '#111' : '#fff', fontSize: '14.5px', fontWeight: 700, marginTop: '18px', cursor: 'pointer' };
+    const secondaryButtonStyle = { flex: 1, padding: '13px', borderRadius: '11px', border: `1.5px solid ${theme.border}`, background: 'transparent', color: theme.text, fontSize: '14px', fontWeight: 700, cursor: 'pointer' };
+    const secondaryButtonSmallStyle = { padding: '9px 16px', borderRadius: '9px', border: `1.5px solid ${theme.border}`, background: 'transparent', color: theme.text, fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', marginTop: '10px' };
+    const dangerButtonStyle = { flex: 1, padding: '13px', borderRadius: '11px', border: 'none', background: theme.danger, color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', marginTop: '18px', width: '100%' };
+    const linkButtonStyle = { background: 'none', border: 'none', color: theme.accent, fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', padding: '4px' };
+    const eyeButtonStyle = { position: 'absolute', right: '8px', top: '7px', background: 'none', border: 'none', color: theme.textMuted, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '6px' };
+    const backLinkStyle = { background: 'none', border: 'none', color: theme.textMuted, fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0, minWidth: '60px', textAlign: 'left' };
+    const sectionLabelStyle = { fontSize: '13px', fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '10px' };
+    const itemCountStyle = { fontSize: '12px', fontWeight: 700, color: theme.textMuted, margin: '4px 0 12px' };
+
+    // Site-style responsive shell: mobile keeps the compact app-like layout with a bottom tab bar;
+    // desktop drops the phone-frame conceit entirely and becomes a full-width site with a top nav bar.
+    const actualIsDesktop = (typeof window !== 'undefined' ? window.innerWidth : 1200) >= 900;
+    const isDesktop = s.previewMode === 'desktop' ? true : s.previewMode === 'mobile' ? false : actualIsDesktop;
+    const appShellStyle = {
+      minHeight: '100vh', background: theme.bg, fontFamily: 'Manrope, sans-serif', overflowX: 'hidden', width: '100%', maxWidth: '100%',
+      backgroundImage: `radial-gradient(${theme.border} 1px, transparent 1px)`, backgroundSize: '38px 38px',
+    };
+    const frameStyle = isDesktop
+      ? { width: '100%', minHeight: '100vh', position: 'relative', background: theme.bg }
+      : { width: '100%', minHeight: '100vh', position: 'relative', background: theme.bg, overflowX: 'hidden' };
+    // Horizontal breathing room + content ceiling on desktop; the mobile gutter stays as-is.
+    const contentMaxWidthStyle = isDesktop ? { maxWidth: '1160px', margin: '0 auto', width: '100%', boxSizing: 'border-box' } : { width: '100%', boxSizing: 'border-box' };
+    // Dev/preview-only floating switcher: force mobile/desktop layout regardless of actual window width.
+    const previewSwitcherStyle = { position: 'fixed', bottom: '14px', right: '14px', zIndex: 500, display: 'flex', gap: '2px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '20px', padding: '3px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)' };
+    const makePreviewBtnStyle = (isActive) => ({ padding: '6px 12px', borderRadius: '16px', border: 'none', background: isActive ? theme.accent : 'transparent', color: isActive ? (dark ? '#111' : '#fff') : theme.textMuted, fontSize: '11.5px', fontWeight: 700, cursor: 'pointer' });
+    const previewSwitcherOptions = [
+      { key: 'auto', label: t.previewAuto, onClick: () => this.setState({ previewMode: 'auto' }), style: makePreviewBtnStyle(s.previewMode === 'auto') },
+      { key: 'mobile', label: t.previewMobile, onClick: () => this.setState({ previewMode: 'mobile' }), style: makePreviewBtnStyle(s.previewMode === 'mobile') },
+      { key: 'desktop', label: t.previewDesktop, onClick: () => this.setState({ previewMode: 'desktop' }), style: makePreviewBtnStyle(s.previewMode === 'desktop') },
+    ];
+    const hasConfirm = !!s.confirm;
+    const confirmMessage = s.confirm ? s.confirm.message : '';
+    const confirmCancelLabel = (s.confirm && s.confirm.cancelLabel) || t.cancel;
+    const confirmConfirmLabel = (s.confirm && s.confirm.confirmLabel) || t.confirmYes;
+    const confirmOverlayStyle = { position: isDesktop ? 'fixed' : 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px' };
+    const confirmCardStyle = { background: theme.surface, borderRadius: '16px', padding: '20px', width: '100%', maxWidth: '340px', border: `1px solid ${theme.border}` };
+    const confirmYesButtonStyle = { flex: 1, padding: '13px', borderRadius: '11px', border: 'none', background: (s.confirm && s.confirm.danger) ? theme.danger : theme.accent, color: (!s.confirm || !s.confirm.danger) && dark ? '#111' : '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer' };
+    const authWrapStyle = { height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', padding: '24px', gap: '18px', overflowY: 'auto' };
+    const authCardStyle = { width: '100%', maxWidth: '380px', margin: 'auto 0', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '20px', padding: '28px 24px', boxShadow: dark ? 'none' : '0 20px 60px -30px rgba(0,0,0,0.25)' };
+    const logoDotStyle = { width: '44px', height: '44px', borderRadius: '50%', background: theme.accent };
+    const langSwitchWrapStyle = { display: 'flex', gap: '8px' };
+
+    const isMobileShell = !isDesktop;
+    const mainWrapStyle = isDesktop
+      ? { display: 'flex', flexDirection: 'column', background: theme.bg, width: '100%', minHeight: '100vh', position: 'relative', overflowX: 'hidden' }
+      : { height: '100%', display: 'flex', flexDirection: 'column', background: theme.bg, width: '100%', position: 'relative', overflowX: 'hidden' };
+    const headerSearchStyle = { display: 'flex', alignItems: 'center', gap: '10px', padding: isDesktop ? '22px 32px 10px' : 'calc(16px + env(safe-area-inset-top)) 20px 6px', ...contentMaxWidthStyle };
+    const headerAvatarStyle = { width: '38px', height: '38px', minWidth: '38px', flexShrink: 0, borderRadius: '50%', background: theme.accentSoft, color: theme.accent, border: 'none', fontSize: '13px', fontWeight: 800, cursor: 'pointer' };
+    const searchInputStyle = { flex: 1, minWidth: 0, padding: '10px 14px', borderRadius: '20px', border: `1.5px solid ${theme.border}`, background: theme.surface, color: theme.text, fontSize: '13.5px', outline: 'none' };
+    const headerBackStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: isDesktop ? '22px 32px 10px' : 'calc(18px + env(safe-area-inset-top)) 20px 6px', ...contentMaxWidthStyle };
+    const scrollAreaStyle = isDesktop
+      ? { ...contentMaxWidthStyle, paddingBottom: '60px' }
+      : { flex: 1, paddingBottom: '90px', overflowY: 'auto', overflowX: 'hidden', width: '100%' };
+    const bottomNavStyle = { position: 'absolute', bottom: 0, left: 0, right: 0, display: 'flex', background: theme.surface, borderTop: `1px solid ${theme.border}`, padding: '8px 6px calc(8px + env(safe-area-inset-bottom))', width: '100%', zIndex: 10 };
+    // ---- Desktop top nav (site-style header, replaces the bottom tab bar on wide viewports) ----
+    const topNavOuterStyle = { position: 'sticky', top: 0, zIndex: 30, width: '100%', background: theme.surface, borderBottom: `1px solid ${theme.border}` };
+    const topNavInnerStyle = { ...contentMaxWidthStyle, display: 'flex', alignItems: 'center', gap: '32px', padding: '14px 32px' };
+    const topNavBrandStyle = { display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', flexShrink: 0 };
+    const topNavLogoDotStyle = { width: '28px', height: '28px', borderRadius: '50%', background: theme.accent, flexShrink: 0 };
+    const topNavWordmarkStyle = { fontSize: '16px', fontWeight: 800, letterSpacing: '-0.02em', color: theme.text };
+    const topNavLinksWrapStyle = { display: 'flex', alignItems: 'center', gap: '4px', flex: 1 };
+    const toastStyle = { position: isDesktop ? 'fixed' : 'absolute', bottom: isDesktop ? '28px' : '96px', left: '50%', transform: 'translateX(-50%)', background: theme.text, color: theme.bg, padding: '10px 18px', borderRadius: '20px', fontSize: '13px', fontWeight: 700, animation: 'toastIn 0.2s ease', zIndex: 50, whiteSpace: 'nowrap' };
+
+    const langMap = { pt: 'PT', en: 'EN', es: 'ES' };
+    const langOptions = ['pt', 'en', 'es'].map(l => ({
+      onClick: () => this.setLang(l),
+      label: langMap[l],
+      style: { padding: '7px 14px', borderRadius: '20px', border: `1.5px solid ${s.lang === l ? theme.accent : theme.border}`, background: s.lang === l ? theme.accentSoft : 'transparent', color: s.lang === l ? theme.accent : theme.textMuted, fontSize: '12px', fontWeight: 700, cursor: 'pointer' },
+    }));
+
+    const hueOptions = Object.keys(HUES).map(h => ({
+      onClick: () => this.setHue(h),
+      style: { width: '34px', height: '34px', borderRadius: '50%', border: s.hue === h ? `3px solid ${theme.text}` : `2px solid ${theme.border}`, background: `oklch(58% 0.13 ${HUES[h]})`, cursor: 'pointer', padding: 0 },
+    }));
+    const modeOptions = [['light', t.lightMode], ['dark', t.darkMode]].map(([m, label]) => ({
+      onClick: () => this.setMode(m),
+      label,
+      style: { flex: 1, padding: '9px', borderRadius: '10px', border: `1.5px solid ${s.mode === m ? theme.accent : theme.border}`, background: s.mode === m ? theme.accentSoft : 'transparent', color: s.mode === m ? theme.accent : theme.textMuted, fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' },
+    }));
+
+    // Featured carousel
+    if (!this._featuredPicks) {
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+      this._featuredPicks = [
+        { item: pick(s.beers), typeLabel: t.beers },
+        { item: pick(s.wines), typeLabel: t.wines },
+        { item: pick(s.drinksList), typeLabel: t.drinks },
+      ];
+    }
+    const featuredSlides = this._featuredPicks.map((f, i) => ({
+      active: i === s.featuredIdx,
+      item: f.item, typeLabel: f.typeLabel,
+      imageLabel: `Foto: ${f.item.name}`,
+      cardStyle: { position: 'relative', borderRadius: '16px', overflow: 'hidden', background: theme.surface, border: `1px solid ${theme.border}`, height: isDesktop ? '260px' : '190px' },
+      bgImageStyle: { ...this.placeholderStyle(theme), position: 'absolute', inset: '-24px', filter: 'blur(28px) saturate(1.05)', transform: 'scale(1.15)', opacity: dark ? 0.55 : 0.7 },
+      scrimStyle: { position: 'absolute', inset: 0, background: `linear-gradient(90deg, transparent 0%, transparent 38%, ${theme.surface} 78%)` },
+      contentRowStyle: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', height: '100%', gap: isDesktop ? '28px' : '16px' },
+      photoStyle: { ...this.placeholderStyle(theme), width: isDesktop ? '170px' : '120px', height: isDesktop ? '212px' : '150px', borderRadius: '14px', flexShrink: 0, marginLeft: isDesktop ? '28px' : '16px', boxShadow: '0 16px 34px -10px rgba(0,0,0,0.4)', fontSize: '9px' },
+      textWrapStyle: { flex: 1, minWidth: 0, paddingRight: isDesktop ? '40px' : '20px' },
+      onDot: () => this.setState({ featuredIdx: i }),
+      dotStyle: { width: '7px', height: '7px', borderRadius: '50%', border: 'none', padding: 0, cursor: 'pointer', background: i === s.featuredIdx ? theme.accent : theme.border },
+    }));
+    const dotsRowStyle = { display: 'flex', justifyContent: 'center', gap: '6px', marginTop: '10px' };
+    const carouselOuterStyle = {};
+    const statsGridStyle = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px', width: '100%' };
+
+    const typeMeta = {
+      beer: { label: t.totalBeers, key: 'beers' }, wine: { label: t.totalWines, key: 'wines' },
+      drink: { label: t.totalDrinks, key: 'drinksList' }, spirit: { label: t.totalSpirits, key: 'spiritsList' },
+    };
+    const statCards = Object.keys(typeMeta).map(type => ({
+      label: typeMeta[type].label, count: this.myOwnList(type).length,
+      onClick: () => this.openStats(type),
+      iconPath: ICON_PATHS[type], iconColor: theme.accent,
+      iconWrapStyle: { width: '36px', height: '36px', borderRadius: '10px', background: theme.accentSoft, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+      style: { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '16px', cursor: 'pointer', minWidth: 0, boxSizing: 'border-box', overflow: 'hidden' },
+    }));
+    const categoryRowStyle = { display: 'flex', alignItems: 'center', padding: '10px 0' };
+    const categoryListCardStyle = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '4px 16px', marginBottom: '4px' };
+
+    // Global search on home
+    const q = (s.searchQuery || '').trim().toLowerCase();
+    const isSearching = isHome && q.length > 0;
+    const isNotSearching = isHome && !isSearching;
+    const typeLabels = { beer: t.beers, wine: t.wines, drink: t.drinks, spirit: t.spirits };
+    const allItemsFlat = [...s.beers.map(i => ({ ...i })), ...s.wines.map(i => ({ ...i })), ...s.drinksList.map(i => ({ ...i })), ...s.spiritsList.map(i => ({ ...i }))];
+    const searchResults = isSearching ? allItemsFlat.filter(i => this.itemMatchesSearch(i, s.searchField, q)).map(item => ({
+      ...item, typeLabel: typeLabels[item.type], thumbLabel: `Foto: ${item.name}`,
+      onOpen: () => this.openDetail(item.id),
+      searchRowStyle: { display: 'flex', gap: '12px', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${theme.border}`, cursor: 'pointer' },
+      thumbStyle: { ...this.placeholderStyle(theme), width: '52px', height: '52px', minWidth: '52px', borderRadius: '10px', fontSize: '8px' },
+    })) : [];
+    const isSearchEmpty = isSearching && searchResults.length === 0;
+    const searchResultsCountLabel = `${searchResults.length} ${t.searchResultsFor} "${s.searchQuery}"`;
+
+    // List screen
+    const rawList = this.currentList();
+    const categories = Array.from(new Set(rawList.map(i => i.category)));
+    const categoryFilterOptions = [{ value: 'all', label: t.all }, ...categories.map(c => ({ value: c, label: c }))];
+    let filtered = rawList.filter(i => s.filterCategory === 'all' || i.category === s.filterCategory);
+    if (isList && q.length > 0) {
+      filtered = filtered.filter(i => this.itemMatchesSearch(i, s.searchField, q));
+    }
+
+    const decorateItem = (item) => ({
+      ...item,
+      starsDisplay: this.starsFor(item.rating),
+      dateDisplay: fmtDate(item.tastingDate),
+      thumbLabel: `Foto: ${item.name}`,
+      canEdit: this.canEditItem(item),
+      onOpen: () => this.openDetail(item.id),
+      onEdit: (e) => { e.stopPropagation(); this.openEdit(item); },
+      onDuplicate: (e) => { e.stopPropagation(); this.requestConfirm(t.confirmDuplicateMsg.replace('{name}', item.name), () => this.quickDuplicate(item)); },
+      onDelete: (e) => { e.stopPropagation(); this.requestConfirm(t.confirmDeleteMsg.replace('{name}', item.name), () => this.quickDelete(item), { danger: true }); },
+      deckRowStyle: { display: 'flex', gap: '12px', alignItems: 'flex-start', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '8px', cursor: 'pointer' },
+      deckThumbStyle: { ...this.placeholderStyle(theme), width: '72px', height: '72px', minWidth: '72px', borderRadius: '10px', fontSize: '8px' },
+      rowIconStyle: { width: '22px', height: '22px', borderRadius: '6px', border: `1.5px solid ${theme.border}`, background: 'transparent', color: theme.text, cursor: 'pointer', fontSize: '10.5px' },
+      rowIconStyleDanger: { width: '22px', height: '22px', borderRadius: '6px', border: `1.5px solid ${theme.danger}`, background: 'transparent', color: theme.danger, cursor: 'pointer', fontSize: '10.5px' },
+      tableIconStyle: { border: 'none', background: theme.accentSoft, color: theme.accent, width: '26px', height: '26px', borderRadius: '7px', cursor: 'pointer' },
+      tableIconStyleDanger: { border: 'none', background: 'transparent', color: theme.danger, width: '26px', height: '26px', borderRadius: '7px', cursor: 'pointer' },
+      galleryCardStyle: { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', overflow: 'hidden', cursor: 'pointer' },
+      galleryImageStyle: { ...this.placeholderStyle(theme), aspectRatio: '3 / 4', height: 'auto', fontSize: '9px' },
+    });
+    const filteredItems = filtered.map(decorateItem);
+    const isListEmpty = filteredItems.length === 0;
+    const itemCountLabel = `${filteredItems.length} ${t.itemsShown}`;
+
+    // Sorting for table view
+    const COL_W = { name: 170, manufacturer: 150, category: 130, date: 110, rating: 100, actions: 80 };
+    const sortFieldsMeta = [
+      { key: 'name', label: t.name, w: COL_W.name }, { key: 'manufacturer', label: t.manufacturer, w: COL_W.manufacturer },
+      { key: 'category', label: t.category, w: COL_W.category }, { key: 'tastingDate', label: t.tastingDate, w: COL_W.date }, { key: 'rating', label: t.rating, w: COL_W.rating },
+    ];
+    const sortableColumns = sortFieldsMeta.map(f => ({
+      onClick: () => this.setSort(f.key),
+      label: f.label,
+      arrow: s.sortField === f.key ? (s.sortDir === 'asc' ? ' ▲' : ' ▼') : '',
+      style: { width: f.w + 'px', minWidth: f.w + 'px', flexShrink: 0, cursor: 'pointer', userSelect: 'none', paddingRight: '8px', boxSizing: 'border-box' },
+    }));
+    const tableActionsHeaderStyle = { width: COL_W.actions + 'px', minWidth: COL_W.actions + 'px', flexShrink: 0, textAlign: 'right', boxSizing: 'border-box' };
+    const tableMinWidth = COL_W.name + COL_W.manufacturer + COL_W.category + COL_W.date + COL_W.rating + COL_W.actions + 56;
+    const tableColNameStyle = { width: COL_W.name + 'px', minWidth: COL_W.name + 'px', flexShrink: 0, fontWeight: 700, color: theme.text, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px', boxSizing: 'border-box' };
+    const tableColManufacturerStyle = { width: COL_W.manufacturer + 'px', minWidth: COL_W.manufacturer + 'px', flexShrink: 0, color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px', boxSizing: 'border-box' };
+    const tableColCategoryStyle = { width: COL_W.category + 'px', minWidth: COL_W.category + 'px', flexShrink: 0, color: theme.textMuted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: '8px', boxSizing: 'border-box' };
+    const tableColDateStyle = { width: COL_W.date + 'px', minWidth: COL_W.date + 'px', flexShrink: 0, color: theme.textMuted, whiteSpace: 'nowrap', paddingRight: '8px', boxSizing: 'border-box' };
+    const tableColRatingStyle = { width: COL_W.rating + 'px', minWidth: COL_W.rating + 'px', flexShrink: 0, color: theme.text, whiteSpace: 'nowrap', paddingRight: '8px', boxSizing: 'border-box' };
+    const tableColActionsStyle = { width: COL_W.actions + 'px', minWidth: COL_W.actions + 'px', flexShrink: 0, display: 'flex', gap: '6px', justifyContent: 'flex-end', boxSizing: 'border-box' };
+    const sortedItems = [...filteredItems].sort((a, b) => {
+      let av = a[s.sortField], bv = b[s.sortField];
+      if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+      if (av < bv) return s.sortDir === 'asc' ? -1 : 1;
+      if (av > bv) return s.sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const viewModeOptions = ['deck', 'table', 'gallery'].map(vm => ({
+      onClick: () => this.setViewMode(vm),
+      label: t['view_' + vm],
+      iconPath: ICON_PATHS[vm],
+      iconColor: s.viewMode === vm ? theme.accent : theme.textMuted,
+      style: { width: '40px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: '10px', border: `1.5px solid ${s.viewMode === vm ? theme.accent : theme.border}`, background: s.viewMode === vm ? theme.accentSoft : 'transparent', cursor: 'pointer' },
+    }));
+    const viewModeRowStyle = { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' };
+    const viewModeSeparatorStyle = { width: '1px', height: '24px', background: theme.border, margin: '0 4px' };
+
+    // ---- Secondary profile switcher (only profiles present in RELAC for this user) ----
+    const secondaryProfiles = this.availableSecondaryProfiles();
+    const hasSecondaryProfiles = secondaryProfiles.length > 0;
+    const activeProfileUser = s.viewedProfileId ? s.users.find(u => u.id === s.viewedProfileId) : s.loggedInUser;
+    const activeProfileInitials = this.initialsFor(activeProfileUser && activeProfileUser.name);
+    const isOwnProfileView = this.isOwnProfileView();
+    const profileAvatarBaseStyle = { width: '30px', height: '30px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '11.5px', fontWeight: 800, flexShrink: 0 };
+    const profileTriggerStyle = { display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 6px 3px 3px', borderRadius: '20px', border: `1.5px solid ${isOwnProfileView ? theme.border : theme.accent}`, background: isOwnProfileView ? 'transparent' : theme.accentSoft, cursor: 'pointer' };
+    const activeProfileAvatarStyle = { ...profileAvatarBaseStyle, background: theme.accentSoft, color: theme.accent };
+    const profileMenuWrapStyle = { position: 'relative' };
+    const profileMenuOverlayStyle = { position: 'fixed', inset: 0, zIndex: 40 };
+    const profileMenuStyle = { position: 'absolute', top: '44px', left: 0, zIndex: 41, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '6px', minWidth: '190px', boxShadow: '0 10px 30px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: '2px' };
+    const profileMenuRowBaseStyle = { display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 8px', borderRadius: '10px', border: 'none', background: 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left' };
+    const makeProfileOption = (u, isSelected) => ({
+      id: u.id,
+      name: u.name,
+      initials: this.initialsFor(u.name),
+      isSelected,
+      onClick: () => this.selectProfile(u.id),
+      rowStyle: { ...profileMenuRowBaseStyle, background: isSelected ? theme.accentSoft : 'transparent' },
+      avatarStyle: { ...profileAvatarBaseStyle, background: theme.accentSoft, color: theme.accent },
+      nameStyle: { flex: 1, fontSize: '13px', fontWeight: isSelected ? 800 : 600, color: theme.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      checkColor: theme.accent,
+    });
+    const profileMenuOptions = s.loggedInUser ? [
+      makeProfileOption({ id: s.loggedInUser.id, name: `${s.loggedInUser.name} · ${t.myProfile}` }, isOwnProfileView),
+      ...secondaryProfiles.map(u => makeProfileOption(u, s.viewedProfileId === u.id)),
+    ] : [];
+    const viewingProfileLabel = isOwnProfileView ? '' : `${t.viewingProfileOf} ${activeProfileUser ? activeProfileUser.name : ''}`;
+    const viewingBadgeStyle = { fontSize: '11.5px', fontWeight: 700, color: theme.accent, marginTop: '2px' };
+
+    const searchFieldOptions = [
+      { value: 'all', label: t.searchAll }, { value: 'name', label: t.name }, { value: 'manufacturer', label: t.manufacturer },
+      { value: 'country', label: t.country },
+    ];
+    const searchFieldSelectStyle = { padding: '10px 8px', borderRadius: '20px', border: `1.5px solid ${theme.border}`, background: theme.surface, color: theme.text, fontSize: '12px', fontWeight: 600, outline: 'none', maxWidth: '92px' };
+    const addButtonStyle = { width: '38px', height: '38px', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, borderRadius: '10px', border: 'none', background: theme.accent, color: dark ? '#111' : '#fff', cursor: 'pointer' };
+    const tableScrollOuterStyle = { overflowX: 'auto', overflowY: 'hidden', borderRadius: '14px', border: `1px solid ${theme.border}`, WebkitOverflowScrolling: 'touch' };
+    const tableWrapStyle = { background: theme.surface, minWidth: tableMinWidth + 'px' };
+    const tableHeaderRowStyle = { display: 'flex', padding: '10px 14px', background: theme.trackBg, fontSize: '11px', fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase', letterSpacing: '0.04em' };
+    const tableRowStyle = { display: 'flex', alignItems: 'center', padding: '12px 14px', borderTop: `1px solid ${theme.border}`, fontSize: '13px' };
+    const galleryGridStyle = { padding: '0 20px 20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '12px', width: '100%', boxSizing: 'border-box' };
+
+    // Detail / edit
+    const selectedRaw = s.selectedItemId ? this.findItemAnywhere(s.selectedItemId) : null;
+    const isSelectedEditable = this.canEditItem(selectedRaw);
+    const selected = selectedRaw ? { ...selectedRaw, starsDisplay: this.starsFor(selectedRaw.rating), dateDisplay: fmtDate(selectedRaw.tastingDate), thumbLabel: `Foto: ${selectedRaw.name}`, flag: FLAGS[selectedRaw.country] || '🏳️' } : { name: '', category: '', origin: '', manufacturer: '', abv: '', description: '', starsDisplay: '', dateDisplay: '', thumbLabel: '', flag: '' };
+    const selectedRatingStars = this.buildStarCells(selected.rating || 0, 20, 'sel');
+    const draft = s.draft || { name: '', category: '', origin: '', manufacturer: '', country: '', abv: '', description: '', rating: 3, tastingDate: '', imageLabel: '' };
+    const draftCatMap = {};
+    const isBeerDraft = draft.type === 'beer';
+    const isWineDraft = draft.type === 'wine';
+    const isDrinkSpiritDraft = draft.type === 'drink' || draft.type === 'spirit';
+    const isBeerSelected = selectedRaw && selectedRaw.type === 'beer';
+    const isWineSelected = selectedRaw && selectedRaw.type === 'wine';
+    const isDrinkSpiritSelected = selectedRaw && (selectedRaw.type === 'drink' || selectedRaw.type === 'spirit');
+    const paisOptions = PAIS_LIST;
+    const bjcp21Options = BJCP21_LIST;
+    const wineCorOptions = WINE_COR_LIST;
+    const wineTipoOptions = WINE_TIPO_LIST;
+    const paisOptionsWithFlag = PAIS_LIST.map(c => ({ value: c, label: `${FLAGS[c] || '🏳️'} ${c}` }));
+
+    const sideBySideRowStyle = { display: 'flex', gap: '12px' };
+    const ratingWidgetOuterStyle = { display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' };
+    const ratingInputWrapStyle = { position: 'relative', display: 'flex', gap: '4px', cursor: 'pointer', touchAction: 'none', padding: '4px 0' };
+    const ratingHintStyle = { position: 'absolute', top: '-30px', left: '50%', transform: 'translateX(-50%)', background: theme.text, color: theme.bg, padding: '3px 9px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, pointerEvents: 'none', whiteSpace: 'nowrap' };
+    const ratingNumberStyle = { fontSize: '14px', fontWeight: 800, color: theme.text, minWidth: '30px' };
+    const readOnlyStarsRowStyle = { display: 'flex', alignItems: 'center', gap: '3px', marginTop: '10px' };
+    const specRowStyle = { display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' };
+    const specCellStyle = { flex: '1', minWidth: '80px', background: theme.trackBg, borderRadius: '10px', padding: '8px 10px' };
+    const specLabelStyle = { fontSize: '10.5px', fontWeight: 700, color: theme.textMuted, textTransform: 'uppercase' };
+    const specValueStyle = { fontSize: '13px', fontWeight: 700, color: theme.text, marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
+
+    const detailActionsRowStyle = { display: 'flex', justifyContent: 'flex-end', gap: '8px', marginBottom: '10px' };
+    const detailIconButtonStyle = { width: '34px', height: '34px', borderRadius: '9px', border: `1.5px solid ${theme.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
+    const detailIconButtonStyleDanger = { ...detailIconButtonStyle, border: `1.5px solid ${theme.danger}` };
+    const idTagStyle = { display: 'inline-block', marginTop: '8px', fontSize: '10.5px', fontWeight: 700, color: theme.textMuted, background: theme.trackBg, padding: '3px 8px', borderRadius: '20px' };
+    const photoViewerOverlayStyle = { position: isDesktop ? 'fixed' : 'absolute', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 200, display: 'flex', flexDirection: 'column' };
+    const photoViewerTopBarStyle = { display: 'flex', gap: '10px', padding: '16px' };
+    const photoViewerIconButtonStyle = { width: '38px', height: '38px', borderRadius: '10px', border: '1.5px solid rgba(255,255,255,0.3)', background: 'rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' };
+    const photoViewerImageWrapStyle = { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: '20px' };
+    const photoViewerImageStyle = { ...this.placeholderStyle(theme), width: '260px', height: '260px', borderRadius: '16px', transform: `scale(${s.photoZoom})`, transition: 'transform 0.15s ease' };
+
+    const draftRatingValue = (s.draft && s.draft.rating) || 0;
+    const draftRatingStars = this.buildStarCells(draftRatingValue, 30, 'draft');
+    const draftRatingLabel = draftRatingValue.toFixed(1);
+    const ratingHintVisible = s.isDraggingRating;
+    const ratingHintText = draftRatingValue.toFixed(1);
+    const draftCategoryOptions = draftCatMap[draft.type] || [];
+    const detailCardStyle = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '18px', padding: '18px' };
+    const detailImageStyle = { ...this.placeholderStyle(theme), height: '180px', borderRadius: '12px' };
+    const uploadBoxStyle = { ...this.placeholderStyle(theme), height: '140px', borderRadius: '12px', cursor: 'pointer' };
+
+    const headerTitleMap = { detail: typeLabels[s.listType], profile: t.profile, stats: typeLabels[s.statsType] };
+    const headerTitle = headerTitleMap[s.screen] || '';
+
+    const navDefs = [
+      { key: 'home', label: t.home, onClick: () => this.goto('home') },
+      { key: 'beer', label: t.beers, onClick: () => this.gotoList('beer') },
+      { key: 'wine', label: t.wines, onClick: () => this.gotoList('wine') },
+      { key: 'drink', label: t.drinks, onClick: () => this.gotoList('drink') },
+      { key: 'spirit', label: t.spirits, onClick: () => this.gotoList('spirit') },
+    ];
+    const activeNavKey = s.screen === 'list' ? s.listType : (s.screen === 'detail' || s.screen === 'stats') ? (s.listType) : s.screen;
+    const navItems = navDefs.map(n => ({
+      onClick: n.onClick,
+      label: n.label,
+      iconPath: ICON_PATHS[n.key],
+      iconColor: activeNavKey === n.key ? theme.accent : theme.textMuted,
+      style: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', padding: '6px 4px', background: 'none', border: 'none', cursor: 'pointer' },
+      labelStyle: { fontSize: '10.5px', fontWeight: 700, color: activeNavKey === n.key ? theme.accent : theme.textMuted },
+    }));
+    const topNavItems = navDefs.map(n => ({
+      onClick: n.onClick,
+      label: n.label,
+      iconPath: ICON_PATHS[n.key],
+      iconColor: activeNavKey === n.key ? theme.accent : theme.textMuted,
+      style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 14px', borderRadius: '10px', border: 'none', background: activeNavKey === n.key ? theme.accentSoft : 'transparent', color: activeNavKey === n.key ? theme.accent : theme.textMuted, fontWeight: 700, fontSize: '13.5px', cursor: 'pointer' },
+    }));
+
+    // Profile
+    const avatarStyle = { width: '72px', height: '72px', borderRadius: '50%', background: theme.accentSoft, color: theme.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', fontWeight: 800, cursor: 'pointer' };
+    const initials = ((s.loggedInUser && s.loggedInUser.name) || '?').replace(/[^\p{L}\s]/gu, '').trim().split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase() || '?';
+    const profileSectionStyle = { background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '16px', padding: '16px', marginBottom: '14px' };
+    const profileSectionTitleStyle = { fontSize: '13px', fontWeight: 700, color: theme.text, marginBottom: '4px' };
+    const userRowStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${theme.border}` };
+    const logRowStyle = { display: 'flex', gap: '10px', padding: '7px 0', borderTop: `1px solid ${theme.border}` };
+    // Profile screen tabs: Configurações / Segurança
+    const isProfileSettingsTab = (s.profileTab || 'settings') === 'settings';
+    const isProfileSecurityTab = (s.profileTab || 'settings') === 'security';
+    const profileTabsRowStyle = { display: 'flex', gap: '8px', marginBottom: '20px', background: theme.trackBg, borderRadius: '12px', padding: '4px' };
+    const makeProfileTabStyle = (isActive) => ({ flex: 1, padding: '9px', borderRadius: '9px', border: 'none', background: isActive ? theme.surface : 'transparent', color: isActive ? theme.text : theme.textMuted, fontWeight: 700, fontSize: '13px', cursor: 'pointer', boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.08)' : 'none' });
+    const profileTabs = [
+      { label: t.settingsMenuItem, isActive: isProfileSettingsTab, onClick: () => this.setState({ profileTab: 'settings' }), style: makeProfileTabStyle(isProfileSettingsTab) },
+      { label: t.securityMenuItem, isActive: isProfileSecurityTab, onClick: () => this.setState({ profileTab: 'security' }), style: makeProfileTabStyle(isProfileSecurityTab) },
+    ];
+    // 2FA toggle row (Segurança tab)
+    const twoFAOptions = [
+      { label: t.active, isActive: s.twoFAEnabled, onClick: () => { if (!s.twoFAEnabled) this.toggleTwoFA(); }, style: makeProfileTabStyle(s.twoFAEnabled) },
+      { label: t.inactive, isActive: !s.twoFAEnabled, onClick: () => { if (s.twoFAEnabled) this.toggleTwoFA(); }, style: makeProfileTabStyle(!s.twoFAEnabled) },
+    ];
+    // Avatar dropdown menu (header) — Configurações / Segurança / Sair
+    const accountMenuWrapStyle = { position: 'relative' };
+    const accountMenuOverlayStyle = { position: 'fixed', inset: 0, zIndex: 40 };
+    const accountMenuStyle = { position: 'absolute', top: '46px', right: 0, zIndex: 41, background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '14px', padding: '6px', minWidth: '190px', boxShadow: '0 10px 30px rgba(0,0,0,0.18)', display: 'flex', flexDirection: 'column', gap: '2px' };
+    const accountMenuItemBaseStyle = { display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 10px', borderRadius: '10px', border: 'none', background: 'transparent', cursor: 'pointer', width: '100%', textAlign: 'left', fontSize: '13px', fontWeight: 700 };
+    const accountMenuItems = [
+      { label: t.settingsMenuItem, iconPath: ICON_PATHS.gear, iconColor: theme.textMuted, onClick: () => this.goProfileTab('settings'), style: { ...accountMenuItemBaseStyle, color: theme.text } },
+      { label: t.securityMenuItem, iconPath: ICON_PATHS.shield, iconColor: theme.textMuted, onClick: () => this.goProfileTab('security'), style: { ...accountMenuItemBaseStyle, color: theme.text } },
+      { label: t.logout, iconPath: ICON_PATHS.logoutIcon, iconColor: theme.danger, onClick: () => this.logoutFromMenu(), style: { ...accountMenuItemBaseStyle, color: theme.danger } },
+    ];
+    const usersDisplay = s.users.map(u => ({
+      ...u,
+      statusLabel: u.status === 'active' ? t.active : t.inactive,
+      toggleLabel: u.status === 'active' ? t.deactivate : t.activate,
+      onToggle: () => this.toggleUserStatus(u.id),
+      statusPillStyle: { fontSize: '10.5px', fontWeight: 700, padding: '3px 9px', borderRadius: '20px', background: u.status === 'active' ? theme.accentSoft : theme.trackBg, color: u.status === 'active' ? theme.accent : theme.textMuted },
+    }));
+    const logsDisplay = s.logs.slice(0, 8);
+
+    // Stats screen
+    const statsData = isStats ? this.computeStats(s.statsType) : { total: 0, avgStars: '', avgRatingNum: '0.0', byCountry: [], byCategory: [], byManufacturer: [] };
+    const statsTypeLabel = typeLabels[s.statsType] || '';
+    const statHeroStyle = { textAlign: 'center', padding: '18px', background: theme.surface, border: `1px solid ${theme.border}`, borderRadius: '16px', marginBottom: '18px' };
+    // Top-10 + "ver tudo" expand per stat section, so long category lists don't dump everything at once.
+    const TOP_N = 10;
+    const buildStatSection = (rows, expanded, sectionKey) => {
+      const hasMore = rows.length > TOP_N;
+      return {
+        rows: expanded ? rows : rows.slice(0, TOP_N),
+        hasMore,
+        toggleLabel: expanded ? t.viewLess : `${t.viewAll} (${rows.length})`,
+        onToggle: () => this.toggleExpandStat(sectionKey),
+      };
+    };
+    const countrySection = buildStatSection(statsData.byCountry, s.expandCountry, 'expandCountry');
+    const categorySection = buildStatSection(statsData.byCategory, s.expandCategory, 'expandCategory');
+    const manufacturerSection = buildStatSection(statsData.byManufacturer, s.expandManufacturer, 'expandManufacturer');
+    const viewAllButtonStyle = { width: '100%', padding: '9px', marginTop: '4px', border: 'none', background: 'transparent', color: theme.accent, fontWeight: 700, fontSize: '12.5px', cursor: 'pointer' };
+
+    return {
+      t, theme, isAuthScreen, isAppScreen, isLogin, isSignup, isForgot, isVerify, isInactiveNotice, demoHintStyle,
+      isHome, isList, isDetail, isProfile, isStats, isEditing, isViewingDetail, isAdmin, isSearchHeader, isBackHeader,
+      form: s.form, authError: s.authError, forgotSent: s.forgotSent, mockCode: s.mockCode,
+      passwordInputType: s.showPassword ? 'text' : 'password', eyeIconPath: s.showPassword ? ICON_PATHS.eyeOff : ICON_PATHS.eyeOpen,
+      onEmailChange: this.onEmailChange, onPasswordChange: this.onPasswordChange, onNameChange: this.onNameChange, onCodeChange: this.onCodeChange,
+      toggleShowPassword: this.toggleShowPassword, doLogin: this.doLogin, doSignup: this.doSignup, doForgot: this.doForgot, doVerify: this.doVerify,
+      resendCode: this.resendCode, goToForgot: this.goToForgot, goToSignup: this.goToSignup, goToLogin: this.goToLogin,
+      langOptions, hueOptions, modeOptions,
+      fieldLabelStyle, inputStyle, selectStyle, textareaStyle, codeInputStyle, errorTextStyle, hintTextStyle, successBoxStyle,
+      primaryButtonStyle, secondaryButtonStyle, secondaryButtonSmallStyle, dangerButtonStyle, linkButtonStyle, eyeButtonStyle, backLinkStyle, sectionLabelStyle, itemCountStyle,
+      appShellStyle, frameStyle, authWrapStyle, authCardStyle, logoDotStyle, langSwitchWrapStyle,
+      mainWrapStyle, headerSearchStyle, headerAvatarStyle, searchInputStyle, headerBackStyle, scrollAreaStyle, bottomNavStyle, toastStyle, toast: s.toast,
+      isDesktop, isMobileShell, topNavOuterStyle, topNavInnerStyle, topNavBrandStyle, topNavLogoDotStyle, topNavWordmarkStyle, topNavLinksWrapStyle, topNavItems, goHome: () => this.goto('home'),
+      isNotEditingBackHeader, backButtonHandler, saveLinkStyle,
+      searchQuery: s.searchQuery, onSearchChange: this.onSearchChange, openProfile: this.openProfile, goBack: this.goBack,
+      searchField: s.searchField, onSearchFieldChange: this.onSearchFieldChange, searchFieldOptions, searchFieldSelectStyle,
+      headerTitle, navItems,
+      isSearching, isNotSearching, searchResults, isSearchEmpty, searchResultsCountLabel,
+      featuredSlides, dotsRowStyle, carouselOuterStyle, statsGridStyle, statCards, categoryRowStyle, categoryListCardStyle,
+      isProfileSettingsTab, isProfileSecurityTab, profileTabsRowStyle, profileTabs, twoFAOptions, t2faLabel: t.twoFactorAuth,
+      accountMenuOpen: s.accountMenuOpen, toggleAccountMenu: this.toggleAccountMenu, closeAccountMenu: this.closeAccountMenu,
+      accountMenuWrapStyle, accountMenuOverlayStyle, accountMenuStyle, accountMenuItems,
+      countrySection, categorySection, manufacturerSection, viewAllButtonStyle,
+      previewSwitcherStyle, previewSwitcherOptions,
+      hasConfirm, confirmMessage, confirmCancelLabel, confirmConfirmLabel, confirmOverlayStyle, confirmCardStyle, confirmYesButtonStyle, confirmYes: this.confirmYes, confirmNo: this.confirmNo,
+      isStatsDummy: false, statsData, statsTypeLabel, statHeroStyle,
+      viewModeOptions, viewModeRowStyle, viewModeSeparatorStyle, categoryFilterOptions, filterCategory: s.filterCategory, onFilterChange: this.onFilterChange, addButtonStyle, addIconPath: ICON_PATHS.plus, openNewItem: this.openNewItem,
+      hasSecondaryProfiles, profileMenuOpen: s.profileMenuOpen, toggleProfileMenu: this.toggleProfileMenu, closeProfileMenu: this.closeProfileMenu,
+      profileTriggerStyle, activeProfileAvatarStyle, activeProfileInitials, profileMenuWrapStyle, profileMenuOverlayStyle, profileMenuStyle, profileMenuOptions,
+      chevronDownIconPath: ICON_PATHS.chevronDown, checkIconPath: ICON_PATHS.check,
+      viewingProfileLabel, viewingBadgeStyle, isSelectedEditable, secondaryProfileReadOnlyLabel: t.secondaryProfileReadOnly, isOwnListProfileView: isOwnProfileView,
+      isDeckView: s.viewMode === 'deck', isTableView: s.viewMode === 'table', isGalleryView: s.viewMode === 'gallery',
+      tableScrollOuterStyle, tableWrapStyle, tableHeaderRowStyle, tableRowStyle, tableActionsHeaderStyle, sortableColumns, sortedItems, galleryGridStyle,
+      tableColNameStyle, tableColManufacturerStyle, tableColCategoryStyle, tableColDateStyle, tableColRatingStyle, tableColActionsStyle,
+      filteredItems, isListEmpty, itemCountLabel,
+      selected, draft, draftCategoryOptions, detailCardStyle, detailImageStyle, uploadBoxStyle,
+      isBeerDraft, isWineDraft, isDrinkSpiritDraft, isBeerSelected, isWineSelected, isDrinkSpiritSelected, paisOptions, bjcp21Options, paisOptionsWithFlag, wineCorOptions, wineTipoOptions,
+      onDraftVintage: this.onDraftVintage, onDraftWineType: this.onDraftWineType, onDraftRegion: this.onDraftRegion, onDraftGrape: this.onDraftGrape,
+      starPath: STAR_PATH, sideBySideRowStyle, ratingWidgetOuterStyle, ratingInputWrapStyle, ratingHintStyle, ratingNumberStyle,
+      readOnlyStarsRowStyle, specRowStyle, specCellStyle, specLabelStyle, specValueStyle,
+      draftRatingStars, draftRatingLabel, ratingHintVisible, ratingHintText, selectedRatingStars,
+      onRatingPointerDown: this.onRatingPointerDown, onRatingPointerMove: this.onRatingPointerMove, onRatingPointerUp: this.onRatingPointerUp,
+      onDraftName: this.onDraftName, onDraftManufacturer: this.onDraftManufacturer, onDraftCategory: this.onDraftCategory, onDraftCountry: this.onDraftCountry, onDraftOrigin: this.onDraftOrigin, onDraftAbv: this.onDraftAbv, onDraftIbu: this.onDraftIbu, onDraftEstiloLivre: this.onDraftEstiloLivre, onDraftDate: this.onDraftDate, onDraftRating: this.onDraftRating, onDraftDescription: this.onDraftDescription,
+      simulateUpload: this.simulateUpload, saveDraft: this.saveDraft, cancelDraft: this.cancelDraft, closeDetail: this.closeDetail,
+      startEdit: this.startEdit, duplicateSelected: this.duplicateSelected, deleteSelected: this.deleteSelected,
+      detailActionsRowStyle, detailIconButtonStyle, detailIconButtonStyleDanger, idTagStyle,
+      starPathSearch: ICON_PATHS.search, shareIconPath: ICON_PATHS.share, editIconPath: ICON_PATHS.edit, duplicateIconPath: ICON_PATHS.duplicate, deleteIconPath: ICON_PATHS.delete,
+      shareSelected: this.shareSelected, searchSelectedOnGoogle: this.searchSelectedOnGoogle,
+      photoViewerOpen: s.photoViewerOpen, openPhotoViewer: this.openPhotoViewer, closePhotoViewer: this.closePhotoViewer,
+      zoomInPhoto: this.zoomInPhoto, zoomOutPhoto: this.zoomOutPhoto,
+      zoomInIconPath: ICON_PATHS.zoomIn, zoomOutIconPath: ICON_PATHS.zoomOut, closeIconPath: ICON_PATHS.close,
+      photoViewerOverlayStyle, photoViewerTopBarStyle, photoViewerIconButtonStyle, photoViewerImageWrapStyle, photoViewerImageStyle,
+      avatarStyle, avatarInitials: initials, simulateAvatarUpload: this.simulateAvatarUpload,
+      profileForm: s.profileForm, onProfileNameChange: this.onProfileNameChange, saveProfileName: this.saveProfileName,
+      profileSectionStyle, profileSectionTitleStyle,
+      pwForm: s.pwForm, pwError: s.pwError, onPwCurrent: this.onPwCurrent, onPwNext: this.onPwNext, onPwConfirm: this.onPwConfirm, savePassword: this.savePassword,
+      userRowStyle, usersDisplay, logRowStyle, logsDisplay, doLogout: this.doLogout,
+    };
+  }
+}
+
+</script>
+</body>
+</html>

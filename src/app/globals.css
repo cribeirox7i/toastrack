@@ -1,0 +1,75 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   Toastrack color system — generated from a single hue via OKLCH.
+   All 7 palettes share identical lightness/chroma curves and only rotate hue
+   (--hue); a light/dark switch flips the lightness set. Mirrors the prototype's
+   theme() function and the "Design Tokens" section of the handoff README.
+
+   Runtime control: data-hue + data-mode attributes on <html> (set by the
+   no-FOUC bootstrap script in layout.tsx and by ThemeProvider).
+   ============================================================================ */
+
+:root {
+  --hue: 150; /* green — default palette */
+  color-scheme: light;
+
+  /* Light mode (default) */
+  --bg: oklch(98% 0.006 var(--hue));
+  --surface: oklch(100% 0 0); /* pure white, hue-independent */
+  --text: oklch(22% 0.02 var(--hue));
+  --text-muted: oklch(48% 0.02 var(--hue));
+  --border: oklch(90% 0.012 var(--hue));
+  --track: oklch(92% 0.012 var(--hue));
+  --accent: oklch(58% 0.13 var(--hue));
+  --accent-soft: oklch(93% 0.03 var(--hue));
+  --danger: oklch(55% 0.14 25); /* fixed red, independent of app hue */
+  --on-accent: oklch(100% 0 0); /* text/icon color on accent fills (light mode) */
+}
+
+:root[data-mode="dark"] {
+  color-scheme: dark;
+  --bg: oklch(17% 0.012 var(--hue));
+  --surface: oklch(22% 0.014 var(--hue));
+  --text: oklch(95% 0.01 var(--hue));
+  --text-muted: oklch(70% 0.02 var(--hue));
+  --border: oklch(32% 0.02 var(--hue));
+  --track: oklch(30% 0.02 var(--hue));
+  --accent: oklch(58% 0.13 var(--hue));
+  --accent-soft: oklch(30% 0.05 var(--hue));
+  --danger: oklch(55% 0.14 25);
+  --on-accent: oklch(18% 0.02 var(--hue)); /* near-black "+" on accent in dark mode */
+}
+
+/* Palettes — only the hue rotates. Order = product owner's confirmed list:
+   Verde, Vermelho, Amarelo, Azul, Roxo, Rosa, Laranja. */
+:root[data-hue="green"]  { --hue: 150; }
+:root[data-hue="red"]    { --hue: 22; }
+:root[data-hue="yellow"] { --hue: 95; }
+:root[data-hue="blue"]   { --hue: 245; }
+:root[data-hue="purple"] { --hue: 300; }
+:root[data-hue="pink"]   { --hue: 350; }
+:root[data-hue="orange"] { --hue: 55; }
+
+/* Expose tokens to Tailwind v4 as color/font utilities:
+   bg-surface, text-text, text-muted, border-border, bg-accent, bg-accent-soft,
+   text-danger, text-on-accent, etc. */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-border: var(--border);
+  --color-track: var(--track);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-on-accent: var(--on-accent);
+  --font-sans: var(--font-manrope);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-manrope), system-ui, sans-serif;
+}
