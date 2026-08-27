@@ -14,28 +14,44 @@
 // arquivo separado para você não perder os valores reais toda vez que colar
 // uma versão nova deste Codigo.gs (veja README, seção 1).
 
-// Estrutura esperada das abas (criadas/conferidas por ensureStructure). Toda
-// aba de item usa "id" como chave (ver MIGRACAO_SHEETS.md seção 3 - é o que
-// permite um único motor genérico de leitura/escrita para as 4 categorias,
-// em vez de repetir a lógica por tabela).
+// Estrutura esperada das abas (criadas/conferidas por ensureStructure). Os
+// nomes AQUI têm que bater com os nomes REAIS da planilha do Carlos - o
+// Google Sheets casa nome de aba sem diferenciar maiúscula/minúscula, mas
+// NÃO faz isso entre "list_pais" e "ListPais" (são palavras diferentes).
+// Um nome errado aqui não dá erro - só cria uma aba nova vazia do lado, o
+// que já aconteceu uma vez (Users/ListPais/ListBjcp/AccessLog vs as abas
+// reais "user"/"list_pais"/"list_bjcp_21"/"log" - ver MIGRACAO_SHEETS.md).
+//
+// As 4 abas de item usam "id" como chave (renomeado de beer_id/wine_id/
+// dest_id/drink_id - é o que permite um único motor genérico de leitura/
+// escrita para as 4 categorias). "user" mantém sua chave original
+// (user_id) e "log" nem precisa de id literal, porque nenhum dos dois
+// passa por updateById/deleteById.
 const ESTRUTURA = {
-  Users: ['id', 'user_nome', 'user_mail', 'senha_hash', 'deve_trocar_senha', 'convite_token', 'convite_expira_em', 'user_role', 'user_status', 'user_idioma', 'user_paleta', 'user_modo', 'user_url_img'],
-  Beer: ['id', 'user_id', 'user_access', 'beer_nome', 'beer_produtor', 'pais_id', 'beer_ibu', 'beer_abv', 'beer_nota', 'beer_estilo_livre', 'bjcp21_id', 'beer_data', 'beer_img_nome', 'beer_img_url', 'updated_at'],
-  Wine: ['id', 'user_id', 'user_access', 'wine_nome', 'wine_safra', 'wine_cor', 'wine_tipo', 'wine_produtor', 'pais_id', 'wine_regiao', 'wine_uva', 'wine_abv', 'wine_nota', 'wine_data_degustacao', 'wine_img_nome', 'wine_img_url', 'updated_at'],
-  Dest: ['id', 'user_id', 'user_access', 'dest_nome', 'dest_safra', 'dest_cor', 'dest_tipo', 'dest_produtor', 'pais_id', 'dest_regiao', 'dest_abv', 'dest_nota', 'dest_data_degustacao', 'dest_img_nome', 'dest_img_url', 'updated_at'],
-  Drink: ['id', 'user_id', 'user_access', 'drink_nome', 'drink_safra', 'drink_cor', 'drink_tipo', 'drink_produtor', 'pais_id', 'drink_regiao', 'drink_abv', 'drink_nota', 'drink_data_degustacao', 'drink_img_nome', 'drink_img_url', 'updated_at'],
-  ListPais: ['pais_id', 'pais_nome', 'pais_img'],
-  ListBjcp: ['bjcp21_id', 'bjcp21_cod'],
-  AccessLog: ['id', 'user_id', 'acao', 'quando'],
-  // Um carimbo updated_at por aba de item - ver "pull incremental" no README.
-  // chave = nome da aba (Beer/Wine/Dest/Drink), valor = ISO da última escrita.
-  Meta: ['chave', 'valor']
+  user: ['user_id', 'user_nome', 'user_mail', 'user_status', 'user_role', 'user_idioma', 'user_paleta', 'user_modo', 'user_url_img', 'senha_hash', 'deve_trocar_senha', 'convite_token', 'convite_expira_em'],
+  beer: ['id', 'beer_owner', 'user_access', 'user_edit', 'beer_nome', 'beer_cervejaria', 'pais_id', 'beer_ibu', 'beer_abv', 'beer_nota', 'beer_estilo_livre', 'bjcp21_id', 'beer_data', 'beer_img_nome', 'beer_img_url', 'updated_at'],
+  wine: ['id', 'wine_owner', 'user_access', 'user_edit', 'wine_nome', 'wine_safra', 'wine_cor', 'wine_tipo', 'wine_produtor', 'pais_id', 'wine_regiao', 'wine_uva', 'wine_abv', 'wine_nota', 'wine_data_degustacao', 'wine_img_nome', 'wine_img_url', 'updated_at'],
+  // dest_owner/drink_owner ainda não existem na planilha (dados fictícios até
+  // aqui, ninguém sentiu falta) - ensureStructure vai criá-las vazias; ver
+  // checklist no README/MIGRACAO_SHEETS.md antes da carga real desses dois tipos.
+  dest: ['id', 'dest_owner', 'user_access', 'user_edit', 'dest_nome', 'dest_safra', 'dest_cor', 'dest_tipo', 'dest_produtor', 'pais_id', 'dest_regiao', 'dest_abv', 'dest_nota', 'dest_data_degustacao', 'dest_img_nome', 'dest_img_url', 'updated_at'],
+  drink: ['id', 'drink_owner', 'user_access', 'user_edit', 'drink_nome', 'drink_safra', 'drink_cor', 'drink_tipo', 'drink_produtor', 'pais_id', 'drink_regiao', 'drink_abv', 'drink_nota', 'drink_data_degustacao', 'drink_img_nome', 'drink_img_url', 'updated_at'],
+  list_pais: ['pais_id', 'pais_nome', 'pais_img'],
+  list_bjcp_21: ['bjcp21_id', 'bjcp21_cod'],
+  // Aba real do Carlos, já com dados (log_id/log_data/etc.) - só append+read,
+  // por isso não precisa de "id" literal nem de updateById/deleteById.
+  log: ['log_id', 'log_data', 'user_id', 'user_mail', 'acao', 'tabela', 'registro_id', 'detalhe'],
+  // Nome deliberadamente diferente de "meta" (a aba de anotações pessoais do
+  // Carlos, intocável) - "SyncMeta" nasce nova e vazia por ensureStructure.
+  // chave = nome real da aba de item (beer/wine/dest/drink), valor = ISO da
+  // última escrita nela (ver "pull incremental" no README).
+  SyncMeta: ['chave', 'valor']
 };
 
 // Abas de item (categorias de bebida) - as únicas que participam do
-// user_access e do carimbo incremental em Meta. Distinto de ESTRUTURA porque
-// Users/ListPais/ListBjcp/AccessLog/Meta seguem outras regras.
-const ABAS_ITEM = ['Beer', 'Wine', 'Dest', 'Drink'];
+// user_access/user_edit e do carimbo incremental em SyncMeta. Distinto de
+// ESTRUTURA porque user/list_pais/list_bjcp_21/log/SyncMeta seguem outras regras.
+const ABAS_ITEM = ['beer', 'wine', 'dest', 'drink'];
 
 // ---------- PONTO DE ENTRADA DO WEB APP ----------
 /**
@@ -162,22 +178,22 @@ function lerTabelaDesde(nome, desde) {
   return todas.filter(function (row) { return String(row.updated_at || '') > desde; });
 }
 
-/** Lê o valor de uma chave da aba Meta (carimbo de última escrita por aba). '' se não existir. */
+/** Lê o valor de uma chave da aba SyncMeta (carimbo de última escrita por aba). '' se não existir. */
 function metaGet(chave) {
-  const linhas = lerTabela('Meta');
+  const linhas = lerTabela('SyncMeta');
   for (let i = 0; i < linhas.length; i++) {
     if (linhas[i].chave === chave) return linhas[i].valor;
   }
   return '';
 }
 
-/** Grava/atualiza o carimbo de uma chave em Meta - chamado depois de toda escrita bem-sucedida
- * numa aba de item, para que o próximo `metaGet` reflita a mudança. */
+/** Grava/atualiza o carimbo de uma chave em SyncMeta - chamado depois de toda escrita
+ * bem-sucedida numa aba de item, para que o próximo `metaGet` reflita a mudança. */
 function metaSet(chave, valor) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const sh = getSheet('Meta');
+    const sh = getSheet('SyncMeta');
     const values = sh.getDataRange().getValues();
     for (let r = 1; r < values.length; r++) {
       if (values[r][0] === chave) {
@@ -191,7 +207,7 @@ function metaSet(chave, valor) {
   }
 }
 
-/** Se `nome` for uma aba de item, atualiza o carimbo dela em Meta com o instante atual. */
+/** Se `nome` for uma aba de item, atualiza o carimbo dela em SyncMeta com o instante atual. */
 function tocarMeta(nome) {
   if (ABAS_ITEM.indexOf(nome) !== -1) metaSet(nome, new Date().toISOString());
 }
@@ -285,7 +301,7 @@ function atualizarPorId(nome, id, patch) {
 
 /**
  * Como atualizarPorId, mas localiza a linha por um valor de coluna qualquer em vez de "id" -
- * usado por Users (chave natural = user_mail em alguns fluxos) e por correções pontuais.
+ * usado por "user" (chave natural = user_mail em alguns fluxos) e por correções pontuais.
  * Atualiza só a PRIMEIRA linha encontrada com esse valor.
  */
 function atualizarPorCampo(nome, campo, valor, patch) {

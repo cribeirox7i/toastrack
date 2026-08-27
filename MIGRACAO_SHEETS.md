@@ -42,74 +42,110 @@ O projeto pausado não bloqueia nada:
 
 ## 3. Modelo de dados (abas da planilha)
 
-A planilha real do Carlos (levantada em 2026-08-26, ver seção 3.1) já chega bem perto deste
-formato — `pais_id`/`bjcp21_id` já numéricos, `list_pais`/`list_bjcp_21` já populadas e mais
-completas que o seed do Supabase. O trabalho é ajuste, não reconstrução do zero.
+A planilha real do Carlos (levantada em 2026-08-26, ajustada por ele e reconferida em
+2026-08-27 — ver seção 3.1) já chega bem perto deste formato. O trabalho é ajuste, não
+reconstrução do zero.
 
 O motor de acesso genérico (`Codigo.gs`, ver seção 3.2) espera uma coluna chamada **literalmente
-`id`** em toda aba — é assim que `atualizarPorId`/`excluirPorId` localizam a linha, no TravelTrack
-e aqui. Pra reaproveitar esse motor sem forkar uma versão por tabela, o ajuste na planilha real é
-**renomear só a coluna de chave primária** de cada aba de item (`beer_id`→`id`, `wine_id`→`id`,
-`dest_id`→`id`, `drink_id`→`id`) — as demais colunas mantêm os prefixos que já têm
-(`beer_nome`, `wine_cor`, ...), sem precisar renomear mais nada. O conteúdo da coluna `id` pode
-continuar sendo o número atual; itens novos passam a receber um UUID gerado no cliente (padrão
-TravelTrack), necessário para o outbox offline da seção 5, que precisa do id antes de confirmar
-com o servidor. Toda aba de item ganha `updated_at` (ISO) — viabiliza o sync incremental da seção 5.
+`id`** nas 4 abas de item — é assim que `atualizarPorId`/`excluirPorId` localizam a linha, no
+TravelTrack e aqui. `beer_id`/`wine_id`/`dest_id`/`drink_id` já foram renomeados para `id` — as
+demais colunas mantêm os prefixos que já tinham (`beer_nome`, `wine_cor`, ...). A aba `user`
+**não precisa** desse rename: como não passa por `updateById`/`deleteById` (usa
+`updateByField`/campo natural), fica com `user_id` como está. O mesmo vale pra `log`.
 
-Colunas extras que já existem na planilha e não aparecem na lista abaixo (`bjcp15_id`,
+**Os nomes das abas em `ESTRUTURA` (`Codigo.gs`) têm que ser os nomes reais da planilha.** Isso já
+causou um incidente (ver seção 3.2): usar `Users`/`ListPais`/`ListBjcp`/`AccessLog` (nomes que eu
+inventei) em vez de `user`/`list_pais`/`list_bjcp_21`/`log` (os nomes reais) fez o
+`ensureStructure` criar 4 abas novas vazias, paralelas às de verdade, sem avisar de erro nenhum —
+Google Sheets casa nome de aba ignorando maiúscula/minúscula, mas não ignora palavra diferente
+(plural vs singular, com/sem underscore). Corrigido; ver checklist de limpeza na seção 3.2.
+
+Colunas extras que existem na planilha e não aparecem na lista abaixo (`bjcp15_id`,
 `beer_img_nome_calc`, `beer_macro`, `beer_img_bkp`, `wine_address`, `dest_address`,
-`drink_address`) **não precisam ser apagadas** — o motor genérico ignora o que não usa; só as
-que faltam precisam ser criadas.
+`drink_address`, `user_pwd`, `user_img`, `user_pwd_changed_at`) **não precisam ser apagadas** — o
+motor genérico ignora o que não usa; só as marcadas com ⭐ precisam ser criadas.
 
-| Aba | Colunas (⭐ = coluna nova a criar) |
+| Aba real | Colunas (⭐ = nova a criar) |
 | --- | --- |
-| `Users` | id, nome, email, senha_hash⭐, deve_trocar_senha⭐, convite_token⭐, convite_expira_em⭐, role, ativo (já existem como `user_status`/`user_role` — reaproveitar) |
-| `Beer` | id (renomeado de `beer_id`), user_id, **user_access**⭐, beer_nome, beer_produtor, pais_id, beer_ibu, beer_abv, beer_nota, beer_estilo_livre, bjcp21_id, beer_data, beer_img_nome, beer_img_url, **updated_at**⭐ |
-| `Wine` | id (renomeado de `wine_id`), user_id, **user_access**⭐, wine_nome, wine_safra, wine_cor, wine_tipo, wine_produtor, pais_id, wine_regiao, wine_uva, wine_abv, wine_nota, wine_data_degustacao, wine_img_nome, wine_img_url, **updated_at**⭐ |
-| `Dest` | id (renomeado de `dest_id`), user_id, **user_access**⭐, dest_nome, dest_safra, dest_cor, dest_tipo, dest_produtor, pais_id, dest_regiao, dest_abv, dest_nota, dest_data_degustacao, dest_img_nome, dest_img_url, **updated_at**⭐ |
-| `Drink` | id (renomeado de `drink_id`), user_id, **user_access**⭐, drink_nome, drink_safra, drink_cor, drink_tipo, drink_produtor, pais_id, drink_regiao, drink_abv, drink_nota, drink_data_degustacao, drink_img_nome, drink_img_url, **updated_at**⭐ |
-| `ListPais` | pais_id, pais_nome, pais_img (já ok, sem mudança) |
-| `ListBjcp` | bjcp21_id, bjcp21_cod (+ os campos descritivos que a planilha já tem — mantidos, não usados pelo app hoje, sem mudança) |
-| `AccessLog` | id⭐, user_id⭐, acao⭐, quando⭐ (aba nova) |
-| `Meta` | chave⭐, valor⭐ — carimbo `updated_at` por aba (ver seção 5; aba nova) |
+| `user` | user_id, user_nome, user_mail, user_status, user_role, user_idioma, user_paleta, user_modo, user_url_img, senha_hash⭐, deve_trocar_senha⭐, convite_token⭐, convite_expira_em⭐ |
+| `beer` | id, **beer_owner** (dono — já existe, substituiu `user_id`), **user_access**, **user_edit**, beer_nome, beer_cervejaria, pais_id, beer_ibu, beer_abv, beer_nota, beer_estilo_livre, bjcp21_id, beer_data, beer_img_nome, beer_img_url, updated_at |
+| `wine` | id, **wine_owner**, **user_access**, **user_edit**, wine_nome, wine_safra, wine_cor, wine_tipo, wine_produtor, pais_id, wine_regiao, wine_uva, wine_abv, wine_nota, wine_data_degustacao, wine_img_nome, wine_img_url, updated_at |
+| `dest` | id, **dest_owner**⭐ (ainda não existe — ver aviso abaixo), **user_access**, **user_edit**, dest_nome, dest_safra, dest_cor, dest_tipo, dest_produtor, pais_id, dest_regiao, dest_abv, dest_nota, dest_data_degustacao, dest_img_nome, dest_img_url, updated_at |
+| `drink` | id, **drink_owner**⭐ (idem), **user_access**, **user_edit**, drink_nome, drink_safra, drink_cor, drink_tipo, drink_produtor, pais_id, drink_regiao, drink_abv, drink_nota, drink_data_degustacao, drink_img_nome, drink_img_url, updated_at |
+| `list_pais` | pais_id, pais_nome, pais_img (já ok, sem mudança) |
+| `list_bjcp_21` | bjcp21_id, bjcp21_cod (+ os campos descritivos que a planilha já tem — mantidos, não usados pelo app hoje) |
+| `log` | log_id, log_data, user_id, user_mail, acao, tabela, registro_id, detalhe (aba real reaproveitada como está — só append+read, não precisa de `id` literal) |
+| `SyncMeta`⭐ | chave, valor — carimbo `updated_at` por aba de item (ver seção 5). **Aba nova**, nome deliberadamente diferente de `meta` (a aba de anotações pessoais do Carlos — intocável, ver 3.2) |
 
-**`user_access`** (decidido 2026-08-26, substitui `Relac`): lista de ids de usuário separados por
-`;` na própria linha do item, com acesso de leitura. Não existe mais uma aba de relacionamento
-entre usuários (a `relac` original tinha uma referência órfã a um `user_id` inexistente — resolvida
-abandonando o modelo, não corrigindo o dado velho). **Isso muda a feature**: antes era "seguir um
-perfil e ver a coleção inteira dele"; agora é "este item específico é visível para esta lista de
-usuários". Se a tela de perfis secundários (seção 3.10 do `MEMORIA.md`) for mantida, o filtro por
-perfil vira "itens de outro usuário onde meu id está em `user_access`", não mais "todos os itens
-de quem eu sigo".
+**`user_access` e `user_edit`** (decidido 2026-08-26/27, substituem `relac`): duas listas de ids de
+usuário separadas por `;` na própria linha do item. `user_access` dá só leitura; `user_edit` dá
+leitura **e** edição/exclusão (quem pode editar obviamente também pode ver — ver seção 4). Não
+existe mais uma aba de relacionamento entre usuários (a `relac` original tinha uma referência órfã
+a um `user_id` inexistente — resolvida abandonando o modelo, não corrigindo o dado velho). **Isso
+muda a feature**: antes era "seguir um perfil e ver a coleção inteira dele"; agora é "este item
+específico está liberado pra esta lista de usuários, com este nível de permissão".
 
-**`Dest`/`Drink` ganham `cor`/`tipo`/`safra`** (decisão 2026-08-26) — isso **substitui** a decisão
+**`dest`/`drink` ganham `cor`/`tipo`/`safra`** (decisão 2026-08-26) — isso **substitui** a decisão
 de 10/jul no Supabase que tinha removido esses campos por serem "decorativos" e mantido só
-`dest_tipo` como enum de bebida. Com a planilha real já trazendo essas colunas preenchidas de
-forma simétrica entre os 4 tipos, mantê-las é o caminho mais simples; o enum de bebida
-(Cachaça/Vodka/Gin/...), se ainda fizer sentido, vira mais um campo de texto/enum a definir
-quando os dados reais de destilado existirem (hoje são fictícios — ver seção 3.1).
+`dest_tipo` como enum de bebida. Os dados de destilado/drink na planilha são fictícios até aqui —
+é por isso que a falta de `dest_owner`/`drink_owner` não tinha sido notada; precisam existir antes
+da carga real desses dois tipos.
 
 Decisões do schema Supabase que continuam valendo: `wine_cor` com `Rosé`, usuário nasce ativo,
-`user_id` obrigatório em todo item.
+dono obrigatório em todo item.
 
-### 3.1 Levantamento da planilha real (2026-08-26)
+### 3.1 Levantamento da planilha real (2026-08-26, reconferido 2026-08-27)
 
 19 abas ao todo; as relevantes pro app:
 
-- **`beer`**: 3573 linhas reais, colunas já alinhadas ao schema (`pais_id`, `bjcp21_id`
-  numéricos). Sobra sem uso: `bjcp15_id`, `beer_img_nome_calc`, `beer_macro`, `beer_img_bkp`.
-- **`wine`**: 69 linhas reais. Sobra: `wine_address`.
-- **`dest`/`drink`**: **dados fictícios** — as 69 linhas de cada são cópia idêntica das linhas do
-  `wine` (mesmo nome, nota, data). Os *nomes* das colunas estão ok e vão para o schema (ver acima);
-  os *valores* não entram na carga — ainda não existem destilados/drinks reais catalogados.
-- **`user`**: só 3 linhas reais. Senhas em formatos não reaproveitáveis — dois hashes de 64 hex
-  (não é o `scrypt salt:hash` do padrão novo) e uma senha em texto puro (linha de teste). **Nenhuma
-  senha é migrada** — ver seção 4.1.
-- **`relac`**: abandonada (ver `user_access` acima). Tinha uma referência a `user_id=6`
-  inexistente na aba `user`.
+- **`beer`**: 3591 linhas reais (cresceu desde o primeiro levantamento). `id` já renomeado,
+  `beer_owner`/`user_access`/`user_edit`/`updated_at` já criadas. **`beer_cervejaria`** é o nome
+  real do campo de produtor (não `beer_produtor` como eu tinha assumido na primeira leitura) —
+  confirmado com o Carlos. Sobra sem uso: `bjcp15_id`, `beer_img_nome_calc`, `beer_macro`,
+  `beer_img_bkp`.
+- **`wine`**: 76 linhas reais. `id`/`wine_owner`/`user_access`/`user_edit`/`updated_at` já
+  criadas; aqui o campo de produtor manteve o nome original `wine_produtor`. Sobra: `wine_address`.
+- **`dest`/`drink`**: **dados fictícios** — as linhas de cada uma são cópia das linhas do `wine`
+  (mesmo nome, nota, data). Os *nomes* das colunas estão ok e vão para o schema; os *valores* não
+  entram na carga — ainda não existem destilados/drinks reais catalogados. Faltam `dest_owner`/
+  `drink_owner` (ver tabela acima).
+- **`user`**: 3 linhas reais, intactas — o "zero linhas" visto em 2026-08-27 era outra aba
+  (`Users`, criada por engano por um nome errado em `ESTRUTURA`, ver 3.2), não perda de dado.
+  Senhas em formatos não reaproveitáveis — dois hashes de 64 hex (não é o `scrypt salt:hash` do
+  padrão novo) e uma senha em texto puro (linha de teste). **Nenhuma senha é migrada** — ver 4.1.
+- **`relac`**: abandonada (ver `user_access`/`user_edit` acima). Tinha uma referência a
+  `user_id=6` inexistente na aba `user`.
 - **`list_pais`** (40) e **`list_bjcp_21`** (129): utilizáveis como estão.
-- Abas do protótipo antigo sem uso no app real: `meta`, `log`, `home`, `menu`, `lib_main`, `lib`,
+- **`log`** (59 linhas): reaproveitada como aba real de log de acesso — ver tabela acima.
+- **`meta`** (138 linhas): anotações pessoais do Carlos (o brief original do projeto) — **não é**
+  a aba de sincronização do app; ver incidente na seção 3.2.
+- Abas do protótipo antigo sem uso no app real: `home`, `menu`, `lib_main`, `lib`,
   `list_bjcp_15`, `list_prod`, `estilos_esquecidos` — não entram na migração.
+
+### 3.2 Incidente: nomes de aba errados no `ensureStructure` (2026-08-27)
+
+A primeira versão de `Codigo.gs` usava `Users`/`ListPais`/`ListBjcp`/`AccessLog`/`Meta` como
+chaves de `ESTRUTURA` — nomes que eu inventei em vez de usar os reais da planilha
+(`user`/`list_pais`/`list_bjcp_21`/`log`, e nenhuma aba de sync existia ainda). Rodar
+`ensureStructure` contra isso:
+
+- Criou **4 abas novas vazias** (`Users`, `ListPais`, `ListBjcp`, `AccessLog`), paralelas às
+  reais — sem erro nenhum, porque `getSheet` cria a aba se não encontra pelo nome. Foi isso que
+  fez a primeira leitura de "Users" parecer que os 3 usuários reais tinham sumido — não sumiram,
+  estavam (e continuam) em `user`.
+- Acrescentou as colunas `chave`/`valor` **na aba `meta` real** (as anotações pessoais do
+  Carlos), porque `Meta` (maiúsculo) casou com `meta` (Sheets ignora caixa) — a aba de
+  sincronização do app precisava de um nome que não colidisse.
+
+**Corrigido em `Codigo.gs`**: todas as chaves de `ESTRUTURA` agora são os nomes reais, e a aba de
+sincronização se chama `SyncMeta` (nunca `meta`/`Meta`).
+
+**Limpeza pendente na planilha** (baixa prioridade, não bloqueia a etapa 2):
+- Apagar as 4 abas vazias `Users`, `ListPais`, `ListBjcp`, `AccessLog`.
+- As 2 colunas extras `chave`/`valor` no fim da aba `meta` são inofensivas (vazias, não
+  atrapalham as anotações) — apagar se quiser deixar limpo, não é obrigatório.
+- Criar `beer_owner`... já existe; faltam **`dest_owner`** e **`drink_owner`** antes da carga real
+  desses dois tipos (podem ficar vazias até lá).
 
 ## 4. Segurança: o que era RLS vira código
 
@@ -119,14 +155,19 @@ esquecimento aqui é vazamento de dado, não bug de tela.
 
 | Política hoje (`0001`/`0003`) | Onde reimplementar |
 | --- | --- |
-| Item: SELECT se dono **ou** listado em `user_access` | Rota de listagem: filtrar por `user_id === sessão` OU `sessão.id` presente na lista `user_access` (split por `;`) |
-| Item: INSERT/UPDATE/DELETE só do dono | Toda rota de escrita: comparar `user_id` da linha com o da sessão **antes** de gravar (`user_access` nunca dá permissão de escrita, só de leitura) |
+| Item: SELECT se dono **ou** listado em `user_access`/`user_edit` | Rota de listagem: filtrar por `{tipo}_owner === sessão` OU `sessão.id` presente em `user_access` OU em `user_edit` (split por `;`) — quem pode editar obviamente também pode ver |
+| Item: UPDATE/DELETE se dono **ou** listado em `user_edit` | Toda rota de escrita: comparar `{tipo}_owner` OU `sessão.id ∈ user_edit` antes de gravar. **`user_access` nunca dá permissão de escrita**, só leitura |
+| Item: INSERT só cria pro próprio usuário | `{tipo}_owner` sempre = id da sessão, nunca do corpo da requisição |
 | `user`: lê/edita só a própria linha | Rota de perfil |
-| `access_log`: só admin lê | Rota de log |
-| Trigger `guard_user_privileges` (sem auto-promoção) | Rota de admin: recusar mudança de `role`/`ativo` se a sessão não for admin |
-| Storage: escrita só na própria pasta | Rota de upload: montar o caminho do Drive a partir do `user_id` da **sessão**, nunca do corpo da requisição |
+| `log`: só admin lê | Rota de log (aba real `log`, ver seção 3.1) |
+| Trigger `guard_user_privileges` (sem auto-promoção) | Rota de admin: recusar mudança de `user_role`/`user_status` se a sessão não for admin |
+| Storage: escrita só na própria pasta | Rota de upload: montar o caminho do Drive a partir do id da **sessão**, nunca do corpo da requisição |
 
-Regra geral: **nada de `user_id` vindo do cliente**. Sempre da sessão, como o import atual já faz.
+Regra geral: **nada de dono vindo do cliente**. Sempre da sessão, como o import atual já faz.
+
+O mapa "categoria → nome da coluna de dono" (`beer_owner`/`wine_owner`/`dest_owner`/`drink_owner`)
+é lógica de aplicação, não do Apps Script (que é um motor genérico sem noção de dono) — vive em
+`src/lib/sheets/` na etapa 2, não em `Codigo.gs`.
 
 ### 4.1 Senha (padrão do WebCRM, decidido 2026-08-26)
 
@@ -195,34 +236,32 @@ referência):
   `updateManyById`/`updateByField`/`deleteById`/`deleteByField`) + `ensureStructure` com a
   `ESTRUTURA` da seção 3 + verbos de Drive (`driveUploadFile`/`driveListFiles`/`driveDeleteFile`/
   `driveDownloadFile`) usando uma pasta raiz **por categoria** (`{raiz da categoria}/{user_id}/`,
-  ver seção 6), ajustado em 2026-08-27 a pedido do Carlos — cada categoria pode viver em lugar
-  diferente do Drive, em vez de uma raiz única com subpastas. Ganhou dois pontos que o TravelTrack
-  não tinha, pro volume maior daqui: `readSince(tab, desde)` (sync incremental) e a aba `Meta`
-  sendo tocada (`tocarMeta`) a cada escrita numa das 4 abas de item — é a base do "cache que fica
-  rápido depois do primeiro login" (seção 5).
+  ver seção 6). Ganhou dois pontos que o TravelTrack não tinha, pro volume maior daqui:
+  `readSince(tab, desde)` (sync incremental) e a aba `SyncMeta` sendo tocada (`tocarMeta`) a cada
+  escrita numa das 4 abas de item — é a base do "cache que fica rápido depois do primeiro login"
+  (seção 5).
 - `apps-script/Config.gs` / `apps-script/appsscript.json` — mesmo formato do TravelTrack, valores
   a preencher (segredo, os 4 ids de pasta do Drive em `DRIVE_ROOT_FOLDERS`).
 - `src/lib/authCrypto.ts` — port do `authCrypto.ts` do WebCRM (`scrypt` nativo, sem dependência
   externa). Testado por `npm run test:auth-crypto` (5 casos).
 
-### O que falta você fazer na planilha e no Drive antes da etapa 2
+### Checklist da planilha/Drive — status em 2026-08-27
 
-1. **Renomear a coluna de chave primária** em cada uma das 4 abas de item: `beer_id`→`id`,
-   `wine_id`→`id`, `dest_id`→`id`, `drink_id`→`id`. Só essa coluna — o resto continua com prefixo.
-2. **Criar as colunas novas** listadas com ⭐ na tabela da seção 3 (`user_access` e `updated_at`
-   em cada uma das 4 abas de item; os 4 campos novos em `Users`). Pode deixar em branco — o
-   `ensureStructure` do passo 5 confere que existem, mas não preenche valor.
-3. **Publicar o Apps Script**: Extensões → Apps Script na planilha, colar `Codigo.gs`, criar um
-   arquivo `Config` com o conteúdo de `Config.gs`, colar `appsscript.json` no manifesto (mostrar
-   via ⚙️ → "Mostrar arquivo de manifesto"). Gerar um segredo aleatório
-   (`openssl rand -base64 32`) e colocar em `SHARED_SECRET`.
-4. **Pastas do Drive**: criar (ou escolher) uma pasta raiz **por categoria** (Beer/Wine/Dest/
-   Drink — podem ficar em lugares diferentes do Drive), pegar o ID de cada uma (trecho depois de
-   `/folders/` na URL) e preencher os 4 valores de `DRIVE_ROOT_FOLDERS` em `Config.gs`.
-5. Rodar `testeAutorizacao` pelo editor (autoriza planilha + Drive) e implantar como **App da
-   Web** (Executar como "Eu", Acesso "Qualquer pessoa") — copiar a URL `/exec`.
-6. Chamar a ação `ensureStructure` uma vez (pelo próprio editor, ou já pela rota de setup do
-   Next.js quando ela existir na etapa 2) para confirmar que todas as abas/colunas batem.
+O Carlos já fez o checklist inteiro (renomear `id`, criar as colunas novas, publicar, preencher
+o Drive, `testeAutorizacao`, implantar). Confirmado por `curl` direto na URL `/exec`: `ensureStructure`
+roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a primeira versão do
+`Codigo.gs` usava nomes de aba errados (ver incidente na seção 3.2), corrigido depois. Falta:
+
+1. **Republicar** o `Codigo.gs` corrigido (nomes de aba reais, `SyncMeta` em vez de `Meta`) —
+   colar no editor e **Implantar → Gerenciar implantações → editar → Nova versão** (a URL `/exec`
+   não muda).
+2. Rodar `ensureStructure` de novo pra confirmar que `SyncMeta` nasce limpo e nenhuma aba nova
+   indevida é criada.
+3. Limpeza opcional na planilha, sem urgência (ver seção 3.2): apagar as 4 abas vazias
+   `Users`/`ListPais`/`ListBjcp`/`AccessLog`; as 2 colunas `chave`/`valor` que sobraram em `meta`
+   são inofensivas.
+4. Criar `dest_owner`/`drink_owner` antes da carga real de destilados/drinks (podem ficar vazias
+   até lá).
 
 ## 7. Sequência de trabalho
 
