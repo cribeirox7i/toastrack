@@ -1,2 +1,2 @@
-wine_nome,wine_produtor,pais_nome,wine_data_degustacao,wine_safra,wine_cor,wine_tipo,wine_regiao,wine_uva,wine_abv,wine_nota,wine_img_nome,wine_img_url
-Malbec Reserva,Bodega Catena,Argentina,2026-06-01,2021,Tinto,Seco,Mendoza,Malbec,13.5,5,malbec-reserva.jpg,https://drive.google.com/...
+wine_nome,wine_safra,wine_cor,wine_tipo,wine_produtor,pais_id,wine_regiao,wine_uva,wine_abv,wine_nota,wine_data_degustacao,wine_img_nome
+Malbec Reserva,2019,Tinto,Seco,Bodega Exemplo,3,Mendoza,Malbec,13.5,4,2026-04-10,malbec-reserva.jpg

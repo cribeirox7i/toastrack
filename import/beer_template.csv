@@ -1,2 +1,2 @@
-beer_nome,beer_produtor,pais_nome,beer_data,beer_ibu,beer_abv,beer_estilo_livre,bjcp_cod,beer_nota,beer_img_nome,beer_img_url
-Weiss Dourada,Cervejaria Bierland,Brasil,2026-03-14,14,5.2,Weiss,10A - Weissbier,4,weiss-dourada.jpg,https://drive.google.com/...
+beer_nome,beer_produtor,pais_id,beer_ibu,beer_abv,beer_nota,beer_estilo_livre,bjcp21_id,beer_data,beer_img_nome
+Weiss Dourada,Cervejaria Bierland,7,14,5.2,4,Weiss,30,2026-03-14,weiss-dourada.jpg

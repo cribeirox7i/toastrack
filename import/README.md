@@ -1,44 +1,71 @@
 # Import de dados — Toastrack
 
-Preencha os templates abaixo com seus ~3600 itens e me devolva. Eu cuido da conversão para o banco (resolver país/estilo, importar, ligar fotos depois).
+O import roda **no próprio app**, na página `/admin` (só quem tem `user_role = 'admin'` entra).
+Você sobe a planilha e um `.zip` com as fotos; o app valida tudo, mostra uma prévia e só
+grava depois que você confirmar.
 
-## Arquivos
-- `beer_template.csv` — cervejas
-- `wine_template.csv` — vinhos
-- (drinks/destilados: sem dados ainda, ignorar por enquanto)
+> ⚠️ **O import é substituição, não acréscimo.** Ao confirmar, ele **apaga todas as suas
+> linhas daquele tipo** (cerveja ou vinho) e insere a planilha inteira no lugar. Os outros
+> tipos e os dados de outros usuários não são tocados — o RLS garante isso, e o import não
+> usa chave de service_role.
 
-Cada um já tem o cabeçalho certo + 1 linha de exemplo (pode apagar a linha de exemplo antes de exportar, ou deixar que eu ignoro).
+## Colunas
 
-## Regras gerais
-- **Codificação:** UTF-8 (o padrão do Google Sheets ao exportar CSV já é UTF-8, sem problema).
-- **Datas:** formato `AAAA-MM-DD` (ex: `2026-03-14`). Se sua planilha tem `DD/MM/AAAA`, me avisa — eu converto na importação, não precisa reformatar manualmente.
-- **Números decimais:** use ponto, não vírgula (`5.2`, não `5,2`).
-- **Nota (avaliação):** de 0 a 5, passos de 0.5 (`0, 0.5, 1, 1.5 ... 5`).
-- **Campos vazios:** pode deixar em branco — não precisa preencher tudo.
+Baixe o template direto no `/admin` (botão "Baixar template") — ele é gerado a partir do
+schema real, então nunca fica desatualizado. As mesmas colunas estão em
+`beer_template.csv` e `wine_template.csv` aqui nesta pasta, para referência.
 
-## `pais_nome` (ambas as planilhas)
-Escreva o nome do país em português, o mais parecido possível com esta lista (já cadastrada no banco):
+**Cervejas:** `beer_nome` (obrigatório), `beer_produtor`, `pais_id`, `beer_ibu`, `beer_abv`,
+`beer_nota`, `beer_estilo_livre`, `bjcp21_id`, `beer_data`, `beer_img_nome`
 
-África do Sul, Alemanha, Argentina, Austrália, Áustria, Bélgica, Brasil, Canadá, Chile, China, Coreia do Sul, Croácia, Cuba, Dinamarca, Escócia, Espanha, Estados Unidos, França, Geórgia, Grécia, Holanda, Hungria, Índia, Inglaterra, Irlanda, Itália, Japão, México, Noruega, Nova Zelândia, Peru, Polônia, Portugal, Reino Unido, República Tcheca, Romênia, Rússia, Suécia, Suíça, Uruguai
+**Vinhos:** `wine_nome` (obrigatório), `wine_safra`, `wine_cor`, `wine_tipo`, `wine_produtor`,
+`pais_id`, `wine_regiao`, `wine_uva`, `wine_abv`, `wine_nota`, `wine_data_degustacao`,
+`wine_img_nome`
 
-**Não se preocupe em bater 100%** — se aparecer um país que falta na lista (ex. "Escócia" vs "Reino Unido", ou um país novo), eu ajusto/adiciono na hora da importação. Só me avisa se tiver muitos casos assim.
+Colunas a mais na planilha são ignoradas. Colunas de menos também, exceto a obrigatória.
+Não existe coluna de URL de foto: o `*_img_url` é calculado pelo app a partir do
+`*_img_nome` e do caminho no Storage.
 
-## `beer_template.csv` — campos específicos
-- `bjcp_cod`: o estilo BJCP, no formato `"01A - American Light Lager"` (código + nome). É uma lista de 129 estilos — **se não souber o código exato, deixe em branco e preencha só o `beer_estilo_livre`** (texto livre, tipo "IPA", "Weiss") que é o que mais importa visualmente.
-- `beer_img_nome` / `beer_img_url`: pode deixar como estão na sua planilha atual (ID/nome do arquivo + URL do Drive) — não preciso que mude nada aqui agora. As fotos são um passo separado (ver abaixo).
+## Regras por tipo de campo
 
-## `wine_template.csv` — campos específicos
-- `wine_cor`: um destes → `Tinto`, `Branco`, `Rosé`, `Verde`, `Laranja`
-- `wine_tipo`: um destes → `Seco`, `Semi-Seco`, `Suave`, `Brut`. **Se você usa "Doce"**, me avisa — vou adicionar esse valor ao invés de forçar em outro.
-- `wine_img_nome` / `wine_img_url`: mesma lógica das fotos de cerveja — pode deixar como está.
+- **`pais_id` e `bjcp21_id`:** o **ID numérico** das tabelas `list_pais` e `list_bjcp_21`.
+  Como conveniência, o nome exato também é aceito (`Brasil`, `10A - Weissbier`) — acento e
+  maiúscula não importam. O que **não** é aceito é um código parcial tipo `10A`, porque
+  vários estilos compartilham o mesmo código e adivinhar seria pior que recusar a linha.
+- **Datas:** `AAAA-MM-DD` ou `DD/MM/AAAA` — os dois funcionam. Ano de 2 dígitos
+  (`03/04/26`) é **recusado** de propósito: é ambíguo demais.
+- **Números decimais:** ponto ou vírgula conforme sua planilha exportar, mas o valor
+  precisa ser numérico (`5.2`).
+- **Avaliação (`*_nota`):** 0 a 5, em passos de 0,5.
+- **`wine_cor`:** `Tinto`, `Branco`, `Rosé`, `Verde`, `Laranja`.
+- **`wine_tipo`:** `Seco`, `Semi-Seco`, `Suave`, `Brut`. Se sua planilha usa **`Doce`**,
+  me avisa — eu adiciono o valor ao enum em vez de forçar em outro.
+- **Campos vazios:** pode deixar em branco, exceto o nome.
 
-## Sobre as fotos (não precisa resolver agora)
-Suas fotos já têm URL pública do Google Drive funcionando (`beer_img_url` / `wine_img_url`). Para o primeiro import, **vou usar essas URLs do Drive diretamente** — o app já sabe exibir imagem por URL, não precisamos re-hospedar ~3600 fotos no Supabase Storage neste momento. Migrar pra Storage próprio fica como melhoria futura, se você quiser (URLs do Drive podem expirar/mudar permissão com o tempo — é o único risco de deixar assim).
+## Fotos
 
-## Como me devolver
-Quando terminar de mapear, um destes caminhos funciona:
-1. **Exportar como CSV** (Arquivo → Fazer download → Valores separados por vírgula) e salvar em `C:\Claude\Toastrack\import\` (sobrescrevendo os templates) — eu leio direto do disco.
-2. Ou mudar o compartilhamento da planilha para **"Qualquer pessoa com o link pode visualizar"** e me passar o link — eu leio direto de lá.
+Um `.zip` com as imagens; o nome do arquivo dentro do zip tem que bater com o
+`*_img_nome` da linha (maiúscula/minúscula não importa; pastas dentro do zip são
+ignoradas). Formatos: jpg, jpeg, png, webp, gif.
 
-## Sobre a conta
-Esses ~3600 itens são dados reais seus — faz sentido você **criar sua conta de verdade no app** (signup com seu e-mail real) em vez de usar a conta de teste (`tt1`). Me avisa se quer fazer isso antes, ou se prefiro importar tudo pra `tt1` mesmo por enquanto.
+As fotos vão para o **Supabase Storage**, no bucket público `toastrack`, em
+`IMG/BEER/<user_id>/` e `IMG/WINE/<user_id>/`. A prévia mostra quantas casaram, quais
+linhas ficaram sem foto e quais fotos sobraram sem linha — dá pra conferir antes de gravar.
+
+O zip é opcional: sem ele, os itens entram sem foto e você pode rodar o import de novo
+depois com as imagens.
+
+## Passo a passo
+
+1. Exporte a planilha (uma aba/arquivo por tipo) — CSV, XLS ou XLSX servem. Só a
+   **primeira aba** de cada arquivo é lida.
+2. Abra `/admin` no app, logado com a conta que vai **ser dona** dos dados.
+3. Escolha o arquivo. A prévia mostra total de linhas, quantas passaram e a lista de
+   problemas (linha, coluna, valor, motivo). Nada foi gravado ainda.
+4. Escolha o zip de fotos, se tiver.
+5. Marque a confirmação de que a substituição vai apagar os dados atuais e confirme.
+
+## Verificação da regra de parsing
+
+`node scripts/test-import-parse.mjs` (ou `npm run test:import`) exercita as regras de data
+e de resolução de país/estilo.

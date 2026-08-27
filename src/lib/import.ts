@@ -1,8 +1,9 @@
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { fetchLookups } from "@/lib/itemSchema";
+import { fetchLookups, type Lookup } from "@/lib/itemSchema";
 import { WINE_COR, WINE_TIPO } from "@/lib/itemSchema";
+import { buildLookupIndex, parseImportDate, resolveFk } from "@/lib/importParse";
 
 /**
  * Bulk-import engine for the /admin page. Reads a beer or wine spreadsheet
@@ -134,28 +135,30 @@ export type RowIssue = { row: number; col: string; value: string; message: strin
 export type ValidationResult = {
   type: ImportType;
   totalRows: number;
-  validRows: RawRow[]; // rows with no blocking issue, in file order
+  /** Rows with no blocking issue, in file order, with dates normalized to ISO
+   *  and FK columns resolved to their numeric id — ready for insert. */
+  validRows: RawRow[];
   issues: RowIssue[];
   missingHeaders: string[];
 };
 
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function isValidDate(s: string): boolean {
-  if (!DATE_RE.test(s)) return false;
-  const d = new Date(s + "T00:00:00");
-  return !Number.isNaN(d.getTime()) && s === d.toISOString().slice(0, 10);
-}
-
-/** Validate parsed rows against the schema + lookup id sets. */
+/**
+ * Validate parsed rows against the schema + lookup tables, returning normalized
+ * copies of the rows that passed. `lookups` can be injected in tests; in the app
+ * it is fetched from the DB.
+ */
 export async function validateRows(
   type: ImportType,
   rows: RawRow[],
+  lookups?: Lookup,
 ): Promise<ValidationResult> {
   const cfg = CONFIG[type];
-  const lookups = await fetchLookups();
-  const paisIds = new Set(lookups.pais.map((p) => p.pais_id));
-  const bjcpIds = new Set(lookups.bjcp.map((b) => b.bjcp21_id));
+  const resolved = lookups ?? (await fetchLookups());
+  const index = {
+    pais: buildLookupIndex(resolved.pais.map((p) => ({ id: p.pais_id, label: p.pais_nome }))),
+    bjcp: buildLookupIndex(resolved.bjcp.map((b) => ({ id: b.bjcp21_id, label: b.bjcp21_cod }))),
+  };
+  const FK_TABLE = { pais: "list_pais", bjcp: "list_bjcp_21" } as const;
 
   const headers = new Set(rows.length ? Object.keys(rows[0]) : []);
   const missingHeaders = cfg.cols
@@ -167,6 +170,7 @@ export async function validateRows(
 
   rows.forEach((row, i) => {
     const rowNum = i + 2; // +1 header, +1 to 1-index for humans
+    const normalized: RawRow = { ...row };
     let blocking = false;
     const flag = (col: string, value: string, message: string) => {
       issues.push({ row: rowNum, col, value, message });
@@ -192,29 +196,27 @@ export async function validateRows(
             flag(c.col, v, "avaliação deve estar entre 0 e 5");
           break;
         }
-        case "date":
-          if (!isValidDate(v)) flag(c.col, v, "data deve ser AAAA-MM-DD");
+        case "date": {
+          const iso = parseImportDate(v);
+          if (!iso) flag(c.col, v, "data deve ser AAAA-MM-DD ou DD/MM/AAAA");
+          else normalized[c.col] = iso;
           break;
+        }
         case "enum":
           if (!c.options!.includes(v))
             flag(c.col, v, `valor inválido (use: ${c.options!.join(", ")})`);
           break;
         case "fk": {
-          if (!/^\d+$/.test(v)) {
-            flag(c.col, v, "deve ser um ID numérico");
-            break;
-          }
-          const id = Number(v);
-          const ok = c.fk === "pais" ? paisIds.has(id) : bjcpIds.has(id);
-          if (!ok)
-            flag(c.col, v, `ID não existe em ${c.fk === "pais" ? "list_pais" : "list_bjcp_21"}`);
+          const r = resolveFk(v, index[c.fk!], FK_TABLE[c.fk!]);
+          if ("error" in r) flag(c.col, v, r.error);
+          else normalized[c.col] = String(r.id);
           break;
         }
         default:
           break;
       }
     }
-    if (!blocking) validRows.push(row);
+    if (!blocking) validRows.push(normalized);
   });
 
   return { type, totalRows: rows.length, validRows, issues, missingHeaders };
