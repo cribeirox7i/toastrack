@@ -260,14 +260,19 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
 
 ## 7. Sequência de trabalho
 
-1. ✅ **Planilha + Apps Script** (ver 6.1) — código escrito; publicar/rodar fica com o Carlos
-   (passos numerados acima).
-2. **Camada de dados no Next**: `src/lib/sheets/` (client + repositórios por aba), substituindo
-   `src/lib/supabase/`. As telas não mudam nesta etapa.
-3. **Auth**: NextAuth v5 (Credentials + JWT) sobre a aba `Users`, com bcrypt; script
-   `create-admin` como no TravelTrack (não há cadastro público hoje no Toastrack — decidir se
-   mantém o signup aberto).
-4. **Rotas de API** com as checagens da seção 4.
+1. ✅ **Planilha + Apps Script** (ver 6.1) — feito e conferido (`ensureStructure` limpo, dados
+   reais acessíveis).
+2. ✅ **Camada de dados no Next** (2026-08-27): `src/lib/sheets/` — `client.ts` (`callAppsScript`,
+   `server-only`), `types.ts`, `permissions.ts` (`user_owner`/`user_access`/`user_edit`, 7 testes
+   puros), `items.ts` (repositório genérico das 4 abas, permissão em toda operação), `users.ts`
+   (senha via `authCrypto.ts`), `lookups.ts`, `log.ts`. Testado de ponta a ponta contra a planilha
+   real (`npm run test:sheets-integration`, 9/9, sem deixar rastro nas 3591 cervejas reais). As
+   telas ainda não mudaram — é só a biblioteca, pronta pra ser consumida pelas rotas da etapa 4.
+3. **Auth**: NextAuth v5 (Credentials + JWT) sobre a aba `user`, com o `authCrypto.ts` já pronto;
+   script `create-admin` como no TravelTrack (sem cadastro público, decisão já fechada na seção 8).
+4. **Rotas de API** com as checagens da seção 4, consumindo `src/lib/sheets/`. É só a partir daqui
+   que o `next.config.ts` deixa de poder ser `output: 'export'` — rota de API não existe em
+   static export (ver seção 8).
 5. **Carga dos 3600 itens**: mapear a planilha existente do Carlos para as colunas da seção 3.
 6. **Cache** (seção 5) — depois que os dados reais estiverem lá, que é quando dá pra medir.
 7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
