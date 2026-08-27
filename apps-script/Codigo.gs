@@ -29,13 +29,14 @@
 // passa por updateById/deleteById.
 const ESTRUTURA = {
   user: ['user_id', 'user_nome', 'user_mail', 'user_status', 'user_role', 'user_idioma', 'user_paleta', 'user_modo', 'user_url_img', 'senha_hash', 'deve_trocar_senha', 'convite_token', 'convite_expira_em'],
-  beer: ['id', 'beer_owner', 'user_access', 'user_edit', 'beer_nome', 'beer_cervejaria', 'pais_id', 'beer_ibu', 'beer_abv', 'beer_nota', 'beer_estilo_livre', 'bjcp21_id', 'beer_data', 'beer_img_nome', 'beer_img_url', 'updated_at'],
-  wine: ['id', 'wine_owner', 'user_access', 'user_edit', 'wine_nome', 'wine_safra', 'wine_cor', 'wine_tipo', 'wine_produtor', 'pais_id', 'wine_regiao', 'wine_uva', 'wine_abv', 'wine_nota', 'wine_data_degustacao', 'wine_img_nome', 'wine_img_url', 'updated_at'],
-  // dest_owner/drink_owner ainda não existem na planilha (dados fictícios até
-  // aqui, ninguém sentiu falta) - ensureStructure vai criá-las vazias; ver
-  // checklist no README/MIGRACAO_SHEETS.md antes da carga real desses dois tipos.
-  dest: ['id', 'dest_owner', 'user_access', 'user_edit', 'dest_nome', 'dest_safra', 'dest_cor', 'dest_tipo', 'dest_produtor', 'pais_id', 'dest_regiao', 'dest_abv', 'dest_nota', 'dest_data_degustacao', 'dest_img_nome', 'dest_img_url', 'updated_at'],
-  drink: ['id', 'drink_owner', 'user_access', 'user_edit', 'drink_nome', 'drink_safra', 'drink_cor', 'drink_tipo', 'drink_produtor', 'pais_id', 'drink_regiao', 'drink_abv', 'drink_nota', 'drink_data_degustacao', 'drink_img_nome', 'drink_img_url', 'updated_at'],
+  // Não existe coluna de "dono" - permissão vem só de user_access (leitura) e
+  // user_edit (leitura+edição/exclusão). beer_owner/wine_owner que aparecem em
+  // algumas linhas são sobra do rascunho anterior, ignorados pelo app (o motor
+  // genérico não liga pra coluna que não está listada aqui).
+  beer: ['id', 'user_access', 'user_edit', 'beer_nome', 'beer_cervejaria', 'pais_id', 'beer_ibu', 'beer_abv', 'beer_nota', 'beer_estilo_livre', 'bjcp21_id', 'beer_data', 'beer_img_nome', 'beer_img_url', 'updated_at'],
+  wine: ['id', 'user_access', 'user_edit', 'wine_nome', 'wine_safra', 'wine_cor', 'wine_tipo', 'wine_produtor', 'pais_id', 'wine_regiao', 'wine_uva', 'wine_abv', 'wine_nota', 'wine_data_degustacao', 'wine_img_nome', 'wine_img_url', 'updated_at'],
+  dest: ['id', 'user_access', 'user_edit', 'dest_nome', 'dest_safra', 'dest_cor', 'dest_tipo', 'dest_produtor', 'pais_id', 'dest_regiao', 'dest_abv', 'dest_nota', 'dest_data_degustacao', 'dest_img_nome', 'dest_img_url', 'updated_at'],
+  drink: ['id', 'user_access', 'user_edit', 'drink_nome', 'drink_safra', 'drink_cor', 'drink_tipo', 'drink_produtor', 'pais_id', 'drink_regiao', 'drink_abv', 'drink_nota', 'drink_data_degustacao', 'drink_img_nome', 'drink_img_url', 'updated_at'],
   list_pais: ['pais_id', 'pais_nome', 'pais_img'],
   list_bjcp_21: ['bjcp21_id', 'bjcp21_cod'],
   // Aba real do Carlos, já com dados (log_id/log_data/etc.) - só append+read,
