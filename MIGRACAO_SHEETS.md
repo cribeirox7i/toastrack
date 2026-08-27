@@ -169,12 +169,16 @@ o armazenamento do navegador.
 
 ## 6. Imagens no Drive
 
-Pasta raiz configurada em `DRIVE_ROOT_FOLDER_ID` (`Config.gs`), com subpasta por categoria e por
-usuário — espelhando o que a migration `0004_storage.sql` fazia no Storage:
+**Uma pasta raiz por categoria** (decisão 2026-08-27, `DRIVE_ROOT_FOLDERS` em `Config.gs`) — cada
+categoria pode viver em lugar diferente do Drive, ao contrário de uma raiz única com subpastas.
+Dentro de cada uma, uma subpasta por usuário — espelhando o que a migration `0004_storage.sql`
+fazia no Storage, só que com 4 raízes em vez de 1:
 
 ```
-<raiz>/IMG/BEER/<user_id>/<arquivo>
-<raiz>/IMG/WINE/<user_id>/<arquivo>
+<raiz BEER>/<user_id>/<arquivo>
+<raiz WINE>/<user_id>/<arquivo>
+<raiz DEST>/<user_id>/<arquivo>
+<raiz DRINK>/<user_id>/<arquivo>
 ```
 
 As ~3600 fotos **já estão no Drive do Carlos** com URL, o que elimina a etapa de upload em massa:
@@ -190,13 +194,14 @@ referência):
 - `apps-script/Codigo.gs` — motor genérico (`read`/`readSince`/`append`/`updateById`/
   `updateManyById`/`updateByField`/`deleteById`/`deleteByField`) + `ensureStructure` com a
   `ESTRUTURA` da seção 3 + verbos de Drive (`driveUploadFile`/`driveListFiles`/`driveDeleteFile`/
-  `driveDownloadFile`) usando o caminho `IMG/{categoria}/{user_id}/`, no lugar da pasta por
-  viagem do TravelTrack. Ganhou dois pontos que o TravelTrack não tinha, pro volume maior daqui:
-  `readSince(tab, desde)` (sync incremental) e a aba `Meta` sendo tocada (`tocarMeta`) a cada
-  escrita numa das 4 abas de item — é a base do "cache que fica rápido depois do primeiro login"
-  (seção 5).
+  `driveDownloadFile`) usando uma pasta raiz **por categoria** (`{raiz da categoria}/{user_id}/`,
+  ver seção 6), ajustado em 2026-08-27 a pedido do Carlos — cada categoria pode viver em lugar
+  diferente do Drive, em vez de uma raiz única com subpastas. Ganhou dois pontos que o TravelTrack
+  não tinha, pro volume maior daqui: `readSince(tab, desde)` (sync incremental) e a aba `Meta`
+  sendo tocada (`tocarMeta`) a cada escrita numa das 4 abas de item — é a base do "cache que fica
+  rápido depois do primeiro login" (seção 5).
 - `apps-script/Config.gs` / `apps-script/appsscript.json` — mesmo formato do TravelTrack, valores
-  a preencher (segredo, ID da pasta do Drive).
+  a preencher (segredo, os 4 ids de pasta do Drive em `DRIVE_ROOT_FOLDERS`).
 - `src/lib/authCrypto.ts` — port do `authCrypto.ts` do WebCRM (`scrypt` nativo, sem dependência
   externa). Testado por `npm run test:auth-crypto` (5 casos).
 
@@ -211,8 +216,9 @@ referência):
    arquivo `Config` com o conteúdo de `Config.gs`, colar `appsscript.json` no manifesto (mostrar
    via ⚙️ → "Mostrar arquivo de manifesto"). Gerar um segredo aleatório
    (`openssl rand -base64 32`) e colocar em `SHARED_SECRET`.
-4. **Pasta do Drive**: criar (ou escolher) a pasta raiz das fotos, pegar o ID (trecho depois de
-   `/folders/` na URL) e colocar em `DRIVE_ROOT_FOLDER_ID`.
+4. **Pastas do Drive**: criar (ou escolher) uma pasta raiz **por categoria** (Beer/Wine/Dest/
+   Drink — podem ficar em lugares diferentes do Drive), pegar o ID de cada uma (trecho depois de
+   `/folders/` na URL) e preencher os 4 valores de `DRIVE_ROOT_FOLDERS` em `Config.gs`.
 5. Rodar `testeAutorizacao` pelo editor (autoriza planilha + Drive) e implantar como **App da
    Web** (Executar como "Eu", Acesso "Qualquer pessoa") — copiar a URL `/exec`.
 6. Chamar a ação `ensureStructure` uma vez (pelo próprio editor, ou já pela rota de setup do

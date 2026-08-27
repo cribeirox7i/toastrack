@@ -20,7 +20,14 @@ const SPREADSHEET_ID = '';
 // não permite autenticação de servidor-a-servidor de outra forma aqui).
 const SHARED_SECRET = 'TROQUE-ESTE-VALOR-POR-UM-SEGREDO-ALEATORIO';
 
-// ID da pasta raiz no Google Drive onde ficam as fotos de todas as bebidas,
-// organizadas em IMG/{categoria}/{user_id}/. Trecho entre /folders/ e o fim
-// na URL da pasta (ex.: .../folders/AAAA1234BBBB -> 'AAAA1234BBBB').
-const DRIVE_ROOT_FOLDER_ID = '';
+// Uma pasta raiz por categoria de bebida (cada uma pode viver em lugar
+// diferente do Drive - por isso 4 ids em vez de 1 pasta raiz com subpastas).
+// Dentro de cada uma, o script cria uma subpasta por usuário: {raiz}/{user_id}/.
+// Preencha com o trecho entre /folders/ e o fim na URL de cada pasta
+// (ex.: .../folders/AAAA1234BBBB -> 'AAAA1234BBBB').
+const DRIVE_ROOT_FOLDERS = {
+  BEER: '',
+  WINE: '',
+  DEST: '',
+  DRINK: ''
+};

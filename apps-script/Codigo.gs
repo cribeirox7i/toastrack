@@ -10,7 +10,7 @@
  */
 
 // ---------- CONFIGURAÇÃO ----------
-// SPREADSHEET_ID, SHARED_SECRET e DRIVE_ROOT_FOLDER_ID ficam em Config.gs -
+// SPREADSHEET_ID, SHARED_SECRET e DRIVE_ROOT_FOLDERS ficam em Config.gs -
 // arquivo separado para você não perder os valores reais toda vez que colar
 // uma versão nova deste Codigo.gs (veja README, seção 1).
 
@@ -475,9 +475,10 @@ function adicionarColunasFaltantes(sh, colunasEsperadas) {
 
 // ---------- FOTOS (GOOGLE DRIVE) ----------
 // Mesmo padrão do TravelTrack: sem service account, usa DriveApp com a identidade de quem
-// publicou o Web App. Estrutura no Drive, espelhando o bucket Supabase que existia antes
-// (migration 0004_storage.sql): {DRIVE_ROOT_FOLDER_ID}/IMG/{categoria}/{user_id}/arquivo.
-// A pasta de usuário só é criada na hora do primeiro upload dele naquela categoria.
+// publicou o Web App. Cada categoria de bebida tem sua PRÓPRIA pasta raiz no Drive
+// (DRIVE_ROOT_FOLDERS em Config.gs - podem viver em lugares diferentes do Drive), e dentro dela
+// uma subpasta por usuário: {raiz da categoria}/{user_id}/arquivo. A pasta de usuário só é
+// criada na hora do primeiro upload dele naquela categoria.
 
 /** Acha ou cria (com lock, para não duplicar em uploads simultâneos) uma subpasta pelo nome. */
 function getOrCreateSubfolder(pai, nome) {
@@ -492,31 +493,29 @@ function getOrCreateSubfolder(pai, nome) {
   }
 }
 
-/** categoria esperada: BEER | WINE | DEST | DRINK (maiúsculo, mesmo padrão do Storage antigo). */
+/** categoria esperada: BEER | WINE | DEST | DRINK (maiúsculo - chaves de DRIVE_ROOT_FOLDERS). */
+function getCategoriaRootId(categoria) {
+  const id = DRIVE_ROOT_FOLDERS[categoria];
+  if (!id) throw new Error('Pasta do Drive não configurada em Config.gs para categoria: ' + categoria);
+  return id;
+}
+
 function getUserFolder(categoria, userId) {
-  if (!DRIVE_ROOT_FOLDER_ID) {
-    throw new Error('DRIVE_ROOT_FOLDER_ID não configurado em Config.gs');
-  }
-  const raiz = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
-  const imgFolder = getOrCreateSubfolder(raiz, 'IMG');
-  const catFolder = getOrCreateSubfolder(imgFolder, categoria);
-  return getOrCreateSubfolder(catFolder, userId);
+  const raiz = DriveApp.getFolderById(getCategoriaRootId(categoria));
+  return getOrCreateSubfolder(raiz, userId);
 }
 
 /**
- * Igual a getUserFolder, mas NUNCA cria nada - devolve null se a pasta ainda não existir. Usado
- * pela listagem/download/exclusão: uma leitura não deve criar pasta vazia no Drive (mesmo
- * problema documentado no README do TravelTrack para "You do not have permission to call
- * DriveApp.Folder.createFolder").
+ * Igual a getUserFolder, mas NUNCA cria nada - devolve null se a pasta ainda não existir (ou a
+ * categoria não tiver pasta configurada). Usado pela listagem/download/exclusão: uma leitura não
+ * deve criar pasta vazia no Drive (mesmo problema documentado no README do TravelTrack para
+ * "You do not have permission to call DriveApp.Folder.createFolder").
  */
 function findUserFolder(categoria, userId) {
-  if (!DRIVE_ROOT_FOLDER_ID) return null;
-  const raiz = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
-  const imgFolders = raiz.getFoldersByName('IMG');
-  if (!imgFolders.hasNext()) return null;
-  const catFolders = imgFolders.next().getFoldersByName(categoria);
-  if (!catFolders.hasNext()) return null;
-  const userFolders = catFolders.next().getFoldersByName(userId);
+  const id = DRIVE_ROOT_FOLDERS[categoria];
+  if (!id) return null;
+  const raiz = DriveApp.getFolderById(id);
+  const userFolders = raiz.getFoldersByName(userId);
   return userFolders.hasNext() ? userFolders.next() : null;
 }
 
@@ -604,17 +603,22 @@ function driveDownloadFile(payload) {
 // ---------- TESTE DE AUTORIZAÇÃO (executar no editor para conceder os escopos) ----------
 function testeAutorizacao() {
   Logger.log('Planilha: ' + abrirPlanilha().getName());
-  if (DRIVE_ROOT_FOLDER_ID) {
-    const raiz = DriveApp.getFolderById(DRIVE_ROOT_FOLDER_ID);
-    Logger.log('Pasta raiz: ' + raiz.getName());
 
-    // Exercita ESCRITA de verdade, não só leitura (ver aviso análogo no README do TravelTrack:
-    // ler a pasta só prova o escopo de leitura; criar pasta/arquivo precisa de escopo maior, e é
-    // isso que precisa estourar aqui se o escopo estiver errado - não só um "Autorização OK!"
-    // que passa e o upload real quebra depois).
+  // Exercita ESCRITA de verdade em cada pasta configurada, não só leitura (ver aviso análogo no
+  // README do TravelTrack: ler a pasta só prova o escopo de leitura; criar pasta/arquivo precisa
+  // de escopo maior, e é isso que precisa estourar aqui se o escopo estiver errado - não só um
+  // "Autorização OK!" que passa e o upload real quebra depois).
+  Object.keys(DRIVE_ROOT_FOLDERS).forEach(function (categoria) {
+    const id = DRIVE_ROOT_FOLDERS[categoria];
+    if (!id) {
+      Logger.log(categoria + ': pasta não configurada em Config.gs, pulando.');
+      return;
+    }
+    const raiz = DriveApp.getFolderById(id);
+    Logger.log(categoria + ': pasta "' + raiz.getName() + '"');
     const temp = raiz.createFolder('__teste_permissao__');
     temp.setTrashed(true);
-    Logger.log('Escrita no Drive: OK (createFolder testado e desfeito)');
-  }
+    Logger.log(categoria + ': escrita OK (createFolder testado e desfeito)');
+  });
   Logger.log('Autorização OK!');
 }
