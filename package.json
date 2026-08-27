@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test:import": "node scripts/test-import-parse.mjs",
-    "test:auth-crypto": "node scripts/test-auth-crypto.mjs"
+    "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
+    "test:permissions": "node scripts/test-permissions.mjs",
+    "test:sheets-integration": "tsx --env-file=.env.local --conditions=react-server scripts/test-sheets-integration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2",
@@ -16,6 +18,7 @@
     "next": "16.2.10",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -26,6 +29,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.10",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }
