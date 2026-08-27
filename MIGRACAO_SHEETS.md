@@ -61,40 +61,30 @@ Google Sheets casa nome de aba ignorando maiúscula/minúscula, mas não ignora 
 (plural vs singular, com/sem underscore). Corrigido; ver checklist de limpeza na seção 3.2.
 
 Colunas extras que existem na planilha e não aparecem na lista abaixo (`bjcp15_id`,
-`beer_img_nome_calc`, `beer_macro`, `beer_img_bkp`, `beer_owner`, `wine_owner`, `wine_address`,
-`dest_address`, `drink_address`, `user_pwd`, `user_img`, `user_pwd_changed_at`) **não precisam ser
-apagadas** — o motor genérico ignora o que não usa; só as marcadas com ⭐ precisam ser criadas.
+`beer_img_nome_calc`, `beer_macro`, `beer_img_bkp`, `beer_produtor`, `user_id` (nas 4 abas de
+item — substituído por `user_owner`), `wine_address`, `dest_address`, `drink_address`, `user_pwd`,
+`user_img`, `user_pwd_changed_at`) **não precisam ser apagadas** — o motor genérico ignora o que
+não usa; só as marcadas com ⭐ precisam ser criadas.
 
 | Aba real | Colunas (⭐ = nova a criar) |
 | --- | --- |
 | `user` | user_id, user_nome, user_mail, user_status, user_role, user_idioma, user_paleta, user_modo, user_url_img, senha_hash⭐, deve_trocar_senha⭐, convite_token⭐, convite_expira_em⭐ |
-| `beer` | id, **user_access**, **user_edit**, beer_nome, beer_cervejaria, pais_id, beer_ibu, beer_abv, beer_nota, beer_estilo_livre, bjcp21_id, beer_data, beer_img_nome, beer_img_url, updated_at |
-| `wine` | id, **user_access**, **user_edit**, wine_nome, wine_safra, wine_cor, wine_tipo, wine_produtor, pais_id, wine_regiao, wine_uva, wine_abv, wine_nota, wine_data_degustacao, wine_img_nome, wine_img_url, updated_at |
-| `dest` | id, **user_access**, **user_edit**, dest_nome, dest_safra, dest_cor, dest_tipo, dest_produtor, pais_id, dest_regiao, dest_abv, dest_nota, dest_data_degustacao, dest_img_nome, dest_img_url, updated_at |
-| `drink` | id, **user_access**, **user_edit**, drink_nome, drink_safra, drink_cor, drink_tipo, drink_produtor, pais_id, drink_regiao, drink_abv, drink_nota, drink_data_degustacao, drink_img_nome, drink_img_url, updated_at |
+| `beer` | id, **user_owner**, **user_access**, **user_edit**, beer_nome, beer_cervejaria, pais_id, beer_ibu, beer_abv, beer_nota, beer_estilo_livre, bjcp21_id, beer_data, beer_img_nome, beer_img_url, updated_at |
+| `wine` | id, **user_owner**, **user_access**, **user_edit**, wine_nome, wine_safra, wine_cor, wine_tipo, wine_produtor, pais_id, wine_regiao, wine_uva, wine_abv, wine_nota, wine_data_degustacao, wine_img_nome, wine_img_url, updated_at |
+| `dest` | id, **user_owner**, **user_access**, **user_edit**, dest_nome, dest_safra, dest_cor, dest_tipo, dest_produtor, pais_id, dest_regiao, dest_abv, dest_nota, dest_data_degustacao, dest_img_nome, dest_img_url, updated_at |
+| `drink` | id, **user_owner**, **user_access**, **user_edit**, drink_nome, drink_safra, drink_cor, drink_tipo, drink_produtor, pais_id, drink_regiao, drink_abv, drink_nota, drink_data_degustacao, drink_img_nome, drink_img_url, updated_at |
 | `list_pais` | pais_id, pais_nome, pais_img (já ok, sem mudança) |
 | `list_bjcp_21` | bjcp21_id, bjcp21_cod (+ os campos descritivos que a planilha já tem — mantidos, não usados pelo app hoje) |
 | `log` | log_id, log_data, user_id, user_mail, acao, tabela, registro_id, detalhe (aba real reaproveitada como está — só append+read, não precisa de `id` literal) |
 | `SyncMeta`⭐ | chave, valor — carimbo `updated_at` por aba de item (ver seção 5). **Aba nova**, nome deliberadamente diferente de `meta` (a aba de anotações pessoais do Carlos — intocável, ver 3.2) |
 
-**Não existe coluna de "dono"** (decidido 2026-08-27) — `beer_owner`/`wine_owner` que já existiam
-na planilha viram sobra sem uso, no mesmo bagagem das outras colunas extras. Toda permissão vem
-só de duas listas de ids separados por `;` na própria linha do item: **`user_access`** (leitura) e
-**`user_edit`** (leitura **e** edição/exclusão — quem pode editar obviamente também pode ver, ver
-seção 4). Isso substitui tanto o `relac` original (a aba de relacionamento entre usuários, que
-tinha uma referência órfã a um `user_id` inexistente — resolvida abandonando o modelo) quanto a
-ideia inicial de um dono fixo por item.
-
-Sem coluna de dono, **quem cria um item precisa ser colocado em `user_edit` pela própria rota de
-escrita** (nunca a partir do que o cliente manda) — senão a pessoa cria o item e não consegue mais
-editá-lo. Isso é regra de aplicação (etapa 2), não do Apps Script.
-
-**Isso muda a feature** duas vezes seguidas: primeiro a de 26/08 (de "seguir um perfil inteiro"
-para "acesso por item"), agora a de 27/08 (de "todo item tem um dono fixo" para "toda permissão é
-uma lista explícita, sem noção de dono"). Se a tela de perfis secundários for mantida, "ver a
-coleção de outro usuário" vira "itens onde meu id está em `user_access` ou `user_edit`, agrupados
-por quem colocou lá" — não há mais um "dono" único pra agrupar visualmente por perfil; convém
-decidir na etapa 2 como (ou se) a UI ainda separa "meus itens" de "itens compartilhados comigo".
+**`user_owner`** (decisão final, 2026-08-27 — o Carlos voltou atrás numa decisão do mesmo dia que
+tinha abolido o dono): um único id, dono do item. Nome genérico, igual nas 4 abas — diferente do
+`beer_owner`/`wine_owner` do rascunho anterior, que ficaram como sobra sem uso. Junto dele, duas
+listas de ids separados por `;`: **`user_access`** (leitura, além do dono) e **`user_edit`**
+(leitura **e** edição/exclusão, além do dono). Isso substitui o `relac` original (a aba de
+relacionamento entre usuários, que tinha uma referência órfã a um `user_id` inexistente —
+resolvida abandonando o modelo, não o `user_owner` em si).
 
 **`dest`/`drink` ganham `cor`/`tipo`/`safra`** (decisão 2026-08-26) — isso **substitui** a decisão
 de 10/jul no Supabase que tinha removido esses campos por serem "decorativos" e mantido só
@@ -160,21 +150,21 @@ Este é o ponto de maior risco da migração. Hoje o Postgres recusa o que não 
 recusa nada. **Cada política das migrations vira checagem explícita numa rota de API**, e um
 esquecimento aqui é vazamento de dado, não bug de tela.
 
-Não existe coluna de dono (decisão 2026-08-27, ver seção 3) — toda permissão vem só de duas
-listas de ids em cada linha: `user_access` (leitura) e `user_edit` (leitura + edição/exclusão).
+`user_owner` (id único) mais duas listas de ids em cada linha: `user_access` (leitura, além do
+dono) e `user_edit` (leitura + edição/exclusão, além do dono) — ver seção 3.
 
 | Política hoje (`0001`/`0003`) | Onde reimplementar |
 | --- | --- |
-| Item: SELECT se dono **ou** seguidor | Rota de listagem: filtrar por `sessão.id ∈ user_access` OU `sessão.id ∈ user_edit` (split por `;`) — quem pode editar obviamente também pode ver |
-| Item: INSERT/UPDATE/DELETE só do dono | UPDATE/DELETE: `sessão.id ∈ user_edit` — `user_access` nunca dá permissão de escrita. INSERT: a rota **sempre** grava `user_edit = sessão.id` (append, nunca substitui o que o cliente mandou) — sem isso quem cria um item não consegue mais editá-lo, já que não há dono fixo |
+| Item: SELECT se dono **ou** seguidor via `relac` | Rota de listagem: `sessão.id === user_owner` OU `sessão.id ∈ user_access` OU `sessão.id ∈ user_edit` (split por `;`) |
+| Item: INSERT/UPDATE/DELETE só do dono | UPDATE/DELETE: `sessão.id === user_owner` OU `sessão.id ∈ user_edit`. INSERT: `user_owner` sempre = id da sessão, **nunca** do corpo da requisição |
 | `user`: lê/edita só a própria linha | Rota de perfil |
 | `log`: só admin lê | Rota de log (aba real `log`, ver seção 3.1) |
 | Trigger `guard_user_privileges` (sem auto-promoção) | Rota de admin: recusar mudança de `user_role`/`user_status` se a sessão não for admin |
 | Storage: escrita só na própria pasta | Rota de upload: montar o caminho do Drive a partir do id da **sessão**, nunca do corpo da requisição |
 
-Regra geral: **nada de permissão vinda do cliente**. A rota sempre soma `sessão.id` a `user_edit`
-na criação; ela nunca aceita um `user_access`/`user_edit` completo vindo do corpo da requisição
-sem primeiro conferir que quem está editando essa lista já tem `user_edit` sobre o item.
+Regra geral: **nada de `user_owner` vindo do cliente**. Sempre da sessão. `user_access`/
+`user_edit` também não são aceitos soltos vindo do corpo da requisição sem antes conferir que
+quem está editando essa lista é o dono ou já está em `user_edit`.
 
 ### 4.1 Senha (padrão do WebCRM, decidido 2026-08-26)
 
