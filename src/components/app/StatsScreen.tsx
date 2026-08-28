@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { Stars } from "@/components/ui";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 
@@ -74,12 +73,11 @@ export default function StatsScreen({ type }: { type: ItemType }) {
   const [flags, setFlags] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    getSupabaseClient()
-      .from("list_pais")
-      .select("pais_nome,pais_img")
-      .then(({ data }) => {
+    fetch("/api/lookups", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { paises: [] }))
+      .then((data: { paises: { pais_nome: string; pais_img: string | null }[] }) => {
         const m = new Map<string, string>();
-        for (const p of (data ?? []) as { pais_nome: string; pais_img: string | null }[]) {
+        for (const p of data.paises) {
           if (p.pais_img) m.set(p.pais_nome, p.pais_img);
         }
         setFlags(m);

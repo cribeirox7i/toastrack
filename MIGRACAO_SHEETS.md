@@ -335,6 +335,45 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
 Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer; a 6 só faz sentido com
 volume real medido.
 
+### 7.1 Ligar as telas ao backend novo (2026-08-28) — não numerada no plano original, mas
+necessária pra alguém conseguir usar o app de verdade: todo o `src/components`/`src/lib` que
+falava com Supabase foi reescrito pra chamar as rotas de API da etapa 4.
+
+- **Auth**: `AuthProvider.tsx` agora fica por baixo do `SessionProvider` do NextAuth
+  (`next-auth/react`), busca o perfil completo via `/api/profile`. `AuthScreen.tsx` perdeu
+  cadastro e "esqueci senha" (decisão da seção 8: sem cadastro público) — só login, com um aviso
+  pra falar com o admin. **Nova tela**: `TrocarSenhaObrigatoria.tsx`, exibida por `AppShell.tsx`
+  quando `deveTrocarSenha` da sessão é `true` (toda conta criada/resetada nasce assim) — chama
+  `update()` do NextAuth ao trocar com sucesso, resolvendo o TODO deixado em `src/auth.ts`.
+- **Dados de item**: `catalog.ts`/`itemSchema.ts` reescritos pra `fetch` nas rotas
+  `/api/items/[tipo]`/`/api/lookups` em vez de `supabase-js`. `Item.id` virou `string` (era
+  `number` — os ids agora são UUID, exceto os itens antigos que mantiveram o número original como
+  texto). Nome histórico da UI `"spirit"` mantido (só `catalog.ts` traduz pra `"dest"`, o nome
+  real da aba — não valia a pena renomear em todas as telas).
+- **Permissão na tela**: como não existe mais uma coluna "sou dono desta lista inteira" (o filtro
+  já mistura itens próprios com compartilhados), cada `Item` ganhou `canEdit: boolean`
+  (`src/lib/itemPermissions.ts`, espelho client-side de `user_owner`/`user_edit` só pra decidir
+  o que mostrar — a garantia real continua sendo a rota). `ListScreen` passou a checar por item,
+  não mais um flag único pra tela inteira.
+- **Perfil/admin**: `prefs.ts`/`admin.ts` reescritos pra `/api/profile`, `/api/profile/senha`,
+  `/api/admin/users`, `/api/admin/log`. Idioma passou de `PT/EN/ES` pra `pt/en/es` (minúsculo,
+  acompanhando o valor real da planilha).
+- **Perfis secundários removidos de fato**: `profiles.ts` agora só devolve `[]` (não existe mais
+  "seguir um perfil inteiro" — ver seção 3). A UI já tratava lista vazia como "sem perfil
+  secundário", então nenhuma tela precisou de cirurgia — o switcher simplesmente não aparece mais.
+- **Removido**: `/admin` (import em massa via CSV/XLSX) — não existe mais "carga" nenhuma (seção
+  7, item 5), então o importador Supabase+XLSX client-side não fazia mais sentido. Foram junto
+  `src/lib/import.ts`, `src/lib/importParse.ts`, `ImportPanel.tsx`, e as dependências `xlsx`/
+  `jszip`/`@supabase/supabase-js` (não usadas em lugar nenhum depois da reescrita).
+
+**Verificação:** `npm run build` limpo (12 rotas + a home, sem erro de tipo), testes de
+permissão/senha ainda 100%. **Limite real desta verificação**: o `AppShell` é Client Component —
+a decisão splash/login/app só acontece depois da hidratação no navegador, então `curl` no HTML
+prova só "o servidor não quebra", não "a tela renderiza certo". A Browser pane está banida pra
+este projeto (ver `feedback_toastrack_no_browser_pane`), então **o React em si (MainApp, listas,
+detalhe/edição) ainda não foi visto rodando de verdade** — só testado por baixo, via as rotas de
+API (etapa 4). Precisa do Carlos abrir num navegador de verdade e confirmar.
+
 ## 8. Decisões
 
 Fechadas com o Carlos em **2026-08-26**:

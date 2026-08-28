@@ -1,22 +1,16 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
-
-/** A secondary (followed) profile the current user may browse read-only. */
+/** Perfil secundário (dono de itens compartilhados) — visível no switcher de listagem. */
 export type SecondaryProfile = {
   id: string;
   name: string;
   img: string | null;
 };
 
-/** Followed profiles for the current user, via the RLS-safe RPC (name+avatar only). */
+/**
+ * Não existe mais "seguir um perfil inteiro" (a aba `relac` foi abandonada — ver
+ * MIGRACAO_SHEETS.md seção 3). Permissão agora é por item (`user_access`/`user_edit`), então não
+ * há uma lista fixa de "perfis seguidos" pra oferecer aqui — o switcher de ListScreen simplesmente
+ * não aparece (a UI já trata lista vazia como "sem perfil secundário").
+ */
 export async function fetchFollowedProfiles(): Promise<SecondaryProfile[]> {
-  const { data, error } = await getSupabaseClient().rpc("followed_profiles");
-  if (error) {
-    console.error("fetchFollowedProfiles error:", error.message);
-    return [];
-  }
-  return (data ?? []).map((r: { user_id: string; user_nome: string; user_img: string | null }) => ({
-    id: r.user_id,
-    name: r.user_nome,
-    img: r.user_img,
-  }));
+  return [];
 }

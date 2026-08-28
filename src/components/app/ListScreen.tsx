@@ -79,7 +79,6 @@ export default function ListScreen({
   onCatalogChanged: () => void;
 }) {
   const isOwnView = !viewedProfileId || viewedProfileId === ownUserId;
-  const effectiveOwner = viewedProfileId ?? ownUserId;
   const hasSecondary = secondaryProfiles.length > 0;
   const viewedProfile = secondaryProfiles.find((p) => p.id === viewedProfileId) ?? null;
 
@@ -96,7 +95,7 @@ export default function ListScreen({
 
   async function reload() {
     setLoading(true);
-    const data = await fetchItems(listType, effectiveOwner);
+    const data = await fetchItems(listType, ownUserId);
     setItems(data);
     setLoading(false);
   }
@@ -104,7 +103,7 @@ export default function ListScreen({
   useEffect(() => {
     void reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listType, effectiveOwner]);
+  }, [listType, ownUserId]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -147,7 +146,7 @@ export default function ListScreen({
 
   async function doDelete(item: Item) {
     setConfirmItem(null);
-    const ok = await deleteItem(item.type, item.id);
+    const ok = item.canEdit && (await deleteItem(item.type, item.id));
     if (ok) {
       await reload();
       onCatalogChanged();
@@ -156,7 +155,7 @@ export default function ListScreen({
   }
 
   async function doDuplicate(item: Item) {
-    const ok = await duplicateItem(item.type, item.id);
+    const ok = item.canEdit && (await duplicateItem(item.type, item.id));
     if (ok) {
       await reload();
       onCatalogChanged();
@@ -304,7 +303,6 @@ export default function ListScreen({
         ) : viewMode === "deck" ? (
           <DeckView
             items={filtered}
-            canEdit={isOwnView}
             onOpen={onOpenItem}
             onEdit={onEditItem}
             onDuplicate={doDuplicate}
@@ -313,7 +311,7 @@ export default function ListScreen({
         ) : viewMode === "table" ? (
           <TableView
             items={sorted}
-            canEdit={isOwnView}
+            showActionsCol={sorted.some((i) => i.canEdit)}
             sortField={sortField}
             sortDir={sortDir}
             onSort={toggleSort}
@@ -419,14 +417,12 @@ function RowActions({
 
 function DeckView({
   items,
-  canEdit,
   onOpen,
   onEdit,
   onDuplicate,
   onDelete,
 }: {
   items: Item[];
-  canEdit: boolean;
   onOpen: (i: Item) => void;
   onEdit: (i: Item) => void;
   onDuplicate: (i: Item) => void;
@@ -449,7 +445,7 @@ function DeckView({
               <span className="text-muted">{formatDate(item.date)}</span>
             </div>
           </div>
-          {canEdit && (
+          {item.canEdit && (
             <RowActions item={item} onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />
           )}
         </div>
@@ -460,7 +456,7 @@ function DeckView({
 
 function TableView({
   items,
-  canEdit,
+  showActionsCol,
   sortField,
   sortDir,
   onSort,
@@ -469,7 +465,7 @@ function TableView({
   onDelete,
 }: {
   items: Item[];
-  canEdit: boolean;
+  showActionsCol: boolean;
   sortField: SortField;
   sortDir: "asc" | "desc";
   onSort: (f: SortField) => void;
@@ -492,7 +488,7 @@ function TableView({
               {arrow(c.key)}
             </button>
           ))}
-          {canEdit && <div className="w-20 px-3 py-2.5 text-right">Ações</div>}
+          {showActionsCol && <div className="w-20 px-3 py-2.5 text-right">Ações</div>}
         </div>
         {items.map((item) => (
           <div key={item.id} className="flex items-center border-b border-border text-[13px]">
@@ -508,22 +504,26 @@ function TableView({
             <div className="flex-1 px-3 py-2.5">
               <Stars value={item.rating} className="text-[12px]" />
             </div>
-            {canEdit && (
+            {showActionsCol && (
               <div className="flex w-20 justify-end gap-1 px-3 py-2.5">
-                <button
-                  onClick={() => onDuplicate(item)}
-                  className="flex size-6 items-center justify-center rounded border border-border text-muted"
-                  title="Duplicar"
-                >
-                  ⧉
-                </button>
-                <button
-                  onClick={() => onDelete(item)}
-                  className="flex size-6 items-center justify-center rounded border border-danger text-danger"
-                  title="Excluir"
-                >
-                  ✕
-                </button>
+                {item.canEdit && (
+                  <>
+                    <button
+                      onClick={() => onDuplicate(item)}
+                      className="flex size-6 items-center justify-center rounded border border-border text-muted"
+                      title="Duplicar"
+                    >
+                      ⧉
+                    </button>
+                    <button
+                      onClick={() => onDelete(item)}
+                      className="flex size-6 items-center justify-center rounded border border-danger text-danger"
+                      title="Excluir"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

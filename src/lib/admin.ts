@@ -1,59 +1,51 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { logAccess } from "@/lib/auth";
-
 export type AdminUser = {
   user_id: string;
   user_nome: string;
   user_mail: string;
   user_status: "S" | "N";
-  user_role: "admin" | "user";
+  user_role: "admin" | "user" | "";
 };
 
 export type LogEntry = {
-  log_id: number;
+  log_id: string;
   ts: string;
   action: string;
   user_id: string | null;
+  user_mail: string;
 };
 
-/** All users (admin only — RLS `user_admin_select` gates this). */
+/** Todos os usuários (só admin — a rota confere `requireAdmin`). */
 export async function fetchAllUsers(): Promise<AdminUser[]> {
-  const { data, error } = await getSupabaseClient()
-    .from("user")
-    .select("user_id,user_nome,user_mail,user_status,user_role")
-    .order("user_nome");
-  if (error) {
-    console.error("fetchAllUsers error:", error.message);
-    return [];
-  }
-  return (data ?? []) as AdminUser[];
+  const res = await fetch("/api/admin/users", { cache: "no-store" });
+  if (!res.ok) return [];
+  const users = (await res.json()) as AdminUser[];
+  return [...users].sort((a, b) => a.user_nome.localeCompare(b.user_nome));
 }
 
-/** Activate ('S') / deactivate ('N') a user (admin only; guard trigger allows
- *  the change because the caller is an admin). */
+/** Ativa ('S') / desativa ('N') um usuário (só admin). */
 export async function setUserStatus(userId: string, status: "S" | "N"): Promise<boolean> {
-  const { error } = await getSupabaseClient()
-    .from("user")
-    .update({ user_status: status })
-    .eq("user_id", userId);
-  if (error) {
-    console.error("setUserStatus error:", error.message);
-    return false;
-  }
-  void logAccess(status === "S" ? "ativou usuário" : "desativou usuário", "user");
-  return true;
+  const res = await fetch(`/api/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ user_status: status }),
+  });
+  return res.ok;
 }
 
-/** Recent access-log entries (admin only — RLS `access_log_admin_read`). */
+/** Log de acesso recente (só admin) — mais novo primeiro. */
 export async function fetchAccessLog(limit = 50): Promise<LogEntry[]> {
-  const { data, error } = await getSupabaseClient()
-    .from("access_log")
-    .select("log_id,ts,action,user_id")
-    .order("ts", { ascending: false })
-    .limit(limit);
-  if (error) {
-    console.error("fetchAccessLog error:", error.message);
-    return [];
-  }
-  return (data ?? []) as LogEntry[];
+  const res = await fetch("/api/admin/log", { cache: "no-store" });
+  if (!res.ok) return [];
+  const rows = (await res.json()) as {
+    log_id: string;
+    log_data: string;
+    acao: string;
+    user_id: string;
+    user_mail: string;
+  }[];
+  return rows
+    .slice()
+    .reverse()
+    .slice(0, limit)
+    .map((r) => ({ log_id: r.log_id, ts: r.log_data, action: r.acao, user_id: r.user_id || null, user_mail: r.user_mail }));
 }

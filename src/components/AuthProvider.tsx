@@ -9,12 +9,16 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { fetchAppUser, logAccess, type AppUser } from "@/lib/auth";
+import { SessionProvider, useSession, signOut as nextAuthSignOut } from "next-auth/react";
+import type { PublicUser } from "@/lib/sheets/users";
+
+type AppUser = PublicUser;
 
 type AuthContextValue = {
-  session: Session | null;
+  userId: string | null;
+  userEmail: string | null;
+  role: "admin" | "user" | null;
+  deveTrocarSenha: boolean;
   appUser: AppUser | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -24,70 +28,71 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Owns the Supabase auth session and the matching public."user" profile row.
- * Resolves the initial session on mount and subscribes to auth changes; the
- * static-export app is fully client-side, so this is the single source of truth
- * for "who is logged in". 2FA and the inactive-account gate live in the login
- * flow (AuthScreen); this provider just tracks session + profile.
+ * Fica por baixo do SessionProvider do NextAuth (useSession só funciona como descendente dele).
+ * Carrega o perfil completo (`/api/profile` — nome, paleta, modo, idioma) e o mantém em sincronia
+ * com o id da sessão, igual o AuthProvider antigo fazia com a linha `public.user` do Supabase.
  */
-export default function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+function AuthInner({ children }: { children: ReactNode }) {
+  const { data: session, status } = useSession();
   const [appUser, setAppUser] = useState<AppUser | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(true);
   const currentUserId = useRef<string | null>(null);
 
-  const loadAppUser = useCallback(async (userId: string | null) => {
-    if (!userId) {
-      setAppUser(null);
-      return;
+  const loadAppUser = useCallback(async () => {
+    setProfileLoading(true);
+    try {
+      const res = await fetch("/api/profile", { cache: "no-store" });
+      setAppUser(res.ok ? await res.json() : null);
+    } finally {
+      setProfileLoading(false);
     }
-    const row = await fetchAppUser(userId);
-    setAppUser(row);
   }, []);
 
   useEffect(() => {
-    const supabase = getSupabaseClient();
-    let active = true;
-
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!active) return;
-      const s = data.session;
-      setSession(s);
-      currentUserId.current = s?.user.id ?? null;
-      await loadAppUser(s?.user.id ?? null);
-      setLoading(false);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      const nextId = s?.user.id ?? null;
-      // Only refetch the profile when the actual user changes (ignore token refreshes).
-      if (nextId !== currentUserId.current) {
-        currentUserId.current = nextId;
-        void loadAppUser(nextId);
-      }
-    });
-
-    return () => {
-      active = false;
-      sub.subscription.unsubscribe();
-    };
-  }, [loadAppUser]);
+    const userId = session?.user.id ?? null;
+    if (!userId) {
+      currentUserId.current = null;
+      setAppUser(null);
+      setProfileLoading(false);
+      return;
+    }
+    // Só refaz o fetch quando o usuário de fato muda (evita refetch em cada refresh de token).
+    if (userId !== currentUserId.current) {
+      currentUserId.current = userId;
+      void loadAppUser();
+    }
+  }, [session?.user.id, loadAppUser]);
 
   const signOut = useCallback(async () => {
-    await logAccess("logout");
-    await getSupabaseClient().auth.signOut();
+    await nextAuthSignOut({ redirect: false });
     setAppUser(null);
   }, []);
 
-  const refreshAppUser = useCallback(async () => {
-    await loadAppUser(currentUserId.current);
-  }, [loadAppUser]);
+  const loading = status === "loading" || (status === "authenticated" && profileLoading);
 
   return (
-    <AuthContext.Provider value={{ session, appUser, loading, signOut, refreshAppUser }}>
+    <AuthContext.Provider
+      value={{
+        userId: session?.user.id ?? null,
+        userEmail: session?.user.email ?? null,
+        role: session?.user.role ?? null,
+        deveTrocarSenha: session?.user.deveTrocarSenha ?? false,
+        appUser,
+        loading,
+        signOut,
+        refreshAppUser: loadAppUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
+  );
+}
+
+export default function AuthProvider({ children }: { children: ReactNode }) {
+  return (
+    <SessionProvider>
+      <AuthInner>{children}</AuthInner>
+    </SessionProvider>
   );
 }
 

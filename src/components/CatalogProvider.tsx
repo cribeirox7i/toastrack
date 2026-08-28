@@ -20,14 +20,11 @@ type CatalogContextValue = {
 const CatalogContext = createContext<CatalogContextValue | null>(null);
 
 /**
- * Loads the logged-in user's own items (all 4 catalog tables) and exposes them
- * to the app. Reloads when the user changes. `reload()` lets screens refresh
- * after a create/edit/delete. Pagination is a later concern — for now it loads
- * the full set (fine for personal collections at this stage).
+ * Carrega os itens visíveis ao usuário logado (todas as 4 categorias) e expõe pro app. Recarrega
+ * quando o usuário muda. `reload()` deixa as telas atualizarem depois de criar/editar/excluir.
  */
 export default function CatalogProvider({ children }: { children: ReactNode }) {
-  const { session } = useAuth();
-  const userId = session?.user.id ?? null;
+  const { userId } = useAuth();
   const [catalog, setCatalog] = useState<Catalog>(EMPTY_CATALOG);
   const [loading, setLoading] = useState(true);
 

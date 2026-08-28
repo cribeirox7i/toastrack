@@ -7,7 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:import": "node scripts/test-import-parse.mjs",
     "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
     "test:permissions": "node scripts/test-permissions.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
@@ -16,14 +15,11 @@
     "promote-admin": "tsx --conditions=react-server scripts/promote-admin.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2",
-    "jszip": "^3.10.1",
     "next": "16.2.10",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
-    "xlsx": "^0.18.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {

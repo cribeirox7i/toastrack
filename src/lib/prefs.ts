@@ -1,36 +1,32 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { logAccess } from "@/lib/auth";
-
 /** Patch of user-editable profile/preference columns. */
 export type PrefsPatch = Partial<{
   user_nome: string;
   user_paleta: string;
   user_modo: "light" | "dark";
-  user_idioma: "PT" | "EN" | "ES";
+  user_idioma: "pt" | "en" | "es";
 }>;
 
-/** Save profile/preference fields to the user's own row (RLS: own row only). */
-export async function saveUserPrefs(userId: string, patch: PrefsPatch): Promise<boolean> {
-  const { error } = await getSupabaseClient().from("user").update(patch).eq("user_id", userId);
-  if (error) {
-    console.error("saveUserPrefs error:", error.message);
-    return false;
-  }
-  return true;
+/** Salva campos de perfil/preferência na própria linha (a rota só deixa mexer na sessão logada). */
+export async function saveUserPrefs(patch: PrefsPatch): Promise<boolean> {
+  const res = await fetch("/api/profile", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+  return res.ok;
 }
 
-/** Change password: re-authenticate with the current password, then update.
- *  Supabase's updateUser doesn't verify the old password, so we check it first. */
+/** Troca a senha do usuário logado (a rota reautentica com a senha atual antes de trocar). */
 export async function changePassword(
-  email: string,
-  current: string,
-  next: string,
+  senhaAtual: string,
+  senhaNova: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const supabase = getSupabaseClient();
-  const { error: authErr } = await supabase.auth.signInWithPassword({ email, password: current });
-  if (authErr) return { ok: false, error: "Senha atual incorreta." };
-  const { error } = await supabase.auth.updateUser({ password: next });
-  if (error) return { ok: false, error: error.message };
-  void logAccess("alterou a senha");
-  return { ok: true };
+  const res = await fetch("/api/profile/senha", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ senhaAtual, senhaNova }),
+  });
+  if (res.ok) return { ok: true };
+  const body = await res.json().catch(() => ({}));
+  return { ok: false, error: body.error ?? "Erro ao alterar senha." };
 }

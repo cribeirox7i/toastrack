@@ -30,19 +30,19 @@ function isMainView(v: View): v is "home" | ItemType {
 }
 
 export default function MainApp() {
-  const { appUser, session } = useAuth();
+  const { appUser, userId, userEmail } = useAuth();
   const { reload: reloadCatalog } = useCatalog();
   const { setHue, setMode } = useTheme();
-  const ownUserId = session?.user.id ?? "";
-  const name = appUser?.user_nome ?? session?.user.email ?? "";
+  const ownUserId = userId ?? "";
+  const name = appUser?.user_nome ?? userEmail ?? "";
 
   // Apply the user's saved palette/mode once when their profile loads (Supabase
   // is the source of truth across devices; overrides the localStorage bootstrap).
   const prefsAppliedFor = useRef<string | null>(null);
   useEffect(() => {
     if (appUser && prefsAppliedFor.current !== appUser.user_id) {
-      prefsAppliedFor.current = appUser.user_id;
-      setHue(paletteEnumToHue(appUser.user_paleta));
+      prefsAppliedFor.current = appUser.user_id ?? null;
+      setHue(paletteEnumToHue(appUser.user_paleta ?? ""));
       if (appUser.user_modo === "light" || appUser.user_modo === "dark") setMode(appUser.user_modo);
     }
   }, [appUser, setHue, setMode]);
@@ -54,7 +54,7 @@ export default function MainApp() {
 
   // Detail/edit screen state.
   const [detailType, setDetailType] = useState<ItemType>("beer");
-  const [detailId, setDetailId] = useState<number | null>(null);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
 
   // Secondary-profile state (persists across category tabs; resets on remount = login/logout).

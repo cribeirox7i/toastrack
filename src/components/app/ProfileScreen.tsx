@@ -27,22 +27,24 @@ const cardLabel = "mb-3 text-[11px] font-bold uppercase tracking-wider text-mute
 const inputCls =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-2.5 text-[14px] outline-none focus:border-accent";
 
-const LANGS: { code: "PT" | "EN" | "ES"; label: string }[] = [
-  { code: "PT", label: "Português" },
-  { code: "EN", label: "English" },
-  { code: "ES", label: "Español" },
+const LANGS: { code: "pt" | "en" | "es"; label: string }[] = [
+  { code: "pt", label: "Português" },
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
 ];
 
 export default function ProfileScreen() {
-  const { session, appUser, signOut, refreshAppUser } = useAuth();
+  const { userId: sessionUserId, userEmail, appUser, signOut, refreshAppUser } = useAuth();
   const { hue, mode, mounted, setHue, setMode } = useTheme();
 
-  const userId = session?.user.id ?? "";
-  const email = appUser?.user_mail ?? session?.user.email ?? "";
+  const userId = sessionUserId ?? "";
+  const email = appUser?.user_mail ?? userEmail ?? "";
 
   const [name, setName] = useState(appUser?.user_nome ?? "");
   const [savingName, setSavingName] = useState(false);
-  const [lang, setLang] = useState<"PT" | "EN" | "ES">(appUser?.user_idioma ?? "PT");
+  const [lang, setLang] = useState<"pt" | "en" | "es">(
+    (appUser?.user_idioma as "pt" | "en" | "es") ?? "pt",
+  );
 
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwError, setPwError] = useState("");
@@ -82,7 +84,7 @@ export default function ProfileScreen() {
   async function saveName() {
     if (!name.trim() || !userId) return;
     setSavingName(true);
-    const ok = await saveUserPrefs(userId, { user_nome: name.trim() });
+    const ok = await saveUserPrefs({ user_nome: name.trim() });
     setSavingName(false);
     if (ok) {
       await refreshAppUser();
@@ -92,16 +94,16 @@ export default function ProfileScreen() {
 
   async function pickPalette(h: HueName) {
     setHue(h);
-    if (userId) await saveUserPrefs(userId, { user_paleta: hueToPaletteEnum(h) });
+    if (userId) await saveUserPrefs({ user_paleta: hueToPaletteEnum(h) });
   }
   async function pickMode(m: "light" | "dark") {
     setMode(m);
-    if (userId) await saveUserPrefs(userId, { user_modo: m });
+    if (userId) await saveUserPrefs({ user_modo: m });
   }
-  async function pickLang(code: "PT" | "EN" | "ES") {
+  async function pickLang(code: "pt" | "en" | "es") {
     setLang(code);
     if (userId) {
-      await saveUserPrefs(userId, { user_idioma: code });
+      await saveUserPrefs({ user_idioma: code });
       await refreshAppUser();
     }
   }
@@ -121,7 +123,7 @@ export default function ProfileScreen() {
       return;
     }
     setPwBusy(true);
-    const res = await changePassword(email, pw.current, pw.next);
+    const res = await changePassword(pw.current, pw.next);
     setPwBusy(false);
     if (!res.ok) {
       setPwError(res.error ?? "Erro ao alterar senha.");
@@ -171,7 +173,7 @@ export default function ProfileScreen() {
                 lang === l.code ? "bg-accent text-on-accent" : "text-muted"
               }`}
             >
-              {l.code}
+              {l.code.toUpperCase()}
             </button>
           ))}
         </div>

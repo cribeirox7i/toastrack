@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import AuthScreen from "@/components/auth/AuthScreen";
 import CatalogProvider from "@/components/CatalogProvider";
 import MainApp from "@/components/app/MainApp";
+import TrocarSenhaObrigatoria from "@/components/auth/TrocarSenhaObrigatoria";
 
 function Splash() {
   return (
@@ -35,13 +37,22 @@ function InactiveNotice({ onExit }: { onExit: () => void }) {
   );
 }
 
-/** Top-level router: splash while resolving session, then auth / inactive / app. */
+/**
+ * Top-level router: splash → auth → conta inativa → troca de senha obrigatória → app.
+ * `deveTrocarSenha` vem da sessão JWT (definido no login); TrocarSenhaObrigatoria chama
+ * `update()` do NextAuth ao trocar com sucesso, o que dispara o callback `jwt` de novo com
+ * `trigger === "update"` e zera essa flag sem exigir logout/login (ver TODO em src/auth.ts).
+ */
 export default function AppShell() {
-  const { session, appUser, loading, signOut } = useAuth();
+  const { userId, appUser, loading, deveTrocarSenha, signOut } = useAuth();
+  const [forcarTrocaConcluida, setForcarTrocaConcluida] = useState(false);
 
   if (loading) return <Splash />;
-  if (!session) return <AuthScreen />;
+  if (!userId) return <AuthScreen />;
   if (appUser?.user_status === "N") return <InactiveNotice onExit={() => void signOut()} />;
+  if (deveTrocarSenha && !forcarTrocaConcluida) {
+    return <TrocarSenhaObrigatoria onDone={() => setForcarTrocaConcluida(true)} />;
+  }
   return (
     <CatalogProvider>
       <MainApp />

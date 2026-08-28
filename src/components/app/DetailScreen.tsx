@@ -5,6 +5,7 @@ import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, duplicateItem, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
+import { canEditRow } from "@/lib/itemPermissions";
 import {
   SCHEMA,
   fieldByRole,
@@ -29,7 +30,7 @@ export default function DetailScreen({
   onChanged,
 }: {
   type: ItemType;
-  itemId: number | null;
+  itemId: string | null;
   initialEditing: boolean;
   ownUserId: string;
   onClose: () => void;
@@ -40,17 +41,15 @@ export default function DetailScreen({
   const producerField = fieldByRole(type, "producer")!;
   const ratingField = fieldByRole(type, "rating")!;
 
-  const [currentId, setCurrentId] = useState<number | null>(itemId);
+  const [currentId, setCurrentId] = useState<string | null>(itemId);
   const [editing, setEditing] = useState(initialEditing);
   const [loading, setLoading] = useState(true);
   const [lookup, setLookup] = useState<Lookup>({ pais: [], bjcp: [] });
   const [values, setValues] = useState<Record<string, string>>({});
-  const [ownerId, setOwnerId] = useState<string>(ownUserId);
+  const [canEdit, setCanEdit] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
-
-  const canEdit = ownerId === ownUserId;
 
   function showToast(m: string) {
     setToast(m);
@@ -68,14 +67,14 @@ export default function DetailScreen({
         const v: Record<string, string> = {};
         for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
         setValues(v);
-        setOwnerId(String(row?.user_id ?? ownUserId));
+        setCanEdit(row ? canEditRow(row, ownUserId) : false);
       } else {
         const v: Record<string, string> = {};
         for (const f of fields) v[f.col] = "";
         const dateField = fields.find((f) => f.kind === "date");
         if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
         setValues(v);
-        setOwnerId(ownUserId);
+        setCanEdit(true);
       }
       setLookup(lk);
       setLoading(false);
@@ -105,7 +104,7 @@ export default function DetailScreen({
       return;
     }
     setSaving(true);
-    const id = await saveItem(type, currentId, values, ownUserId);
+    const id = await saveItem(type, currentId, values);
     setSaving(false);
     if (id == null) {
       showToast("Erro ao salvar.");

@@ -1,10 +1,10 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { canEditRow } from "@/lib/itemPermissions";
 
 export type ItemType = "beer" | "wine" | "drink" | "spirit";
 
 /** Normalized item used across the UI (each catalog table maps into this shape). */
 export type Item = {
-  id: number;
+  id: string;
   type: ItemType;
   name: string;
   manufacturer: string;
@@ -12,6 +12,8 @@ export type Item = {
   rating: number; // 0–5
   date: string; // "YYYY-MM-DD" or ""
   category: string; // beer: BJCP label · wine: cor · spirit: tipo · drink: ""
+  /** Dono ou listado em user_edit — item compartilhado só por user_access dá false. */
+  canEdit: boolean;
 };
 
 export type Catalog = Record<ItemType, Item[]>;
@@ -32,159 +34,102 @@ export const TYPE_LABEL_SINGULAR: Record<ItemType, string> = {
   spirit: "Destilado",
 };
 
-// Per-type query config. `spirit` lives in the `dest` table.
+/** A UI usa "spirit" (nome histórico, já espalhado pelas telas); a aba/rota real é "dest" — ver
+ *  MIGRACAO_SHEETS.md seção 3. Esta é a única fronteira onde a tradução acontece. */
+export const TYPE_TAB: Record<ItemType, string> = {
+  beer: "beer",
+  wine: "wine",
+  spirit: "dest",
+  drink: "drink",
+};
+
+type RawItemRow = Record<string, string | undefined>;
+
 type TypeCfg = {
-  table: string;
-  idCol: string;
-  select: string;
+  nameCol: string;
+  manufacturerCol: string;
+  ratingCol: string;
   dateCol: string;
-  map: (row: Record<string, unknown>) => Item;
-};
-
-/** Public per-type metadata (table + PK column) for CRUD by other modules. */
-export const TYPE_TABLE: Record<ItemType, { table: string; idCol: string }> = {
-  beer: { table: "beer", idCol: "beer_id" },
-  wine: { table: "wine", idCol: "wine_id" },
-  spirit: { table: "dest", idCol: "dest_id" },
-  drink: { table: "drink", idCol: "drink_id" },
-};
-
-const num = (v: unknown): number => (v == null ? 0 : Number(v)) || 0;
-const str = (v: unknown): string => (v == null ? "" : String(v));
-const paisNome = (row: Record<string, unknown>): string => {
-  const p = row.list_pais as { pais_nome?: string } | null | undefined;
-  return p?.pais_nome ?? "";
+  categoryCol?: string; // undefined = sem categoria (drink)
 };
 
 const CONFIG: Record<ItemType, TypeCfg> = {
-  beer: {
-    table: "beer",
-    idCol: "beer_id",
-    select:
-      "beer_id,beer_nome,beer_produtor,beer_nota,beer_data,list_pais(pais_nome),list_bjcp_21(bjcp21_cod)",
-    dateCol: "beer_data",
-    map: (r) => ({
-      id: num(r.beer_id),
-      type: "beer",
-      name: str(r.beer_nome),
-      manufacturer: str(r.beer_produtor),
-      country: paisNome(r),
-      rating: num(r.beer_nota),
-      date: str(r.beer_data),
-      category: str((r.list_bjcp_21 as { bjcp21_cod?: string } | null)?.bjcp21_cod),
-    }),
-  },
-  wine: {
-    table: "wine",
-    idCol: "wine_id",
-    select:
-      "wine_id,wine_nome,wine_produtor,wine_nota,wine_data_degustacao,wine_cor,list_pais(pais_nome)",
-    dateCol: "wine_data_degustacao",
-    map: (r) => ({
-      id: num(r.wine_id),
-      type: "wine",
-      name: str(r.wine_nome),
-      manufacturer: str(r.wine_produtor),
-      country: paisNome(r),
-      rating: num(r.wine_nota),
-      date: str(r.wine_data_degustacao),
-      category: str(r.wine_cor),
-    }),
-  },
-  spirit: {
-    table: "dest",
-    idCol: "dest_id",
-    select:
-      "dest_id,dest_nome,dest_produtor,dest_nota,dest_data_degustacao,dest_tipo,list_pais(pais_nome)",
-    dateCol: "dest_data_degustacao",
-    map: (r) => ({
-      id: num(r.dest_id),
-      type: "spirit",
-      name: str(r.dest_nome),
-      manufacturer: str(r.dest_produtor),
-      country: paisNome(r),
-      rating: num(r.dest_nota),
-      date: str(r.dest_data_degustacao),
-      category: str(r.dest_tipo),
-    }),
-  },
-  drink: {
-    table: "drink",
-    idCol: "drink_id",
-    select: "drink_id,drink_nome,drink_produtor,drink_nota,drink_data_degustacao,list_pais(pais_nome)",
-    dateCol: "drink_data_degustacao",
-    map: (r) => ({
-      id: num(r.drink_id),
-      type: "drink",
-      name: str(r.drink_nome),
-      manufacturer: str(r.drink_produtor),
-      country: paisNome(r),
-      rating: num(r.drink_nota),
-      date: str(r.drink_data_degustacao),
-      category: "",
-    }),
-  },
+  beer: { nameCol: "beer_nome", manufacturerCol: "beer_cervejaria", ratingCol: "beer_nota", dateCol: "beer_data", categoryCol: "beer_estilo_livre" },
+  wine: { nameCol: "wine_nome", manufacturerCol: "wine_produtor", ratingCol: "wine_nota", dateCol: "wine_data_degustacao", categoryCol: "wine_cor" },
+  spirit: { nameCol: "dest_nome", manufacturerCol: "dest_produtor", ratingCol: "dest_nota", dateCol: "dest_data_degustacao", categoryCol: "dest_tipo" },
+  drink: { nameCol: "drink_nome", manufacturerCol: "drink_produtor", ratingCol: "drink_nota", dateCol: "drink_data_degustacao" },
 };
 
-/** Load one category's items for a given owner. RLS allows own items or, when
- *  viewing a followed profile, that profile's items (read-only). */
-export async function fetchItems(type: ItemType, ownerId: string): Promise<Item[]> {
+// país vem só como pais_id na linha crua; o nome é resolvido à parte via /api/lookups, porque a
+// rota de itens não faz join (o Apps Script não sabe fazer join entre abas).
+function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) => string, userId: string): Item {
   const cfg = CONFIG[type];
-  const { data, error } = await getSupabaseClient()
-    .from(cfg.table)
-    .select(cfg.select)
-    .eq("user_id", ownerId)
-    .order(cfg.dateCol, { ascending: false, nullsFirst: false });
-  if (error) {
-    console.error(`fetch ${type} error:`, error.message);
-    return [];
-  }
-  return (data ?? []).map((r) => cfg.map(r as unknown as Record<string, unknown>));
+  return {
+    id: row.id ?? "",
+    type,
+    name: row[cfg.nameCol] ?? "",
+    manufacturer: row[cfg.manufacturerCol] ?? "",
+    country: paisNome(row.pais_id ?? ""),
+    rating: Number(row[cfg.ratingCol]) || 0,
+    date: row[cfg.dateCol] ?? "",
+    category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
+    canEdit: canEditRow(row, userId),
+  };
 }
 
-/** Delete one item. RLS enforces ownership server-side (belt-and-suspenders). */
-export async function deleteItem(type: ItemType, id: number): Promise<boolean> {
-  const cfg = CONFIG[type];
-  const { error } = await getSupabaseClient().from(cfg.table).delete().eq(cfg.idCol, id);
-  if (error) {
-    console.error(`delete ${type} error:`, error.message);
-    return false;
-  }
-  return true;
+async function getJson<T>(url: string): Promise<T | null> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as T;
 }
 
-/** Duplicate an item: copy every column except the PK and created_at, re-insert.
- *  Keeps user_id (your own), so you can only ever duplicate into your collection. */
-export async function duplicateItem(type: ItemType, id: number): Promise<boolean> {
-  const cfg = CONFIG[type];
-  const supabase = getSupabaseClient();
-  const { data, error } = await supabase.from(cfg.table).select("*").eq(cfg.idCol, id).single();
-  if (error || !data) {
-    console.error(`duplicate (read) ${type} error:`, error?.message);
-    return false;
-  }
-  const copy = { ...(data as Record<string, unknown>) };
-  delete copy[cfg.idCol];
-  delete copy.created_at;
-  const { error: insErr } = await supabase.from(cfg.table).insert(copy);
-  if (insErr) {
-    console.error(`duplicate (insert) ${type} error:`, insErr.message);
-    return false;
-  }
-  return true;
+/** Nome de país por id — busca as 40 linhas de /api/lookups uma vez por chamada. Aceitável pro
+ *  volume de países; se virar hotspot, dá pra levar pro CatalogProvider e cachear por sessão. */
+async function paisNomeResolver(): Promise<(id: string) => string> {
+  const lk = await getJson<{ paises: { pais_id: string; pais_nome: string }[] }>("/api/lookups");
+  const map = new Map((lk?.paises ?? []).map((p) => [String(p.pais_id), p.pais_nome]));
+  return (id: string) => map.get(id) ?? "";
 }
 
-async function fetchType(type: ItemType, ownerId: string): Promise<Item[]> {
-  return fetchItems(type, ownerId);
+/** Carrega uma categoria (itens visíveis pra sessão — dono, ou em user_access/user_edit).
+ *  `userId` só serve pra calcular `Item.canEdit` no cliente — a rota já filtra por sessão sozinha. */
+export async function fetchItems(type: ItemType, userId: string): Promise<Item[]> {
+  const [rows, paisNome] = await Promise.all([
+    getJson<RawItemRow[]>(`/api/items/${TYPE_TAB[type]}`),
+    paisNomeResolver(),
+  ]);
+  const items = (rows ?? []).map((r) => mapRow(type, r, paisNome, userId));
+  items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+  return items;
 }
 
-/** Load all four catalog tables for a given owner (own items only). */
-export async function fetchCatalog(ownerId: string): Promise<Catalog> {
+export async function deleteItem(type: ItemType, id: string): Promise<boolean> {
+  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, { method: "DELETE" });
+  return res.ok;
+}
+
+/** Duplica um item: lê a linha inteira, tira id/dono/updated_at (a rota de criação recalcula) e
+ *  recria — sai sempre como item seu, mesmo duplicando um item compartilhado com você. */
+export async function duplicateItem(type: ItemType, id: string): Promise<boolean> {
+  const row = await getJson<Record<string, string>>(`/api/items/${TYPE_TAB[type]}/${id}`);
+  if (!row) return false;
+  const { id: _id, user_owner: _owner, user_access: _access, user_edit: _edit, updated_at: _ts, ...payload } = row;
+  void _id; void _owner; void _access; void _edit; void _ts;
+  const res = await fetch(`/api/items/${TYPE_TAB[type]}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.ok;
+}
+
+/** Carrega as 4 categorias de uma vez (itens visíveis pro usuário logado). */
+export async function fetchCatalog(userId: string): Promise<Catalog> {
   const [beer, wine, drink, spirit] = await Promise.all([
-    fetchType("beer", ownerId),
-    fetchType("wine", ownerId),
-    fetchType("drink", ownerId),
-    fetchType("spirit", ownerId),
+    fetchItems("beer", userId),
+    fetchItems("wine", userId),
+    fetchItems("drink", userId),
+    fetchItems("spirit", userId),
   ]);
   return { beer, wine, drink, spirit };
 }

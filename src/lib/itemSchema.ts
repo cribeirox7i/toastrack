@@ -1,5 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
-import { TYPE_TABLE, type ItemType } from "@/lib/catalog";
+import { TYPE_TAB, type ItemType } from "@/lib/catalog";
 
 /** A field in the per-type detail/edit form. `role` drives special layout;
  *  `kind` drives the input/rendering. `col` is the real DB column. */
@@ -29,7 +28,7 @@ export const SCHEMA: Record<ItemType, TypeSchema> = {
     imgNomeCol: "beer_img_nome",
     fields: [
       { col: "beer_nome", label: "Nome", role: "name" },
-      { col: "beer_produtor", label: "Cervejaria", role: "producer", kind: "text" },
+      { col: "beer_cervejaria", label: "Cervejaria", role: "producer", kind: "text" },
       { col: "beer_nota", label: "Avaliação", role: "rating" },
       { col: "pais_id", label: "País", role: "field", kind: "country" },
       { col: "beer_data", label: "Data de degustação", role: "field", kind: "date" },
@@ -90,33 +89,28 @@ export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined 
 export type Lookup = { pais: { pais_id: number; pais_nome: string }[]; bjcp: { bjcp21_id: number; bjcp21_cod: string }[] };
 
 export async function fetchLookups(): Promise<Lookup> {
-  const supabase = getSupabaseClient();
-  const [pais, bjcp] = await Promise.all([
-    supabase.from("list_pais").select("pais_id,pais_nome").order("pais_nome"),
-    supabase.from("list_bjcp_21").select("bjcp21_id,bjcp21_cod").order("bjcp21_id"),
-  ]);
+  const res = await fetch("/api/lookups", { cache: "no-store" });
+  if (!res.ok) return { pais: [], bjcp: [] };
+  const data = (await res.json()) as {
+    paises: { pais_id: string; pais_nome: string }[];
+    bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
+  };
   return {
-    pais: (pais.data ?? []) as Lookup["pais"],
-    bjcp: (bjcp.data ?? []) as Lookup["bjcp"],
+    pais: data.paises.map((p) => ({ pais_id: Number(p.pais_id), pais_nome: p.pais_nome })),
+    bjcp: data.bjcp.map((b) => ({ bjcp21_id: Number(b.bjcp21_id), bjcp21_cod: b.bjcp21_cod })),
   };
 }
 
-/** Raw DB row for one item (all columns), including user_id for ownership checks. */
+/** Linha crua de um item (todas as colunas), incluindo user_owner/user_access/user_edit — usado
+ *  pra checagem de permissão de edição na tela. `id` é string (UUID pros itens novos; itens
+ *  antigos mantêm o número original como string). */
 export async function fetchFullItem(
   type: ItemType,
-  id: number,
-): Promise<Record<string, unknown> | null> {
-  const { table, idCol } = TYPE_TABLE[type];
-  const { data, error } = await getSupabaseClient()
-    .from(table)
-    .select("*")
-    .eq(idCol, id)
-    .single();
-  if (error) {
-    console.error("fetchFullItem error:", error.message);
-    return null;
-  }
-  return data as Record<string, unknown>;
+  id: string,
+): Promise<Record<string, string> | null> {
+  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, { cache: "no-store" });
+  if (!res.ok) return null;
+  return (await res.json()) as Record<string, string>;
 }
 
 /** Convert a raw DB value to a form string. */
@@ -124,54 +118,39 @@ export function toFormString(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Coerce a form string back to the DB value for its field kind. */
-function coerce(field: Field, raw: string): unknown {
-  const v = (raw ?? "").trim();
-  if (field.role === "rating") return v === "" ? null : Number(v);
-  switch (field.kind) {
-    case "number":
-    case "country":
-    case "bjcp":
-      return v === "" ? null : Number(v);
-    case "date":
-      return v === "" ? null : v;
-    default:
-      return v === "" ? null : v;
-  }
+/** Coerce a form string pro formato de texto que a planilha espera (tudo vira string ali —
+ *  campo vazio vira "" mesmo, não null: o Apps Script não tem um "sem valor" separado de "vazio"). */
+function coerce(field: Field, raw: string): string {
+  return (raw ?? "").trim();
 }
 
 /**
- * Insert (id null) or update an item from form values. Always stamps
- * user_id = ownUserId on insert, so you can only ever create under your own id
- * (RLS enforces the same server-side). Returns the row id, or null on failure.
+ * Cria (id null) ou atualiza um item a partir dos valores do formulário. O dono nunca é mandado
+ * pelo cliente — a rota de criação sempre grava a sessão como user_owner, ignorando qualquer
+ * coisa no corpo (ver src/lib/sheets/items.ts). Retorna o id (string) ou null em falha.
  */
 export async function saveItem(
   type: ItemType,
-  id: number | null,
+  id: string | null,
   values: Record<string, string>,
-  ownUserId: string,
-): Promise<number | null> {
-  const { table, idCol } = TYPE_TABLE[type];
-  const supabase = getSupabaseClient();
-  const payload: Record<string, unknown> = {};
+): Promise<string | null> {
+  const payload: Record<string, string> = {};
   for (const f of SCHEMA[type].fields) payload[f.col] = coerce(f, values[f.col] ?? "");
 
   if (id == null) {
-    const { data, error } = await supabase
-      .from(table)
-      .insert({ ...payload, user_id: ownUserId })
-      .select(idCol)
-      .single();
-    if (error) {
-      console.error("saveItem insert error:", error.message);
-      return null;
-    }
-    return Number((data as unknown as Record<string, unknown>)[idCol]);
+    const res = await fetch(`/api/items/${TYPE_TAB[type]}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) return null;
+    const row = (await res.json()) as { id: string };
+    return row.id;
   }
-  const { error } = await supabase.from(table).update(payload).eq(idCol, id);
-  if (error) {
-    console.error("saveItem update error:", error.message);
-    return null;
-  }
-  return id;
+  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return res.ok ? id : null;
 }
