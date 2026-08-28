@@ -316,7 +316,18 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    antes de filtrar por id — contra o `beer` real (3591 linhas), cada uma dessas chamadas levou
    **~9-10s** no teste HTTP. Funciona, mas confirma que a etapa 6 (cache) não é opcional pra essa
    aba ficar utilizável; ver seção 5.
-5. **Carga dos 3600 itens**: mapear a planilha existente do Carlos para as colunas da seção 3.
+5. ✅ **Titularidade dos dados reais** (2026-08-28) — renomeado de "carga dos 3600 itens": não
+   existe carga nenhuma nesse sentido (a planilha já É o banco, nunca precisou de import). O que
+   faltava era outra coisa, achada ao checar a etapa 4: `user_owner` nas linhas reais de `beer`
+   (3591) e `wine` (76) estava preenchido com **e-mail**, não o `user_id` numérico que
+   `permissions.ts` compara — ou seja, na prática nenhum item aparecia como visível pra ninguém.
+   Achados 4 e-mails distintos como dono; 2 batiam direto com contas reais (`carlosasribeiro@
+   gmail.com`→1, `thamirescarv@hotmail.com`→2), 2 não batiam com nenhuma das 3 contas
+   (`creebeercervejas@gmail.com`, `carlosasribeiro2@gmail.com`) — perguntado ao Carlos, os dois
+   são contas antigas dele mesmo, também viram `user_id 1`. O Carlos corrigiu direto na planilha
+   (`user_owner`/`user_access`/`user_edit` das 4 abas de item, todas numéricas agora) — conferido
+   por leitura: `beer` e `wine` 100% com dono `1`, `user_access` com `1`/`1;2` (compartilhado com
+   a Thamires em parte dos itens), `dest`/`drink` (fictícios) também com `1`.
 6. **Cache** (seção 5) — antes opcional "se sobrar tempo", agora claramente necessário: o achado
    de performance da etapa 4 mostra ~9-10s por leitura/escrita individual contra o `beer` real.
 7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
