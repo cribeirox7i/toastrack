@@ -15,6 +15,18 @@ export async function fetchAllUsers(): Promise<UserRow[]> {
   return callAppsScript<UserRow[]>("read", { tab: "user" });
 }
 
+export type PublicUser = Omit<UserRow, "senha_hash" | "convite_token" | "convite_expira_em">;
+
+/** Nunca deixar `senha_hash`/`convite_token`/`convite_expira_em` chegar numa resposta de API —
+ *  toda rota que devolve um UserRow pro cliente passa por aqui antes. */
+export function toPublicUser(user: UserRow): PublicUser {
+  const { senha_hash: _senhaHash, convite_token: _conviteToken, convite_expira_em: _conviteExpiraEm, ...rest } = user;
+  void _senhaHash;
+  void _conviteToken;
+  void _conviteExpiraEm;
+  return rest;
+}
+
 export async function fetchUserById(userId: string): Promise<UserRow | null> {
   const users = await fetchAllUsers();
   return users.find((u) => u.user_id === userId) ?? null;

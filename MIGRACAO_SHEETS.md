@@ -285,9 +285,40 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    **Pendência anotada no código** (`src/auth.ts`, TODO): sessão é JWT, então trocar a senha no
    meio de uma sessão não atualiza `deveTrocarSenha` sozinho — a rota de troca de senha (etapa 4)
    precisa chamar `update()` do lado do cliente pra isso refletir sem exigir logout/login.
-4. **Rotas de API** com as checagens da seção 4, consumindo `src/lib/sheets/`.
+4. ✅ **Rotas de API** (2026-08-28): `src/lib/apiHelpers.ts` (`requireSession`/`requireAdmin`,
+   porte do `api-helpers.ts` do TravelTrack) + 12 rotas — `/api/items/[tipo]` (GET/POST),
+   `/api/items/[tipo]/[id]` (GET/PATCH/DELETE), `/api/lookups`, `/api/profile` (GET/PATCH),
+   `/api/profile/senha` (POST, valida força da senha — `src/lib/senhaSchema.ts`),
+   `/api/admin/users` (GET/POST), `/api/admin/users/[id]` (PATCH), `/api/admin/users/[id]/
+   reset-senha` (POST), `/api/admin/log` (GET). Login/troca de senha/mudança de privilégio
+   gravam em `log` via `logAccess`. Corpo de requisição validado com `zod`.
+
+   **Testado de ponta a ponta pela HTTP de verdade** (não só chamando as funções direto): subi
+   `next dev`, criei conta descartável, fiz login real (CSRF + credentials do NextAuth), e
+   exercitei os 12 endpoints com sessão de cookie de verdade — incluindo criar/ler/editar/excluir
+   um item real na aba `beer`, trocar senha, promover a admin e confirmar que `/api/admin/*` só
+   abre depois de um **re-login** (a sessão JWT antiga não vê o novo `role` sozinha — mesma
+   limitação do TODO de `deveTrocarSenha`). 401 sem sessão confirmado nas 5 rotas antes de logar.
+   Limpeza confirmada depois: aba `user` de volta às 3 contas reais.
+
+   **Bug real achado e corrigido**: `APPS_SCRIPT_SHARED_SECRET` tem um `$` no meio, e o
+   carregador de `.env` do `next dev` (`@next/env`, com `dotenv-expand`) tentava interpretar
+   `$ksjds` como referência a outra variável, truncando o segredo — toda chamada ao Apps Script
+   falhava com "Segredo inválido" **só quando rodado pelo `next dev`/Vercel**, nunca nos scripts
+   `tsx` (que usavam `node --env-file`, sem essa expansão — por isso os testes das etapas 2/3
+   nunca pegaram isso). Corrigido escapando `\$` no `.env.local` (confirmado com o pacote real do
+   Next, `@next/env`) e criado `scripts/_loadEnv.mjs` pra todo script usar o mesmo carregador do
+   app, em vez de `node --env-file` (que não entende esse escape) — elimina essa classe de
+   divergência de vez. **No Vercel isso não se aplica**: env var lá é literal, sem parser de
+   shell, então o valor colado na env var do Vercel deve ser o `$` puro, sem `\`.
+
+   **Achado de performance**: `getItemIfVisible`/`updateItem`/`deleteItem` leem a aba inteira
+   antes de filtrar por id — contra o `beer` real (3591 linhas), cada uma dessas chamadas levou
+   **~9-10s** no teste HTTP. Funciona, mas confirma que a etapa 6 (cache) não é opcional pra essa
+   aba ficar utilizável; ver seção 5.
 5. **Carga dos 3600 itens**: mapear a planilha existente do Carlos para as colunas da seção 3.
-6. **Cache** (seção 5) — depois que os dados reais estiverem lá, que é quando dá pra medir.
+6. **Cache** (seção 5) — antes opcional "se sobrar tempo", agora claramente necessário: o achado
+   de performance da etapa 4 mostra ~9-10s por leitura/escrita individual contra o `beer` real.
 7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
 
 Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer; a 6 só faz sentido com

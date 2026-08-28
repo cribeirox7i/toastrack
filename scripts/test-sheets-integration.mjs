@@ -1,17 +1,20 @@
+import "./_loadEnv.mjs";
 /**
  * Teste de integração de src/lib/sheets/ contra o Apps Script REAL (lê .env.local). Cria UM item
  * de teste na aba `beer` de verdade, exercita leitura/permissão/edição/compartilhamento, e apaga
  * no final — mesmo com falha no meio (try/finally), pra nunca deixar lixo nas 3591 cervejas reais.
  *
- *   npx tsx --env-file=.env.local --conditions=react-server scripts/test-sheets-integration.mjs
+ *   npx tsx --conditions=react-server scripts/test-sheets-integration.mjs
  *
  * tsx (devDependency) resolve os imports relativos sem extensão do jeito que o bundler do Next.js
  * resolve — o type-stripping nativo do Node não aceita isso (exige ".ts" explícito), e adicionar
  * ".ts" nos arquivos-fonte quebra o `tsc` do projeto (moduleResolution "bundler" rejeita extensão
- * explícita sem allowImportingTsExtensions). --env-file carrega o .env.local. --conditions=react-
- * server é necessário porque os módulos importam "server-only", que lança erro fora do bundler do
- * Next.js a menos que essa condição esteja ativa (ela resolve pro empty.js do pacote em vez do
- * index.js que lança).
+ * explícita sem allowImportingTsExtensions). O import de "./_loadEnv.mjs" carrega o .env.local
+ * pelo mesmo carregador que o Next.js usa (@next/env) — não usar `node --env-file`, que não
+ * entende o escape "\$" que o .env.local precisa (ver _loadEnv.mjs). --conditions=react-server é
+ * necessário porque os módulos importam "server-only", que lança erro fora do bundler do Next.js
+ * a menos que essa condição esteja ativa (ela resolve pro empty.js do pacote em vez do index.js
+ * que lança).
  */
 import assert from "node:assert/strict";
 import {

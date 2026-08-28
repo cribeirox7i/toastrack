@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./_loadEnv.mjs";
 /**
  * Promove um usuário já existente na aba `user` a admin, com senha provisória nova (padrão do
  * WebCRM — nunca reaproveita a senha antiga, que pode nem ter um hash compatível com o scrypt

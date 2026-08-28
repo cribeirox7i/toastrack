@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { excedeuLimite, limparLimite } from "@/lib/rateLimit";
 import { verifyCredentials } from "@/lib/sheets/users";
+import { logAccess } from "@/lib/sheets/log";
 
 /** 10 tentativas por e-mail+IP a cada 10 minutos — folgado pra quem erra a senha, apertado pra
  *  quem varre uma lista de senhas. Estourar devolve a mesma falha genérica de senha errada, pra
@@ -35,6 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!user) return null;
 
         limparLimite(chave);
+        void logAccess({ userId: user.user_id, userMail: user.user_mail, acao: "login" });
         return {
           id: user.user_id,
           name: user.user_nome,

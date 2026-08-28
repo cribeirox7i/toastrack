@@ -1,10 +1,11 @@
+import "./_loadEnv.mjs";
 /**
  * Teste de integração de src/lib/sheets/users.ts contra o Apps Script REAL. Cria UM usuário de
  * teste na aba `user` de verdade, exercita login/troca de senha/reset por admin, e apaga no final
  * (try/finally) — mesma disciplina do test-sheets-integration.mjs, pra nunca deixar lixo na
  * aba real de usuários (que hoje tem só 3 contas).
  *
- *   npx tsx --env-file=.env.local --conditions=react-server scripts/test-users-integration.mjs
+ *   npx tsx --conditions=react-server scripts/test-users-integration.mjs
  */
 import assert from "node:assert/strict";
 import {

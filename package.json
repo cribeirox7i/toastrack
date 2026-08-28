@@ -10,10 +10,10 @@
     "test:import": "node scripts/test-import-parse.mjs",
     "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
     "test:permissions": "node scripts/test-permissions.mjs",
-    "test:sheets-integration": "tsx --env-file=.env.local --conditions=react-server scripts/test-sheets-integration.mjs",
-    "test:users-integration": "tsx --env-file=.env.local --conditions=react-server scripts/test-users-integration.mjs",
-    "create-admin": "tsx --env-file=.env.local --conditions=react-server scripts/create-admin.mjs",
-    "promote-admin": "tsx --env-file=.env.local --conditions=react-server scripts/promote-admin.mjs"
+    "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
+    "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
+    "create-admin": "tsx --conditions=react-server scripts/create-admin.mjs",
+    "promote-admin": "tsx --conditions=react-server scripts/promote-admin.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2",
@@ -23,7 +23,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import "./_loadEnv.mjs";
 /**
  * Cria o primeiro usuário (normalmente admin) direto na planilha — o app não tem outra forma de
  * criar o primeiro usuário sem já estar logado, e não há cadastro público (ver MIGRACAO_SHEETS.md
