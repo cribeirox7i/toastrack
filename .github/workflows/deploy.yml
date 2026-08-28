@@ -1,13 +1,18 @@
 name: Deploy to GitHub Pages
 
+# PAUSED mid-migration (see MIGRACAO_SHEETS.md) — next.config.ts dropped `output: "export"` once
+# server-only API routes (NextAuth) landed, so `npm run build` here no longer produces `./out` and
+# this workflow would fail on every push. Auto-trigger removed on purpose so a broken run doesn't
+# show up red on every commit while the migration is in progress; the live GitHub Pages site keeps
+# serving whatever was last successfully deployed (the pre-migration, Supabase-backed build) until
+# step 7 of the plan ("aposentar o GitHub Pages") retires this workflow for good in favor of Vercel.
+#
 # Builds the Next.js static export and publishes it to GitHub Pages.
 # Set the Supabase env vars as repository secrets:
 #   NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
 # (anon key is public by design; real security is enforced by RLS.)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:

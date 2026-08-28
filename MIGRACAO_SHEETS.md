@@ -268,11 +268,24 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    (senha via `authCrypto.ts`), `lookups.ts`, `log.ts`. Testado de ponta a ponta contra a planilha
    real (`npm run test:sheets-integration`, 9/9, sem deixar rastro nas 3591 cervejas reais). As
    telas ainda não mudaram — é só a biblioteca, pronta pra ser consumida pelas rotas da etapa 4.
-3. **Auth**: NextAuth v5 (Credentials + JWT) sobre a aba `user`, com o `authCrypto.ts` já pronto;
-   script `create-admin` como no TravelTrack (sem cadastro público, decisão já fechada na seção 8).
-4. **Rotas de API** com as checagens da seção 4, consumindo `src/lib/sheets/`. É só a partir daqui
-   que o `next.config.ts` deixa de poder ser `output: 'export'` — rota de API não existe em
-   static export (ver seção 8).
+3. ✅ **Auth** (2026-08-27): NextAuth v5 (Credentials + JWT) sobre a aba `user` — `src/auth.ts`
+   (rate limit de 10 tentativas/10min por e-mail+IP, `src/lib/rateLimit.ts` portado do
+   TravelTrack), `src/app/api/auth/[...nextauth]/route.ts`, `src/types/next-auth.d.ts`.
+   `scripts/create-admin.mjs` cria o primeiro usuário reaproveitando `createUser` (senha
+   provisória, sem cadastro público — decisão já fechada na seção 8). Testado de ponta a ponta
+   contra a planilha real (`npm run test:users-integration`, 6/6: criação, login, troca de senha,
+   reset por admin, e-mail duplicado recusado — sem deixar rastro na aba `user` real).
+
+   **Efeito colateral esperado**: a rota de auth forçou tirar `output: "export"` do
+   `next.config.ts` agora (rota de API não existe em static export) — `basePath`/
+   `images.unoptimized` saíram junto. O workflow do GitHub Pages foi **pausado** (gatilho de push
+   removido, só `workflow_dispatch` manual) pra não passar a falhar em vermelho a cada commit; o
+   site publicado continua servindo a última versão boa (Supabase) até o passo 7 aposentar de vez.
+
+   **Pendência anotada no código** (`src/auth.ts`, TODO): sessão é JWT, então trocar a senha no
+   meio de uma sessão não atualiza `deveTrocarSenha` sozinho — a rota de troca de senha (etapa 4)
+   precisa chamar `update()` do lado do cliente pra isso refletir sem exigir logout/login.
+4. **Rotas de API** com as checagens da seção 4, consumindo `src/lib/sheets/`.
 5. **Carga dos 3600 itens**: mapear a planilha existente do Carlos para as colunas da seção 3.
 6. **Cache** (seção 5) — depois que os dados reais estiverem lá, que é quando dá pra medir.
 7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
