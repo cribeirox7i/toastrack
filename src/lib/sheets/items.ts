@@ -30,8 +30,9 @@ export async function getItemIfVisible(
   id: string,
   sessionUserId: string
 ): Promise<ItemRowBase | null> {
-  const linhas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
-  const row = linhas.find((r) => r.id === id);
+  // readById lê só a linha pedida (localizando pela coluna id, não a aba inteira) — contra o
+  // beer real (3591 linhas) é isso que tira o ~9-10s de abrir 1 item pra bem menos que 1s.
+  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
   if (!row || !canRead(row, sessionUserId)) return null;
   return row;
 }
@@ -73,8 +74,7 @@ export async function updateItem(
   patch: Record<string, string>,
   sessionUserId: string
 ): Promise<UpdateResult> {
-  const linhas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
-  const row = linhas.find((r) => r.id === id);
+  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
   if (!row) return "not_found";
   if (!canWrite(row, sessionUserId)) return "forbidden";
 
@@ -93,8 +93,7 @@ export async function deleteItem(
   id: string,
   sessionUserId: string
 ): Promise<UpdateResult> {
-  const linhas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
-  const row = linhas.find((r) => r.id === id);
+  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
   if (!row) return "not_found";
   if (!canWrite(row, sessionUserId)) return "forbidden";
 

@@ -96,6 +96,7 @@ function api(action, payload) {
       case 'ensureStructure': return ok(ensureStructure());
       case 'read':             return ok(lerTabela(abaValida(payload.tab)));
       case 'readSince':        return ok(lerTabelaDesde(abaValida(payload.tab), payload.desde || ''));
+      case 'readById':         return ok(lerLinhaPorId(abaValida(payload.tab), payload.id));
       case 'append':           return ok(inserirLinhas(abaValida(payload.tab), payload.rows || []));
       case 'updateById':       return ok(atualizarPorId(abaValida(payload.tab), payload.id, payload.patch || {}));
       case 'updateManyById':   return ok(atualizarVariosPorId(abaValida(payload.tab), payload.updates || []));
@@ -176,6 +177,43 @@ function lerTabelaDesde(nome, desde) {
   const todas = lerTabela(nome);
   if (!desde) return todas;
   return todas.filter(function (row) { return String(row.updated_at || '') > desde; });
+}
+
+/** Só o cabeçalho (linha 1) - não lê nenhuma linha de dado. */
+function lerCabecalho(sh) {
+  return sh.getRange(1, 1, 1, sh.getLastColumn() || 1).getValues()[0].map(String);
+}
+
+/**
+ * Acha a linha de um id lendo SÓ a coluna "id" (uma célula por linha, não a linha inteira) - é
+ * isso que evita ler ~20 colunas × milhares de linhas só pra achar 1 registro. Contra o `beer`
+ * real (3591 linhas) essa é a diferença entre ~9-10s e menos de 1s por chamada (achado em
+ * 2026-08-30, ver MIGRACAO_SHEETS.md). Devolve o número da linha na planilha (1-based, já
+ * contando o cabeçalho) ou -1 se não achar.
+ */
+function localizarLinhaPorId(sh, headers, id) {
+  const idCol = headers.indexOf('id');
+  if (idCol === -1) return -1;
+  const totalLinhas = sh.getLastRow() - 1;
+  if (totalLinhas < 1) return -1;
+  const ids = sh.getRange(2, idCol + 1, totalLinhas, 1).getValues();
+  for (let i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2; // +2: pula o cabeçalho, 1-based
+  }
+  return -1;
+}
+
+/** Lê UMA linha pelo id, sem tocar no resto da aba - usado pelo GET de item por id (abrir
+ *  detalhe, checar permissão antes de editar/excluir). null se não encontrar. */
+function lerLinhaPorId(nome, id) {
+  const sh = getSheet(nome);
+  const headers = lerCabecalho(sh);
+  const linha = localizarLinhaPorId(sh, headers, id);
+  if (linha === -1) return null;
+  const valores = sh.getRange(linha, 1, 1, headers.length).getValues()[0];
+  const obj = {};
+  headers.forEach(function (h, i) { if (h) obj[h] = sanitizarValor(valores[i]); });
+  return obj;
 }
 
 /** Lê o valor de uma chave da aba SyncMeta (carimbo de última escrita por aba). '' se não existir. */
@@ -270,28 +308,26 @@ function inserirLinhas(nome, rows) {
   return null;
 }
 
-/** Localiza a linha pelo id e sobrescreve com o patch informado (mescla com valores atuais). */
+/**
+ * Localiza a linha pelo id (via localizarLinhaPorId - só a coluna id, não a aba inteira) e
+ * sobrescreve com o patch informado (mescla com os valores atuais DAQUELA linha só).
+ */
 function atualizarPorId(nome, id, patch) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const sh = getSheet(nome);
-    const values = sh.getDataRange().getValues();
-    const headers = (values[0] || []).map(String);
-    const idCol = headers.indexOf('id');
-    if (idCol === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
+    const headers = lerCabecalho(sh);
+    if (headers.indexOf('id') === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
 
-    let rowIndex = -1;
-    for (let r = 1; r < values.length; r++) {
-      if (String(values[r][idCol]) === String(id)) { rowIndex = r; break; }
-    }
-    if (rowIndex === -1) throw new Error('Linha com id "' + id + '" não encontrada na aba ' + nome);
+    const linha = localizarLinhaPorId(sh, headers, id);
+    if (linha === -1) throw new Error('Linha com id "' + id + '" não encontrada na aba ' + nome);
 
-    const atual = values[rowIndex];
+    const atual = sh.getRange(linha, 1, 1, headers.length).getValues()[0];
     const nova = headers.map(function (h, i) {
       return (h in patch) ? patch[h] : sanitizarValor(atual[i]);
     });
-    sh.getRange(rowIndex + 1, 1, 1, headers.length).setNumberFormat('@').setValues([nova]);
+    sh.getRange(linha, 1, 1, headers.length).setNumberFormat('@').setValues([nova]);
   } finally {
     lock.releaseLock();
   }
@@ -389,18 +425,13 @@ function excluirPorId(nome, id) {
   lock.waitLock(20000);
   try {
     const sh = getSheet(nome);
-    const values = sh.getDataRange().getValues();
-    const headers = (values[0] || []).map(String);
-    const idCol = headers.indexOf('id');
-    if (idCol === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
+    const headers = lerCabecalho(sh);
+    if (headers.indexOf('id') === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
 
-    let rowIndex = -1;
-    for (let r = 1; r < values.length; r++) {
-      if (String(values[r][idCol]) === String(id)) { rowIndex = r; break; }
-    }
-    if (rowIndex === -1) return null;
+    const linha = localizarLinhaPorId(sh, headers, id);
+    if (linha === -1) return null;
 
-    sh.deleteRow(rowIndex + 1);
+    sh.deleteRow(linha);
   } finally {
     lock.releaseLock();
   }
