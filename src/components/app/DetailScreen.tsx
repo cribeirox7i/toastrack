@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
-import { deleteItem, duplicateItem, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
+import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
 import {
   SCHEMA,
@@ -225,7 +225,11 @@ export default function DetailScreen({
         ) : (
           /* ---------- VIEW ---------- */
           <div className="mx-auto w-full max-w-md px-5 py-4">
-            <Thumb label={values[nameField.col] || "item"} className="h-44 w-full rounded-2xl" />
+            <Thumb
+              label={values[nameField.col] || "item"}
+              src={driveImageUrl(values[IMG_URL_COL[type]])}
+              className="h-44 w-full rounded-2xl"
+            />
 
             <div className="mt-3 flex gap-2">
               <ActionBtn label="Google" onClick={googleSearch} icon="search" />

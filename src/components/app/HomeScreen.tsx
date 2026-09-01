@@ -74,7 +74,7 @@ export default function HomeScreen({
               onClick={() => onOpenItem(item)}
               className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5 text-left"
             >
-              <Thumb label={item.name} className="size-12 shrink-0 rounded-lg" />
+              <Thumb label={item.name} src={item.imgUrl} className="size-12 shrink-0 rounded-lg" />
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-bold uppercase text-accent">
                   {TYPE_LABELS[item.type]}
@@ -110,7 +110,7 @@ export default function HomeScreen({
               (slide, i) =>
                 i === idx && (
                   <div key={`${slide.type}-${slide.id}`} className="flex gap-4 p-4">
-                    <Thumb label={slide.name} className="h-32 w-28 shrink-0 rounded-xl" />
+                    <Thumb label={slide.name} src={slide.imgUrl} className="h-32 w-28 shrink-0 rounded-xl" />
                     <div className="flex min-w-0 flex-col justify-center">
                       <div className="text-[11px] font-bold uppercase tracking-wide text-accent">
                         {TYPE_LABELS[slide.type]}

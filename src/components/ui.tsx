@@ -1,4 +1,8 @@
+"use client";
+
 /** Small shared UI primitives used across screens. */
+
+import { useState } from "react";
 
 /** Read-only 5-star row supporting halves (0–5, 0.5 steps) via a clipped overlay. */
 export function Stars({ value, className = "text-[13px]" }: { value: number; className?: string }) {
@@ -20,9 +24,23 @@ export function Stars({ value, className = "text-[13px]" }: { value: number; cla
   );
 }
 
-/** Striped 45° placeholder box with a monospace caption, per the design token.
- *  Marks every spot that still needs a real photo. */
-export function Thumb({ label, className = "" }: { label: string; className?: string }) {
+/** Foto real do item (src) quando existir, com fallback pro placeholder listrado — tanto pra
+ *  item sem foto (src vazio) quanto pra link do Drive quebrado (onError). */
+export function Thumb({ label, src, className = "" }: { label: string; src?: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+
+  if (src && !failed) {
+    return (
+      <img
+        src={src}
+        alt={label}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        className={`object-cover ${className}`}
+      />
+    );
+  }
+
   return (
     <div
       className={`flex items-center justify-center overflow-hidden p-1 text-center font-mono text-[8px] leading-tight text-muted ${className}`}

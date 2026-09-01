@@ -422,7 +422,7 @@ function DeckView({
           onClick={() => onOpen(item)}
           className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-2.5"
         >
-          <Thumb label={item.name} className="size-[72px] shrink-0 rounded-xl" />
+          <Thumb label={item.name} src={item.imgUrl} className="size-[72px] shrink-0 rounded-xl" />
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15px] font-extrabold">{item.name}</div>
             <div className="truncate text-[12.5px] text-muted">{item.manufacturer}</div>
@@ -531,7 +531,7 @@ function GalleryView({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => vo
           onClick={() => onOpen(item)}
           className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface"
         >
-          <Thumb label={item.name} className="aspect-[3/4] w-full" />
+          <Thumb label={item.name} src={item.imgUrl} className="aspect-[3/4] w-full" />
           <div className="p-2.5">
             <div className="truncate text-[13px] font-bold">{item.name}</div>
             <div className="truncate text-[11px] text-muted">{item.manufacturer}</div>

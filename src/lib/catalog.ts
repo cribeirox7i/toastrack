@@ -18,6 +18,7 @@ export type Item = {
   rating: number; // 0–5
   date: string; // "YYYY-MM-DD" or ""
   category: string; // beer: BJCP label · wine: cor · spirit: tipo · drink: ""
+  imgUrl: string; // beer_img_url etc., ou "" quando o item não tem foto
   /** Dono ou listado em user_edit — item compartilhado só por user_access dá false. */
   canEdit: boolean;
 };
@@ -57,13 +58,32 @@ type TypeCfg = {
   ratingCol: string;
   dateCol: string;
   categoryCol?: string; // undefined = sem categoria (drink)
+  imgUrlCol: string;
+};
+
+/** A planilha guarda o link de "visualizar no Drive" (`drive.google.com/file/d/{id}/view...`,
+ *  às vezes com lixo colado no fim, ex. aspas) — isso é uma página HTML, não uma imagem, não
+ *  funciona direto num `<img src>`. Extrai o fileId e monta o link de imagem direta que o Drive
+ *  serve sem exigir login (`lh3.googleusercontent.com/d/{id}`, confirmado com uma foto real). */
+export function driveImageUrl(raw: string | undefined): string {
+  const m = /\/d\/([\w-]+)/.exec(raw ?? "");
+  return m ? `https://lh3.googleusercontent.com/d/${m[1]}` : "";
+}
+
+/** Nome da coluna de foto por tipo — usado em DetailScreen pra ler `values[...]` (linha crua,
+ *  fora do Item normalizado) sem repetir os 4 nomes de coluna espalhados pela UI. */
+export const IMG_URL_COL: Record<ItemType, string> = {
+  beer: "beer_img_url",
+  wine: "wine_img_url",
+  spirit: "dest_img_url",
+  drink: "drink_img_url",
 };
 
 const CONFIG: Record<ItemType, TypeCfg> = {
-  beer: { nameCol: "beer_nome", manufacturerCol: "beer_cervejaria", ratingCol: "beer_nota", dateCol: "beer_data", categoryCol: "beer_estilo_livre" },
-  wine: { nameCol: "wine_nome", manufacturerCol: "wine_produtor", ratingCol: "wine_nota", dateCol: "wine_data_degustacao", categoryCol: "wine_cor" },
-  spirit: { nameCol: "dest_nome", manufacturerCol: "dest_produtor", ratingCol: "dest_nota", dateCol: "dest_data_degustacao", categoryCol: "dest_tipo" },
-  drink: { nameCol: "drink_nome", manufacturerCol: "drink_produtor", ratingCol: "drink_nota", dateCol: "drink_data_degustacao" },
+  beer: { nameCol: "beer_nome", manufacturerCol: "beer_cervejaria", ratingCol: "beer_nota", dateCol: "beer_data", categoryCol: "beer_estilo_livre", imgUrlCol: IMG_URL_COL.beer },
+  wine: { nameCol: "wine_nome", manufacturerCol: "wine_produtor", ratingCol: "wine_nota", dateCol: "wine_data_degustacao", categoryCol: "wine_cor", imgUrlCol: IMG_URL_COL.wine },
+  spirit: { nameCol: "dest_nome", manufacturerCol: "dest_produtor", ratingCol: "dest_nota", dateCol: "dest_data_degustacao", categoryCol: "dest_tipo", imgUrlCol: IMG_URL_COL.spirit },
+  drink: { nameCol: "drink_nome", manufacturerCol: "drink_produtor", ratingCol: "drink_nota", dateCol: "drink_data_degustacao", imgUrlCol: IMG_URL_COL.drink },
 };
 
 // país vem só como pais_id na linha crua; o nome é resolvido à parte via /api/lookups, porque a
@@ -79,6 +99,7 @@ export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) =
     rating: Number(row[cfg.ratingCol]) || 0,
     date: row[cfg.dateCol] ?? "",
     category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
+    imgUrl: driveImageUrl(row[cfg.imgUrlCol]),
     canEdit: canEditRow(row, userId),
   };
 }
