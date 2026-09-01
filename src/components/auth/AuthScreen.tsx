@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 
 const inputCls =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-3 text-[14px] text-text outline-none placeholder:text-muted focus:border-accent";
@@ -26,6 +26,7 @@ export default function AuthScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const { update } = useSession();
 
   async function doLogin() {
     if (!email || !password) {
@@ -35,11 +36,16 @@ export default function AuthScreen() {
     setBusy(true);
     setError("");
     const res = await signIn("credentials", { email, senha: password, redirect: false });
-    setBusy(false);
     if (res?.error) {
+      setBusy(false);
       setError("E-mail ou senha inválidos.");
+      return;
     }
-    // Sucesso: a sessão é setada, AuthProvider/AppShell tomam conta do resto.
+    // signIn(redirect:false) grava o cookie, mas o SessionProvider não refaz o fetch sozinho
+    // (mesmo motivo do update() em TrocarSenhaObrigatoria) — sem isso a tela ficava presa no
+    // login até um F5 manual, mesmo com a sessão já válida no servidor.
+    await update();
+    setBusy(false);
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
