@@ -328,12 +328,36 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    (`user_owner`/`user_access`/`user_edit` das 4 abas de item, todas numéricas agora) — conferido
    por leitura: `beer` e `wine` 100% com dono `1`, `user_access` com `1`/`1;2` (compartilhado com
    a Thamires em parte dos itens), `dest`/`drink` (fictícios) também com `1`.
-6. **Cache** (seção 5) — antes opcional "se sobrar tempo", agora claramente necessário: o achado
-   de performance da etapa 4 mostra ~9-10s por leitura/escrita individual contra o `beer` real.
+6. ✅ **Cache** (seção 5, 2026-08-31) — o Carlos reportou o app "impossível de usar" (~18s pra
+   abrir a Home/uma lista, medido contra o `beer` real de 3591 linhas: `listVisibleItems` lia a
+   aba inteira toda vez). Adicionado `src/lib/offline/` (IndexedDB via `idb`): `db.ts` (stores
+   `beer`/`wine`/`dest`/`drink`/`meta`/`outbox`), `sync.ts` (carimbo de versão via `SyncMeta` —
+   `/api/items/[tipo]/meta`, barato, não lê a aba de item — e delta via `readSince` quando algo
+   mudou), `useOfflineData.ts` (hooks `useOfflineItems`/`useOfflineLookups`). Escrita é otimista:
+   `createItemOffline`/`updateItemOffline`/`deleteItemOffline` gravam local na hora e enfileiram
+   no outbox, sincronizando em segundo plano — mesmo padrão do TravelTrack
+   (`C:\Claude\TravelTrack\src\lib\offline\`), mas **sem outbox de arquivo**: o Toastrack ainda
+   não tem upload de imagem implementado (`img_url`/`img_nome` existem nas colunas, nenhuma tela
+   usa upload), só campos de texto. `createItem` (servidor) passou a aceitar um `id` opcional no
+   payload e reaproveitá-lo — é o que permite um item criado offline manter a mesma referência
+   local até sincronizar, em vez do servidor gerar outro uuid.
+
+   `CatalogProvider` (a única fonte dos 4 catálogos) e `ListScreen` (que antes buscava sozinho,
+   duplicando o custo) passaram a compartilhar o mesmo cache. **Caveat aceito**: `readSince` nunca
+   devolve exclusões (só linhas com `updated_at` mudado) — um item apagado fora do app (edição
+   direta na planilha, outro dispositivo) fica "fantasma" no cache local até uma reconciliação
+   completa (`refreshAllNow`, ainda sem botão na UI — exclusões pelo próprio app já são tratadas
+   na hora, sem depender do delta). Fora de escopo desta rodada: "baixar pra uso offline"/aquecer
+   rotas do service worker (modo avião completo, não pedido — o objetivo aqui era só velocidade).
+
+   Testado contra a planilha real (`npm run test:items-sync-integration`, 7/7: carimbo não vazio,
+   delta vazio quando nada mudou, `createItem` reaproveita id do cliente, carimbo avança após
+   escrita, delta traz só o item novo, delta fica vazio de novo depois — sem deixar rastro no
+   `beer` real) e `npm run build` (TypeScript limpo, rota `/api/items/[tipo]/meta` convive sem
+   conflito com `/api/items/[tipo]/[id]` — segmento literal sempre vence o dinâmico no Next.js).
 7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
 
-Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer; a 6 só faz sentido com
-volume real medido.
+Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer.
 
 ### 7.1 Ligar as telas ao backend novo (2026-08-28) — não numerada no plano original, mas
 necessária pra alguém conseguir usar o app de verdade: todo o `src/components`/`src/lib` que
