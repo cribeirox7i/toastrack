@@ -355,7 +355,19 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    escrita, delta traz só o item novo, delta fica vazio de novo depois — sem deixar rastro no
    `beer` real) e `npm run build` (TypeScript limpo, rota `/api/items/[tipo]/meta` convive sem
    conflito com `/api/items/[tipo]/[id]` — segmento literal sempre vence o dinâmico no Next.js).
-7. **Deploy no Vercel** + variáveis de ambiente; aposentar o GitHub Pages.
+7. ✅ **Deploy no Vercel** (2026-09-01) — projeto `cribeirox7i1/toastrack` ligado ao repo do GitHub
+   (deploy automático a cada push em `main`, mesmo padrão do TravelTrack), produção em
+   `https://toastrack.vercel.app`. Env vars de produção setadas via `vercel env add`:
+   `APPS_SCRIPT_URL`, `APPS_SCRIPT_SHARED_SECRET` (colado **sem** o escape `\$` que o
+   `.env.local` precisa — na Vercel o valor é literal), `NEXTAUTH_SECRET` (gerado novo, diferente
+   do de dev) e `NEXTAUTH_URL=https://toastrack.vercel.app`. Build limpo (`npm run build` do
+   próprio Vercel, TypeScript ok, 9 rotas), `curl` confirmou `/` 200 e `/api/lookups` 401 sem
+   sessão (rota protegida respondendo). GitHub Pages aposentado: `.github/workflows/deploy.yml`
+   removido do repo — falta só o Carlos desativar o Pages em Settings → Pages do repo no GitHub
+   (não tenho `gh` autenticado nesta máquina pra fazer isso via CLI).
+
+   **Ainda pendente**: verificação visual real no navegador (ver seção 7.1) — a Browser pane
+   segue banida neste projeto.
 
 Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer.
 
