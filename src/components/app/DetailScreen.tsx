@@ -46,6 +46,7 @@ export default function DetailScreen({
   const [loading, setLoading] = useState(true);
   const [lookup, setLookup] = useState<Lookup>({ pais: [], bjcp: [] });
   const [values, setValues] = useState<Record<string, string>>({});
+  const [imgUrl, setImgUrl] = useState("");
   const [canEdit, setCanEdit] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
@@ -67,6 +68,7 @@ export default function DetailScreen({
         const v: Record<string, string> = {};
         for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
         setValues(v);
+        setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
         setCanEdit(row ? canEditRow(row, ownUserId) : false);
       } else {
         const v: Record<string, string> = {};
@@ -74,6 +76,7 @@ export default function DetailScreen({
         const dateField = fields.find((f) => f.kind === "date");
         if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
         setValues(v);
+        setImgUrl("");
         setCanEdit(true);
       }
       setLookup(lk);
@@ -126,6 +129,7 @@ export default function DetailScreen({
     const v: Record<string, string> = {};
     for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
     setValues(v);
+    setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
     setEditing(false);
   }
 
@@ -227,7 +231,7 @@ export default function DetailScreen({
           <div className="mx-auto w-full max-w-md px-5 py-4">
             <Thumb
               label={values[nameField.col] || "item"}
-              src={driveImageUrl(values[IMG_URL_COL[type]])}
+              src={imgUrl}
               className="h-44 w-full rounded-2xl"
             />
 
