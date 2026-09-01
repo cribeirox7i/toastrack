@@ -10,11 +10,13 @@
     "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
     "test:permissions": "node scripts/test-permissions.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
+    "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
     "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
     "create-admin": "tsx --conditions=react-server scripts/create-admin.mjs",
     "promote-admin": "tsx --conditions=react-server scripts/promote-admin.mjs"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "next": "16.2.10",
     "next-auth": "^5.0.0-beta.32",
     "react": "19.2.4",

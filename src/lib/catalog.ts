@@ -1,4 +1,10 @@
 import { canEditRow } from "@/lib/itemPermissions";
+import {
+  createItemOffline,
+  deleteItemOffline,
+  getCachedItem,
+  type ItemTab,
+} from "@/lib/offline/sync";
 
 export type ItemType = "beer" | "wine" | "drink" | "spirit";
 
@@ -62,7 +68,7 @@ const CONFIG: Record<ItemType, TypeCfg> = {
 
 // país vem só como pais_id na linha crua; o nome é resolvido à parte via /api/lookups, porque a
 // rota de itens não faz join (o Apps Script não sabe fazer join entre abas).
-function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) => string, userId: string): Item {
+export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) => string, userId: string): Item {
   const cfg = CONFIG[type];
   return {
     id: row.id ?? "",
@@ -77,59 +83,30 @@ function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) => strin
   };
 }
 
-async function getJson<T>(url: string): Promise<T | null> {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) return null;
-  return (await res.json()) as T;
-}
-
-/** Nome de país por id — busca as 40 linhas de /api/lookups uma vez por chamada. Aceitável pro
- *  volume de países; se virar hotspot, dá pra levar pro CatalogProvider e cachear por sessão. */
-async function paisNomeResolver(): Promise<(id: string) => string> {
-  const lk = await getJson<{ paises: { pais_id: string; pais_nome: string }[] }>("/api/lookups");
-  const map = new Map((lk?.paises ?? []).map((p) => [String(p.pais_id), p.pais_nome]));
-  return (id: string) => map.get(id) ?? "";
-}
-
-/** Carrega uma categoria (itens visíveis pra sessão — dono, ou em user_access/user_edit).
- *  `userId` só serve pra calcular `Item.canEdit` no cliente — a rota já filtra por sessão sozinha. */
-export async function fetchItems(type: ItemType, userId: string): Promise<Item[]> {
-  const [rows, paisNome] = await Promise.all([
-    getJson<RawItemRow[]>(`/api/items/${TYPE_TAB[type]}`),
-    paisNomeResolver(),
-  ]);
-  const items = (rows ?? []).map((r) => mapRow(type, r, paisNome, userId));
+/** Mapeia + ordena um lote de linhas cruas (do cache local, ver CatalogProvider) numa categoria. */
+export function mapRows(type: ItemType, rows: RawItemRow[], paisNome: (id: string) => string, userId: string): Item[] {
+  const items = rows.map((r) => mapRow(type, r, paisNome, userId));
   items.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
   return items;
 }
 
+/** Exclui um item — otimista (ver src/lib/offline/sync.ts): grava local na hora, sincroniza em
+ *  segundo plano. Sempre "true" porque o precondition real (canEdit) já foi checado por quem
+ *  chama antes de invocar isto. */
 export async function deleteItem(type: ItemType, id: string): Promise<boolean> {
-  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, { method: "DELETE" });
-  return res.ok;
+  await deleteItemOffline(TYPE_TAB[type] as ItemTab, id);
+  return true;
 }
 
-/** Duplica um item: lê a linha inteira, tira id/dono/updated_at (a rota de criação recalcula) e
- *  recria — sai sempre como item seu, mesmo duplicando um item compartilhado com você. */
-export async function duplicateItem(type: ItemType, id: string): Promise<boolean> {
-  const row = await getJson<Record<string, string>>(`/api/items/${TYPE_TAB[type]}/${id}`);
+/** Duplica um item: lê a linha inteira (cache local primeiro), tira id/dono/user_access/
+ *  user_edit/updated_at (createItemOffline recalcula) e recria — sai sempre como item seu, mesmo
+ *  duplicando um item compartilhado com você. */
+export async function duplicateItem(type: ItemType, id: string, ownerId: string): Promise<boolean> {
+  const tab = TYPE_TAB[type] as ItemTab;
+  const row = await getCachedItem(tab, id);
   if (!row) return false;
   const { id: _id, user_owner: _owner, user_access: _access, user_edit: _edit, updated_at: _ts, ...payload } = row;
   void _id; void _owner; void _access; void _edit; void _ts;
-  const res = await fetch(`/api/items/${TYPE_TAB[type]}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return res.ok;
-}
-
-/** Carrega as 4 categorias de uma vez (itens visíveis pro usuário logado). */
-export async function fetchCatalog(userId: string): Promise<Catalog> {
-  const [beer, wine, drink, spirit] = await Promise.all([
-    fetchItems("beer", userId),
-    fetchItems("wine", userId),
-    fetchItems("drink", userId),
-    fetchItems("spirit", userId),
-  ]);
-  return { beer, wine, drink, spirit };
+  await createItemOffline(tab, payload as Record<string, string>, ownerId);
+  return true;
 }

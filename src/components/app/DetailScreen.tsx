@@ -104,7 +104,7 @@ export default function DetailScreen({
       return;
     }
     setSaving(true);
-    const id = await saveItem(type, currentId, values);
+    const id = await saveItem(type, currentId, values, ownUserId);
     setSaving(false);
     if (id == null) {
       showToast("Erro ao salvar.");
@@ -131,7 +131,7 @@ export default function DetailScreen({
 
   async function doDuplicate() {
     if (currentId == null) return;
-    const ok = await duplicateItem(type, currentId);
+    const ok = await duplicateItem(type, currentId, ownUserId);
     if (ok) {
       onChanged();
       showToast("Item duplicado");

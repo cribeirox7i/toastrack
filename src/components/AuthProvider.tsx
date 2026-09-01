@@ -11,6 +11,7 @@ import {
 } from "react";
 import { SessionProvider, useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import type { PublicUser } from "@/lib/sheets/users";
+import { wipeLocalData } from "@/lib/offline/db";
 
 type AppUser = PublicUser;
 
@@ -64,6 +65,9 @@ function AuthInner({ children }: { children: ReactNode }) {
   }, [session?.user.id, loadAppUser]);
 
   const signOut = useCallback(async () => {
+    // Antes do signOut do NextAuth: sem isso, os dados de quem saiu continuam legíveis no
+    // IndexedDB pro próximo login neste mesmo aparelho (ver src/lib/offline/db.ts).
+    await wipeLocalData().catch(() => {});
     await nextAuthSignOut({ redirect: false });
     setAppUser(null);
   }, []);

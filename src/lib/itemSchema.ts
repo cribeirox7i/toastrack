@@ -1,4 +1,12 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
+import {
+  createItemOffline,
+  getCachedItem,
+  getCachedLookups,
+  pullLookups,
+  updateItemOffline,
+  type ItemTab,
+} from "@/lib/offline/sync";
 
 /** A field in the per-type detail/edit form. `role` drives special layout;
  *  `kind` drives the input/rendering. `col` is the real DB column. */
@@ -88,27 +96,41 @@ export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined 
 
 export type Lookup = { pais: { pais_id: number; pais_nome: string }[]; bjcp: { bjcp21_id: number; bjcp21_cod: string }[] };
 
+/** Cache-first (IndexedDB, etapa 6): países/BJCP quase não mudam, então servir do que já está
+ *  salvo e disparar um refresh em segundo plano evita esperar rede toda vez que a tela de
+ *  detalhe/edição abre. Sem cache ainda (primeiro uso do aparelho) cai pro fetch direto. */
 export async function fetchLookups(): Promise<Lookup> {
-  const res = await fetch("/api/lookups", { cache: "no-store" });
-  if (!res.ok) return { pais: [], bjcp: [] };
-  const data = (await res.json()) as {
-    paises: { pais_id: string; pais_nome: string }[];
-    bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
-  };
+  const cached = await getCachedLookups();
+  const data = cached ?? (await fetchLookupsNetwork());
+  void pullLookups(); // sempre atualiza em segundo plano, tendo cache ou não
   return {
     pais: data.paises.map((p) => ({ pais_id: Number(p.pais_id), pais_nome: p.pais_nome })),
     bjcp: data.bjcp.map((b) => ({ bjcp21_id: Number(b.bjcp21_id), bjcp21_cod: b.bjcp21_cod })),
   };
 }
 
+async function fetchLookupsNetwork(): Promise<{
+  paises: { pais_id: string; pais_nome: string }[];
+  bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
+}> {
+  const res = await fetch("/api/lookups", { cache: "no-store" });
+  if (!res.ok) return { paises: [], bjcp: [] };
+  return (await res.json()) as { paises: { pais_id: string; pais_nome: string }[]; bjcp: { bjcp21_id: string; bjcp21_cod: string }[] };
+}
+
 /** Linha crua de um item (todas as colunas), incluindo user_owner/user_access/user_edit — usado
  *  pra checagem de permissão de edição na tela. `id` é string (UUID pros itens novos; itens
- *  antigos mantêm o número original como string). */
+ *  antigos mantêm o número original como string). Cache-first (etapa 6): o item normalmente já
+ *  está no IndexedDB (veio da lista); só cai pra rede se este aparelho ainda não o sincronizou
+ *  (ex.: link direto pra um item novo). */
 export async function fetchFullItem(
   type: ItemType,
   id: string,
 ): Promise<Record<string, string> | null> {
-  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, { cache: "no-store" });
+  const tab = TYPE_TAB[type] as ItemTab;
+  const cached = await getCachedItem(tab, id);
+  if (cached) return cached as Record<string, string>;
+  const res = await fetch(`/api/items/${tab}/${id}`, { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json()) as Record<string, string>;
 }
@@ -125,32 +147,23 @@ function coerce(field: Field, raw: string): string {
 }
 
 /**
- * Cria (id null) ou atualiza um item a partir dos valores do formulário. O dono nunca é mandado
- * pelo cliente — a rota de criação sempre grava a sessão como user_owner, ignorando qualquer
- * coisa no corpo (ver src/lib/sheets/items.ts). Retorna o id (string) ou null em falha.
+ * Cria (id null) ou atualiza um item a partir dos valores do formulário — otimista (etapa 6, ver
+ * src/lib/offline/sync.ts): grava no IndexedDB e devolve o id na hora, sincroniza em segundo
+ * plano. `ownerId` só serve pra a linha local nascer com o dono certo antes de qualquer resposta
+ * do servidor (que recalcula os mesmos valores por conta própria — nunca confia no que o cliente
+ * manda, ver src/lib/sheets/items.ts); não é usado na atualização (o dono não muda por edição).
  */
 export async function saveItem(
   type: ItemType,
   id: string | null,
   values: Record<string, string>,
+  ownerId: string,
 ): Promise<string | null> {
   const payload: Record<string, string> = {};
   for (const f of SCHEMA[type].fields) payload[f.col] = coerce(f, values[f.col] ?? "");
 
-  if (id == null) {
-    const res = await fetch(`/api/items/${TYPE_TAB[type]}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) return null;
-    const row = (await res.json()) as { id: string };
-    return row.id;
-  }
-  const res = await fetch(`/api/items/${TYPE_TAB[type]}/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  return res.ok ? id : null;
+  const tab = TYPE_TAB[type] as ItemTab;
+  if (id == null) return createItemOffline(tab, payload, ownerId);
+  await updateItemOffline(tab, id, payload);
+  return id;
 }

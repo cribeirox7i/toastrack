@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
+import { useCatalog } from "@/components/CatalogProvider";
 import {
-  fetchItems,
   deleteItem,
   duplicateItem,
   TYPE_LABELS,
@@ -82,8 +82,8 @@ export default function ListScreen({
   const hasSecondary = secondaryProfiles.length > 0;
   const viewedProfile = secondaryProfiles.find((p) => p.id === viewedProfileId) ?? null;
 
-  const [items, setItems] = useState<Item[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { catalog, loading } = useCatalog();
+  const items = catalog[listType];
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<SearchField>("all");
@@ -92,18 +92,6 @@ export default function ListScreen({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<Item | null>(null);
   const [toast, setToast] = useState("");
-
-  async function reload() {
-    setLoading(true);
-    const data = await fetchItems(listType, ownUserId);
-    setItems(data);
-    setLoading(false);
-  }
-
-  useEffect(() => {
-    void reload();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listType, ownUserId]);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -148,16 +136,14 @@ export default function ListScreen({
     setConfirmItem(null);
     const ok = item.canEdit && (await deleteItem(item.type, item.id));
     if (ok) {
-      await reload();
       onCatalogChanged();
       showToast("Item excluído");
     } else showToast("Erro ao excluir");
   }
 
   async function doDuplicate(item: Item) {
-    const ok = item.canEdit && (await duplicateItem(item.type, item.id));
+    const ok = item.canEdit && (await duplicateItem(item.type, item.id, ownUserId));
     if (ok) {
-      await reload();
       onCatalogChanged();
       showToast("Item duplicado");
     } else showToast("Erro ao duplicar");

@@ -23,6 +23,33 @@ export async function listVisibleItems(
   return linhas.filter((row) => canRead(row, sessionUserId));
 }
 
+/**
+ * Como listVisibleItems, mas só as linhas mudadas depois de `since` (etapa 6 — cache local). O
+ * Apps Script (`readSince`) ainda lê a aba inteira pra filtrar (mesmo custo de `read` quando algo
+ * de fato mudou) — o ganho real é poder pular essa chamada de vez quando nada mudou, comparando
+ * primeiro com `getItemsStamp` (barato, só a aba SyncMeta). `since` vazio devolve tudo, igual
+ * `listVisibleItems`.
+ */
+export async function listVisibleItemsSince(
+  tipo: ItemType,
+  sessionUserId: string,
+  since: string
+): Promise<ItemRowBase[]> {
+  const linhas = await callAppsScript<ItemRowBase[]>("readSince", {
+    tab: ITEM_TAB[tipo],
+    desde: since,
+  });
+  return linhas.filter((row) => canRead(row, sessionUserId));
+}
+
+/** Carimbo (ISO) da última escrita na aba deste tipo, segundo a aba SyncMeta — não lê a aba de
+ *  item, só uma célula de SyncMeta. '' se a aba nunca foi escrita (ou ensureStructure é recente
+ *  o bastante pra SyncMeta ainda não ter entrada). Usado pelo cliente pra saber, antes de puxar
+ *  qualquer coisa, se o cache local já está em dia. */
+export async function getItemsStamp(tipo: ItemType): Promise<string> {
+  return callAppsScript<string>("metaGet", { chave: ITEM_TAB[tipo] });
+}
+
 /** Busca um item por id, devolvendo null se não existir OU se a sessão não tiver permissão de
  *  leitura — de propósito não distingue os dois casos (não vazar que o item existe). */
 export async function getItemIfVisible(
@@ -47,9 +74,13 @@ export async function createItem(
   payload: Record<string, string>,
   sessionUserId: string
 ): Promise<ItemRowBase> {
+  const { id: idDoCliente, ...conteudo } = payload;
   const row: ItemRowBase = {
-    ...payload,
-    id: randomUUID(),
+    ...conteudo,
+    // Reaproveita o id do cliente quando informado (etapa 6 — item criado offline já nasce com
+    // um uuid local; se o servidor gerasse outro, o item apareceria "duplicado" na UI até a
+    // próxima sincronização trocar a referência). Mesmo padrão do createTrip do TravelTrack.
+    id: idDoCliente || randomUUID(),
     user_owner: sessionUserId,
     user_access: payload.user_access ?? "",
     // O criador sempre entra em user_edit (mesmo já sendo o dono, ensureInEditList não duplica) -
