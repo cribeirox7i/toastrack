@@ -100,6 +100,20 @@ export async function getCachedItem(tab: ItemTab, id: string): Promise<RawItemRo
   return getOne(tab, id);
 }
 
+/** Aplica no cache local um patch que já foi confirmado pelo servidor (ex.: upload de foto, ver
+ *  src/lib/photoUpload.ts) — ao contrário de `updateItemOffline`, NÃO enfileira no outbox: a
+ *  escrita já aconteceu, isto só evita esperar o próximo `pullItemsIfStale` pra a UI mostrar o
+ *  resultado. */
+export async function applyServerPatch(
+  tab: ItemTab,
+  id: string,
+  patch: Record<string, string>
+): Promise<void> {
+  const existing = await getOne(tab, id);
+  await putOne(tab, { ...(existing ?? { id }), ...patch });
+  notifyChange();
+}
+
 export async function getCachedItems(tab: ItemTab): Promise<RawItemRow[]> {
   return listAll(tab);
 }

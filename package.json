@@ -12,6 +12,7 @@
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
     "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
     "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
+    "test:photo-upload-integration": "tsx --conditions=react-server scripts/test-photo-upload-integration.mjs",
     "create-admin": "tsx --conditions=react-server scripts/create-admin.mjs",
     "promote-admin": "tsx --conditions=react-server scripts/promote-admin.mjs"
   },

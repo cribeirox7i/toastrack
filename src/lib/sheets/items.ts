@@ -2,7 +2,14 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { callAppsScript } from "./client";
 import { canRead, canWrite, ensureInEditList } from "./permissions";
-import { ITEM_TAB, type ItemRowBase, type ItemType } from "./types";
+import {
+  ITEM_DRIVE_CATEGORY,
+  ITEM_IMG_NOME_COL,
+  ITEM_IMG_URL_COL,
+  ITEM_TAB,
+  type ItemRowBase,
+  type ItemType,
+} from "./types";
 
 /**
  * Repositório genérico das 4 abas de item (beer/wine/dest/drink) — mesma forma pras 4, já que o
@@ -130,4 +137,52 @@ export async function deleteItem(
 
   await callAppsScript("deleteById", { tab: ITEM_TAB[tipo], id });
   return "ok";
+}
+
+interface DriveUploadResult {
+  fileId: string;
+  name: string;
+  url: string;
+}
+
+export type UploadPhotoResult =
+  | { ok: true; url: string; imgNome: string }
+  | { ok: false; reason: "not_found" | "forbidden" };
+
+/**
+ * Sobe uma foto pro Drive (pasta {categoria}/{sessionUserId}/, ver Codigo.gs `driveUploadFile`)
+ * e grava o link + nome do arquivo nas colunas de imagem do item — mesmas colunas já usadas
+ * pelos ~3600 itens reais (ver ITEM_IMG_URL_COL/ITEM_IMG_NOME_COL). Igual a updateItem: exige
+ * permissão de escrita (dono ou user_edit), nunca aceita categoria/pasta vinda do corpo da
+ * requisição. Não apaga a foto anterior do Drive (fica órfã lá) — fora de escopo desta rodada.
+ */
+export async function uploadItemPhoto(
+  tipo: ItemType,
+  id: string,
+  sessionUserId: string,
+  foto: { base64Data: string; mimeType: string; filename: string }
+): Promise<UploadPhotoResult> {
+  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
+  if (!row) return { ok: false, reason: "not_found" };
+  if (!canWrite(row, sessionUserId)) return { ok: false, reason: "forbidden" };
+
+  const uploaded = await callAppsScript<DriveUploadResult>("driveUploadFile", {
+    categoria: ITEM_DRIVE_CATEGORY[tipo],
+    userId: sessionUserId,
+    base64Data: foto.base64Data,
+    mimeType: foto.mimeType,
+    filename: foto.filename,
+  });
+
+  await callAppsScript("updateById", {
+    tab: ITEM_TAB[tipo],
+    id,
+    patch: {
+      [ITEM_IMG_URL_COL[tipo]]: uploaded.url,
+      [ITEM_IMG_NOME_COL[tipo]]: uploaded.name,
+      updated_at: nowIso(),
+    },
+  });
+
+  return { ok: true, url: uploaded.url, imgNome: uploaded.name };
 }

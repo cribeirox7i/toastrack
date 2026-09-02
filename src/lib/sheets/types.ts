@@ -24,6 +24,22 @@ export const ITEM_DRIVE_CATEGORY: Record<ItemType, string> = {
   drink: "DRINK",
 };
 
+/** Colunas de foto por tipo — mesmas usadas pelos ~3600 itens reais (nome do arquivo + link do
+ *  Drive). Upload de foto (seção 6 do plano) escreve nelas depois de subir pro Drive. */
+export const ITEM_IMG_URL_COL: Record<ItemType, string> = {
+  beer: "beer_img_url",
+  wine: "wine_img_url",
+  dest: "dest_img_url",
+  drink: "drink_img_url",
+};
+
+export const ITEM_IMG_NOME_COL: Record<ItemType, string> = {
+  beer: "beer_img_nome",
+  wine: "wine_img_nome",
+  dest: "dest_img_nome",
+  drink: "drink_img_nome",
+};
+
 /** Campos comuns a toda aba de item — permissão (seção 4 do plano) + sync (seção 5). O resto dos
  *  campos é específico de cada tipo (beer_nome, wine_cor, ...), por isso ficam soltos como string. */
 export interface ItemRowBase {

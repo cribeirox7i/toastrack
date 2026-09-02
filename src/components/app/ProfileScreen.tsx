@@ -7,6 +7,7 @@ import { PALETTES, HUES, hueToPaletteEnum, type HueName } from "@/lib/theme";
 import { initialsFor } from "@/lib/utils";
 import { validatePassword } from "@/lib/auth";
 import { saveUserPrefs, changePassword } from "@/lib/prefs";
+import { refreshAllNow } from "@/lib/offline/sync";
 import {
   fetchAllUsers,
   setUserStatus,
@@ -54,6 +55,19 @@ export default function ProfileScreen() {
   function showToast(m: string) {
     setToast(m);
     window.setTimeout(() => setToast(""), 2200);
+  }
+
+  const [syncing, setSyncing] = useState(false);
+  async function doRefreshAll() {
+    setSyncing(true);
+    try {
+      await refreshAllNow();
+      showToast("Dados atualizados");
+    } catch {
+      showToast("Erro ao atualizar");
+    } finally {
+      setSyncing(false);
+    }
   }
 
   // ---- Admin ----
@@ -296,6 +310,23 @@ export default function ProfileScreen() {
           </div>
         </div>
       )}
+
+      {/* Sync: reconciliação completa (traz também exclusões feitas fora do app — o delta normal
+          nunca traz isso, ver MIGRACAO_SHEETS.md seção 6) */}
+      <div className={cardCls}>
+        <div className={cardLabel}>Sincronização</div>
+        <div className="mb-3 text-[12.5px] leading-relaxed text-muted">
+          O app atualiza sozinho em segundo plano. Use isto se um item excluído em outro
+          dispositivo ou direto na planilha continuar aparecendo aqui.
+        </div>
+        <button
+          onClick={() => void doRefreshAll()}
+          disabled={syncing}
+          className="w-full rounded-xl border border-border py-2.5 text-[13px] font-bold disabled:opacity-60"
+        >
+          {syncing ? "Atualizando…" : "Atualizar tudo agora"}
+        </button>
+      </div>
 
       {/* Admin: access log */}
       {isAdmin && (

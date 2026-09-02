@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
+import { uploadItemPhoto } from "@/lib/photoUpload";
 import {
   SCHEMA,
   fieldByRole,
@@ -51,6 +52,8 @@ export default function DetailScreen({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   function showToast(m: string) {
     setToast(m);
@@ -133,6 +136,30 @@ export default function DetailScreen({
     setEditing(false);
   }
 
+  function pickPhoto() {
+    if (currentId == null) {
+      showToast("Salve o item antes de adicionar uma foto.");
+      return;
+    }
+    fileInputRef.current?.click();
+  }
+
+  async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
+    if (!file || currentId == null) return;
+    setUploadingPhoto(true);
+    const result = await uploadItemPhoto(type, currentId, file);
+    setUploadingPhoto(false);
+    if (result.ok && result.url) {
+      setImgUrl(result.url);
+      onChanged();
+      showToast("Foto enviada");
+    } else {
+      showToast(result.error ?? "Erro ao enviar a foto.");
+    }
+  }
+
   async function doDuplicate() {
     if (currentId == null) return;
     const ok = await duplicateItem(type, currentId, ownUserId);
@@ -206,11 +233,23 @@ export default function DetailScreen({
         ) : editing ? (
           /* ---------- EDIT ---------- */
           <div className="mx-auto w-full max-w-md px-5 py-4">
-            <button
-              onClick={() => showToast("Upload de foto chega com o Storage.")}
-              className="mb-2 w-full"
-            >
-              <Thumb label={values[nameField.col] || "novo item"} className="h-40 w-full rounded-2xl" />
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => void onPhotoSelected(e)}
+            />
+            <button onClick={pickPhoto} disabled={uploadingPhoto} className="relative mb-2 w-full">
+              <Thumb
+                label={values[nameField.col] || "novo item"}
+                src={imgUrl}
+                className="h-40 w-full rounded-2xl"
+              />
+              <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 rounded-b-2xl bg-black/55 py-2 text-[12.5px] font-bold text-white">
+                <Icon name="edit" size={13} />
+                {uploadingPhoto ? "Enviando…" : currentId == null ? "Salve para adicionar foto" : "Trocar foto"}
+              </span>
             </button>
 
             <label className={labelCls}>{ratingField.label}</label>

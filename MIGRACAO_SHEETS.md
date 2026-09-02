@@ -363,11 +363,8 @@ roda, `beer`/`wine` têm dados reais acessíveis, tudo bate — **exceto** que a
    do de dev) e `NEXTAUTH_URL=https://toastrack.vercel.app`. Build limpo (`npm run build` do
    próprio Vercel, TypeScript ok, 9 rotas), `curl` confirmou `/` 200 e `/api/lookups` 401 sem
    sessão (rota protegida respondendo). GitHub Pages aposentado: `.github/workflows/deploy.yml`
-   removido do repo — falta só o Carlos desativar o Pages em Settings → Pages do repo no GitHub
-   (não tenho `gh` autenticado nesta máquina pra fazer isso via CLI).
-
-   **Ainda pendente**: verificação visual real no navegador (ver seção 7.1) — a Browser pane
-   segue banida neste projeto.
+   removido do repo, e o Carlos desativou o Pages em Settings → Pages do GitHub (2026-09-02) —
+   nada mais publica lá.
 
 Etapas 1-4 são pré-requisito de tudo; a 5 é o que o Carlos mais quer.
 
@@ -403,12 +400,63 @@ falava com Supabase foi reescrito pra chamar as rotas de API da etapa 4.
   `jszip`/`@supabase/supabase-js` (não usadas em lugar nenhum depois da reescrita).
 
 **Verificação:** `npm run build` limpo (12 rotas + a home, sem erro de tipo), testes de
-permissão/senha ainda 100%. **Limite real desta verificação**: o `AppShell` é Client Component —
-a decisão splash/login/app só acontece depois da hidratação no navegador, então `curl` no HTML
-prova só "o servidor não quebra", não "a tela renderiza certo". A Browser pane está banida pra
-este projeto (ver `feedback_toastrack_no_browser_pane`), então **o React em si (MainApp, listas,
-detalhe/edição) ainda não foi visto rodando de verdade** — só testado por baixo, via as rotas de
-API (etapa 4). Precisa do Carlos abrir num navegador de verdade e confirmar.
+permissão/senha ainda 100%. **Limite real desta verificação, na época**: o `AppShell` é Client
+Component — a decisão splash/login/app só acontece depois da hidratação no navegador, então
+`curl` no HTML provava só "o servidor não quebra", não "a tela renderiza certo"; a Browser pane
+segue banida pra este projeto (ver `feedback_toastrack_no_browser_pane`). **Resolvido em
+2026-09-01**: o Carlos verificou visualmente em produção pela primeira vez desde o início da
+migração — ver seção 7.2.
+
+### 7.2 Achados do primeiro uso real em produção (2026-09-01 e 2026-09-02)
+
+Depois do deploy (etapa 7), o Carlos abriu o app de verdade no navegador dele pela primeira vez
+desde a migração — todo diagnóstico a seguir foi feito por `curl`/scripts Node contra a planilha
+real e a rota de auth de produção, nunca pela Browser pane (banida neste projeto).
+
+- **2026-09-01**: dois bugs de produção achados e corrigidos — login travava até um F5 manual
+  (faltava `update()` do `useSession` depois do `signIn`, mesmo padrão de
+  `TrocarSenhaObrigatoria.tsx`) e fotos não apareciam em lugar nenhum (`Thumb` nunca teve código
+  lendo `img_url` — implementado `driveImageUrl()` convertendo o link "view" do Drive pro link de
+  imagem direta `lh3.googleusercontent.com`, e corrigido o Detalhe guardando a foto num state
+  próprio em vez de depender de `values`, que só carrega os campos de formulário).
+- **2026-09-02**: reportado que a lista de cervejas não rolava pra baixo. Causa: `<main>`
+  (`MainApp.tsx`) e os containers de `ListScreen`/Home/Stats/Perfil dentro dele são flexbox
+  aninhado sem `min-h-0` — por padrão um item flex tem `min-height: auto` (cresce pelo conteúdo
+  em vez de respeitar a altura disponível), então a lista crescia além do `<main>` e o
+  `overflow-hidden` dele cortava o final em vez de deixar o `overflow-y-auto` interno rolar.
+  Afetava todas as 4 categorias e as outras telas com scroll, não só cervejas — só apareceu ali
+  primeiro por ter itens suficientes pra estourar a tela. Corrigido adicionando `min-h-0` em toda
+  a cadeia (`<main>`, raiz do `ListScreen`, os wrappers `flex-1 overflow-y-auto`).
+- **Reconciliação com botão** (fechando a pendência da etapa 6 — antes só existia a função
+  `refreshAllNow`, sem lugar na UI pra chamá-la): card "Sincronização" em `ProfileScreen.tsx` com
+  o botão "Atualizar tudo agora" — é o que resolve um item apagado fora do app (edição direta na
+  planilha, outro dispositivo) que ficaria "fantasma" no cache local até isso.
+- **Upload de foto implementado** (fechava a lacuna documentada na etapa 6: `img_url`/`img_nome`
+  sempre existiram, nenhuma tela subia foto nova). O Apps Script já tinha `driveUploadFile`
+  pronto desde a etapa 1 (seção 6.1) — faltava só o lado do Next.js:
+  - `src/lib/sheets/items.ts` (`uploadItemPhoto`, servidor): confere permissão de escrita
+    (mesma checagem de `updateItem`/`deleteItem`, nunca aceita categoria/pasta do corpo da
+    requisição), chama `driveUploadFile` com `categoria`/`userId` da sessão, grava o link+nome
+    retornados nas colunas `*_img_url`/`*_img_nome` — as mesmas já usadas pelos ~3600 itens
+    reais.
+  - `POST /api/items/[tipo]/[id]/foto` — rota nova, mesmo padrão de auth/validação (`zod`) das
+    outras rotas de item.
+  - `src/lib/photoUpload.ts` (cliente): redimensiona (maior lado ≤1600px) e recomprime em JPEG
+    via `<canvas>` antes de mandar — uma foto de câmera pode ter 5-10 MB, isso evita estourar
+    limite de payload da função serverless. **De propósito sem outbox/offline** (mesmo raciocínio
+    já documentado em `sync.ts`): precisa de rede na hora pra saber a URL que o Drive devolveu,
+    então falha com mensagem clara se offline em vez de fingir sucesso otimista.
+  - `DetailScreen.tsx`: o botão placeholder ("Upload de foto chega com o Storage") virou um
+    `<input type="file">` de verdade, desabilitado até o item ser salvo (upload precisa de um id
+    de linha real).
+  - **Testado de ponta a ponta contra o Drive/planilha reais**
+    (`npm run test:photo-upload-integration`, 4/4): sobe um JPEG mínimo de verdade, confirma que
+    quem não tem permissão é recusado antes de chamar o Drive, que a URL/nome voltam certos, e
+    que a linha da planilha reflete a foto — sempre apagando o arquivo de teste do Drive e o item
+    de teste no `finally`.
+  - **Não fica pra depois** (fora de escopo desta rodada, aceito): trocar a foto não apaga a
+    anterior do Drive — fica órfã lá. Sem outbox de imagem, então continua igual ao caveat já
+    documentado na etapa 6.
 
 ## 8. Decisões
 
@@ -428,11 +476,11 @@ Fechadas com o Carlos em **2026-08-26**:
   de verdade.
 - **Senha**: nenhuma é migrada; esquema `scrypt` + senha provisória do WebCRM — ver seção 4.1.
 
-Ainda em aberto:
+**Resolvido na etapa 7**: `next.config.ts` já não tem `output: 'export'`/`basePath`/
+`images.unoptimized` — saíram todos na ida pro Vercel (ver comentário no próprio arquivo).
 
-- **2FA e sessão de 15 dias**: estavam no plano do Supabase; com NextAuth muda a implementação.
-- **`next.config.ts`**: hoje tem `output: 'export'`, `basePath: '/toastrack'` e
-  `images.unoptimized` — tudo isso sai na ida pro Vercel.
+**Arquivado (2026-09-02, decisão do Carlos)**: 2FA e sessão de 15 dias estavam no plano do
+Supabase; não entram na reimplementação com NextAuth. Sem previsão de retomar.
 
 ## 9. O que se perde e o que se ganha
 
