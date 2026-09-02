@@ -457,6 +457,21 @@ real e a rota de auth de produção, nunca pela Browser pane (banida neste proje
   - **Não fica pra depois** (fora de escopo desta rodada, aceito): trocar a foto não apaga a
     anterior do Drive — fica órfã lá. Sem outbox de imagem, então continua igual ao caveat já
     documentado na etapa 6.
+- **Fotos de vinho não apareciam** (reportado 2026-09-02, depois do upload acima já estar no ar):
+  não é bug de código — `driveImageUrl`/`Thumb` são exatamente os mesmos pros dois tipos.
+  `scripts/check-photo-sharing.mjs wine` confirmou 0 de 47 fotos publicamente acessíveis (todas
+  redirecionam pra login do Google, 302); o mesmo script contra `beer` mostra as fotos reais
+  respondendo 200 direto. Causa: as ~3600 fotos de cerveja foram organizadas/compartilhadas antes
+  da migração; as 76 de vinho nunca passaram por isso — ficaram sem "Qualquer pessoa com o link".
+  Fotos enviadas PELO app (`driveUploadFile`, seção 7.2 acima) já nascem com essa permissão certa
+  — o problema é só o acervo antigo. Adicionada `corrigirCompartilhamentoDeFotosAntigas()` em
+  `apps-script/Codigo.gs` (checa as 4 abas de item, corrige quem não está público, idempotente) —
+  **de propósito fora do `api()`/doPost** (tornar um arquivo público a partir só de um fileId da
+  rede, sem a checagem de pasta que `arquivoDoUsuario` faz pro resto dos verbos de Drive, seria
+  uma superfície de ataque desnecessária no Web App público). **Pendente**: o Carlos precisa
+  colar o `Codigo.gs` atualizado no editor do Apps Script e rodar essa função manualmente uma vez
+  (mesmo fluxo do `testeAutorizacao`) — não tenho como executar Apps Script direto desta máquina.
+  Depois de rodar, `npm run check-photo-sharing wine` confirma (deveria virar 47 públicas).
 
 ## 8. Decisões
 

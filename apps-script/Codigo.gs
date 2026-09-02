@@ -647,6 +647,53 @@ function driveDownloadFile(payload) {
   };
 }
 
+// ---------- MANUTENÇÃO (executar manualmente pelo editor - não passa por doPost/api) ----------
+
+/**
+ * Corrige fotos pré-existentes (subidas antes do app existir, direto pelo Carlos) que não estão
+ * compartilhadas como "Qualquer pessoa com o link" - o Carlos reportou 2026-09-02 que as fotos
+ * de vinho não apareciam; `curl` confirmou que os links de foto do `wine` redirecionam pra login
+ * do Google (302), enquanto os de `beer` respondem 200 direto - ou seja, não é bug de código
+ * (driveImageUrl/Thumb funcionam iguais pros dois), é permissão de compartilhamento faltando no
+ * arquivo do Drive em si. Fotos enviadas PELO app (`driveUploadFile`) já nascem com
+ * `setSharing(ANYONE_WITH_LINK, VIEW)` - isto é só para o acervo antigo.
+ *
+ * De propósito NÃO exposta via `api()`/doPost: tornar um arquivo público a partir só de um
+ * fileId vindo da rede (sem a checagem de pasta de `arquivoDoUsuario`) seria uma superfície de
+ * ataque desnecessária no Web App publicado como "Qualquer pessoa". Rodar direto no editor
+ * (selecionar a função no dropdown de cima e clicar em Executar), com os logs em Ver > Logs.
+ * Idempotente: rodar de novo não mexe nos arquivos já corrigidos.
+ */
+function corrigirCompartilhamentoDeFotosAntigas() {
+  var colunaPorAba = { beer: 'beer_img_url', wine: 'wine_img_url', dest: 'dest_img_url', drink: 'drink_img_url' };
+  Object.keys(colunaPorAba).forEach(function (aba) {
+    var coluna = colunaPorAba[aba];
+    var linhas = lerTabela(aba);
+    var corrigidas = 0, jaEstavamOk = 0, semFoto = 0, falharam = 0;
+    linhas.forEach(function (linha) {
+      var raw = linha[coluna];
+      var m = raw && /\/d\/([\w-]+)/.exec(String(raw));
+      if (!m) { semFoto++; return; }
+      var fileId = m[1];
+      try {
+        var file = DriveApp.getFileById(fileId);
+        var acessoAtual = file.getSharingAccess();
+        if (acessoAtual === DriveApp.Access.ANYONE_WITH_LINK || acessoAtual === DriveApp.Access.ANYONE) {
+          jaEstavamOk++;
+        } else {
+          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+          corrigidas++;
+        }
+      } catch (err) {
+        falharam++;
+        Logger.log(aba + ' id=' + linha.id + ' fileId=' + fileId + ': erro - ' + err);
+      }
+    });
+    Logger.log(aba + ': ' + corrigidas + ' corrigidas, ' + jaEstavamOk + ' já estavam ok, ' +
+      semFoto + ' sem foto, ' + falharam + ' falharam');
+  });
+}
+
 // ---------- TESTE DE AUTORIZAÇÃO (executar no editor para conceder os escopos) ----------
 function testeAutorizacao() {
   Logger.log('Planilha: ' + abrirPlanilha().getName());
