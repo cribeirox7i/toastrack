@@ -177,9 +177,9 @@ export default function MainApp() {
       )}
 
       {/* Content */}
-      <main className="flex flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {view === "home" && (
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <HomeScreen searchQuery={query} onOpenStats={openStats} onOpenItem={openItem} />
           </div>
         )}
@@ -209,12 +209,12 @@ export default function MainApp() {
           />
         )}
         {view === "stats" && (
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <StatsScreen type={statsType} />
           </div>
         )}
         {view === "profile" && (
-          <div className="flex-1 overflow-y-auto">
+          <div className="min-h-0 flex-1 overflow-y-auto">
             <ProfileScreen />
           </div>
         )}

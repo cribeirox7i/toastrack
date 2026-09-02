@@ -152,7 +152,7 @@ export default function ListScreen({
   const activeProfileInitials = initialsFor(viewedProfile ? viewedProfile.name : ownName);
 
   return (
-    <div className="relative flex flex-1 flex-col">
+    <div className="relative flex min-h-0 flex-1 flex-col">
       {/* Header: search + field selector + avatar (mobile) */}
       <header className="flex items-center gap-2 border-b border-border px-5 py-2.5">
         <div className="relative flex-1">
@@ -283,7 +283,7 @@ export default function ListScreen({
       </div>
 
       {/* Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {!loading && filtered.length === 0 ? (
           <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
         ) : viewMode === "deck" ? (
