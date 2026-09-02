@@ -90,6 +90,7 @@ export default function ListScreen({
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<Item | null>(null);
   const [toast, setToast] = useState("");
 
@@ -177,6 +178,49 @@ export default function ListScreen({
             </option>
           ))}
         </select>
+        <div className="relative">
+          <button
+            onClick={() => setSortMenuOpen((v) => !v)}
+            title="Ordenar"
+            aria-label="Ordenar"
+            className="flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-2.5 text-[13px] font-semibold text-muted"
+          >
+            <Icon name="sort" size={15} />
+            <span className="hidden sm:inline">
+              {SORT_COLS.find((c) => c.key === sortField)?.label}
+            </span>
+          </button>
+          {sortMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
+              <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[190px] rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
+                {SORT_COLS.map((c) => {
+                  const active = sortField === c.key;
+                  return (
+                    <button
+                      key={c.key}
+                      onClick={() => {
+                        toggleSort(c.key);
+                        setSortMenuOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold"
+                      style={{ background: active ? "var(--accent-soft)" : "transparent" }}
+                    >
+                      <span className={active ? "text-accent" : ""}>{c.label}</span>
+                      {active && (
+                        <Icon
+                          name="chevronDown"
+                          size={14}
+                          className={`text-accent transition-transform ${sortDir === "asc" ? "rotate-180" : ""}`}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
         <button
           onClick={onOpenProfile}
           aria-label="Perfil"
@@ -288,7 +332,7 @@ export default function ListScreen({
           <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
         ) : viewMode === "deck" ? (
           <DeckView
-            items={filtered}
+            items={sorted}
             onOpen={onOpenItem}
             onEdit={onEditItem}
             onDuplicate={doDuplicate}
@@ -306,7 +350,7 @@ export default function ListScreen({
             onDelete={setConfirmItem}
           />
         ) : (
-          <GalleryView items={filtered} onOpen={onOpenItem} />
+          <GalleryView items={sorted} onOpen={onOpenItem} />
         )}
       </div>
 
