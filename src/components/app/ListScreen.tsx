@@ -464,16 +464,24 @@ function DeckView({
         <div
           key={item.id}
           onClick={() => onOpen(item)}
-          className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-2.5"
+          className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-3 shadow-sm transition active:scale-[0.99]"
         >
-          <Thumb label={item.name} src={item.imgUrl} className="size-[72px] shrink-0 rounded-xl" />
+          <Thumb label={item.name} src={item.imgUrl} className="size-[92px] shrink-0 rounded-2xl" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15px] font-extrabold">{item.name}</div>
+            <div className="truncate text-[15.5px] font-extrabold">{item.name}</div>
             <div className="truncate text-[12.5px] text-muted">{item.manufacturer}</div>
-            <div className="mt-1.5 flex items-center gap-2 text-[12.5px]">
-              <Stars value={item.rating} />
-              <span className="text-muted">{formatDate(item.date)}</span>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5">
+              {item.category && (
+                <span className="max-w-[9.5rem] truncate rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-bold text-accent">
+                  {item.category}
+                </span>
+              )}
+              <span className="flex items-center gap-1 rounded-full bg-track px-2 py-0.5 text-[11px] font-bold">
+                <span className="text-accent">★</span>
+                {item.rating.toFixed(1)}
+              </span>
             </div>
+            <div className="mt-1.5 text-[11.5px] text-muted">{formatDate(item.date)}</div>
           </div>
           {item.canEdit && (
             <RowActions item={item} onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />
@@ -573,15 +581,23 @@ function GalleryView({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => vo
         <div
           key={item.id}
           onClick={() => onOpen(item)}
-          className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface"
+          className="cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition active:scale-[0.99]"
         >
-          <Thumb label={item.name} src={item.imgUrl} className="aspect-[3/4] w-full" />
+          <div className="relative">
+            <Thumb label={item.name} src={item.imgUrl} className="aspect-[3/4] w-full" />
+            <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-bg/85 px-2 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-sm">
+              <span className="text-accent">★</span>
+              {item.rating.toFixed(1)}
+            </span>
+          </div>
           <div className="p-2.5">
             <div className="truncate text-[13px] font-bold">{item.name}</div>
             <div className="truncate text-[11px] text-muted">{item.manufacturer}</div>
-            <div className="mt-1 flex items-center gap-1 text-[11px]">
-              <Stars value={item.rating} className="text-[11px]" />
-            </div>
+            {item.category && (
+              <span className="mt-1.5 inline-block max-w-full truncate rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
+                {item.category}
+              </span>
+            )}
           </div>
         </div>
       ))}

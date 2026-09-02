@@ -46,8 +46,13 @@ export function hueToPaletteEnum(hue: HueName): string {
   return PALETTES.find((p) => p.name === hue)?.enumValue ?? "Verde";
 }
 
-export const DEFAULT_HUE: HueName = "green";
-export const DEFAULT_MODE: Mode = "light";
+// Padrão pra quem nunca configurou preferência (primeiro login, ou a tela de login antes de
+// autenticar) — decisão do Carlos em 2026-09-02, inspirada numa referência de app de cerveja.
+// Continua 100% trocável por usuário em Perfil > Paleta/Modo; não muda a preferência de quem já
+// tinha salvo a própria (ver `prefsAppliedFor` em MainApp.tsx, que só aplica o hue/modo salvos do
+// usuário quando existem).
+export const DEFAULT_HUE: HueName = "orange";
+export const DEFAULT_MODE: Mode = "dark";
 
 export const STORAGE_KEYS = {
   hue: "tt.hue",

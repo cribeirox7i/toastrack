@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { callAppsScript } from "./client";
 import { hashPassword, generateProvisionalPassword, verifyPassword } from "@/lib/authCrypto";
+import { DEFAULT_HUE, DEFAULT_MODE, hueToPaletteEnum } from "@/lib/theme";
 import type { UserRow } from "./types";
 
 /**
@@ -68,8 +69,11 @@ export async function createUser(input: {
     user_status: "S",
     user_role: input.role ?? "user",
     user_idioma: "pt",
-    user_paleta: "verde",
-    user_modo: "light",
+    // Antes hardcoded "verde"/"light" com grafia divergente do enum real (theme.ts compara
+    // exato, "Verde" != "verde" — caía no fallback "green" de qualquer jeito). Agora usa o
+    // padrão atual do produto (ver DEFAULT_HUE/DEFAULT_MODE, decisão do Carlos 2026-09-02).
+    user_paleta: hueToPaletteEnum(DEFAULT_HUE),
+    user_modo: DEFAULT_MODE,
     user_url_img: "",
     senha_hash: hashPassword(provisionalPassword),
     deve_trocar_senha: "true",
