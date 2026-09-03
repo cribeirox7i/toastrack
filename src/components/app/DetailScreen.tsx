@@ -7,6 +7,7 @@ import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
 import { uploadItemPhoto } from "@/lib/photoUpload";
+import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
   fieldByRole,
@@ -54,6 +55,7 @@ export default function DetailScreen({
   const [confirmDel, setConfirmDel] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
   function showToast(m: string) {
     setToast(m);
@@ -268,11 +270,17 @@ export default function DetailScreen({
         ) : (
           /* ---------- VIEW ---------- */
           <div className="mx-auto w-full max-w-md px-5 py-4">
-            <Thumb
-              label={values[nameField.col] || "item"}
-              src={imgUrl}
-              className="h-44 w-full rounded-2xl"
-            />
+            <button
+              onClick={() => imgUrl && setPhotoViewerOpen(true)}
+              disabled={!imgUrl}
+              className="block w-full disabled:cursor-default"
+            >
+              <Thumb
+                label={values[nameField.col] || "item"}
+                src={imgUrl}
+                className="h-44 w-full rounded-2xl"
+              />
+            </button>
 
             <div className="mt-3 flex gap-2">
               <ActionBtn label="Google" onClick={googleSearch} icon="search" />
@@ -355,6 +363,14 @@ export default function DetailScreen({
         <div className="fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded-full bg-text px-4 py-2 text-[13px] font-semibold text-bg shadow-lg">
           {toast}
         </div>
+      )}
+
+      {photoViewerOpen && imgUrl && (
+        <PhotoViewer
+          src={imgUrl}
+          alt={values[nameField.col] || "item"}
+          onClose={() => setPhotoViewerOpen(false)}
+        />
       )}
     </div>
   );
