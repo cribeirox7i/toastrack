@@ -1,11 +1,13 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
 import {
+  applyServerPatch,
   createItemOffline,
   getCachedItem,
   getCachedLookups,
   pullLookups,
   updateItemOffline,
   type ItemTab,
+  type RawItemRow,
 } from "@/lib/offline/sync";
 
 /** A field in the per-type detail/edit form. `role` drives special layout;
@@ -147,11 +149,12 @@ function coerce(field: Field, raw: string): string {
 }
 
 /**
- * Cria (id null) ou atualiza um item a partir dos valores do formulário — otimista (etapa 6, ver
- * src/lib/offline/sync.ts): grava no IndexedDB e devolve o id na hora, sincroniza em segundo
- * plano. `ownerId` só serve pra a linha local nascer com o dono certo antes de qualquer resposta
- * do servidor (que recalcula os mesmos valores por conta própria — nunca confia no que o cliente
- * manda, ver src/lib/sheets/items.ts); não é usado na atualização (o dono não muda por edição).
+ * Cria (id null) ou atualiza um item a partir dos valores do formulário. Atualização é otimista
+ * (etapa 6, ver src/lib/offline/sync.ts): grava no IndexedDB e devolve na hora, sincroniza em
+ * segundo plano. `ownerId` só serve pra a linha local nascer com o dono certo antes de qualquer
+ * resposta do servidor (que recalcula os mesmos valores por conta própria — nunca confia no que o
+ * cliente manda, ver src/lib/sheets/items.ts); não é usado na atualização (o dono não muda por
+ * edição).
  */
 export async function saveItem(
   type: ItemType,
@@ -163,7 +166,38 @@ export async function saveItem(
   for (const f of SCHEMA[type].fields) payload[f.col] = coerce(f, values[f.col] ?? "");
 
   const tab = TYPE_TAB[type] as ItemTab;
-  if (id == null) return createItemOffline(tab, payload, ownerId);
+  if (id == null) return createNewItem(tab, payload, ownerId);
   await updateItemOffline(tab, id, payload);
   return id;
+}
+
+/**
+ * Criação de item: tenta direto no servidor primeiro. O id agora é sempre sequencial, atribuído
+ * pelo servidor (pedido do Carlos 2026-09-02: "a chave das tabelas precisa ser sequencial") — o
+ * servidor ignora qualquer id que o cliente mande. Criar direto (em vez de sempre otimista)
+ * evita depender do remapeamento de id no caso comum (com internet): o item já nasce com o id
+ * final, sem id temporário nenhum — importante porque quem chama isto com id null é justamente o
+ * rascunho criado ao abrir "novo item" (DetailScreen), que precisa de um id ESTÁVEL na hora pra
+ * já poder anexar foto (ver "a jornada de cadastro começa pela imagem", mesma data). Só cai pro
+ * caminho otimista/offline (`createItemOffline`, id temporário + fila, remapeado depois em
+ * sync.ts) quando de fato não há conexão ou a chamada falha por rede.
+ */
+async function createNewItem(tab: ItemTab, payload: Record<string, string>, ownerId: string): Promise<string> {
+  if (navigator.onLine) {
+    try {
+      const res = await fetch(`/api/items/${tab}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        const row = (await res.json()) as RawItemRow;
+        await applyServerPatch(tab, row.id, row as Record<string, string>);
+        return row.id;
+      }
+    } catch {
+      // sem rede de verdade apesar do navigator.onLine, ou erro transitório - cai pro offline.
+    }
+  }
+  return createItemOffline(tab, payload, ownerId);
 }

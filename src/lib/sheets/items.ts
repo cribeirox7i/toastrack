@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { callAppsScript } from "./client";
 import { canRead, canWrite, ensureInEditList } from "./permissions";
 import {
@@ -81,13 +80,18 @@ export async function createItem(
   payload: Record<string, string>,
   sessionUserId: string
 ): Promise<ItemRowBase> {
-  const { id: idDoCliente, ...conteudo } = payload;
+  // O id é SEMPRE sequencial, atribuído aqui - nunca aceito do cliente (decisão do Carlos
+  // 2026-09-02: "a chave das tabelas precisa ser sequencial, sempre acréscimo do maior número").
+  // Isso é diferente do id que o cliente eventualmente manda (`payload.id`, um uuid temporário
+  // gerado pelo `createItemOffline` pra criação otimista offline) - o id do cliente é só um
+  // placeholder local; o real (devolvido aqui) pode ser outro, e quem chamou isto do lado do
+  // cliente (src/lib/offline/sync.ts, `remapItemId`) troca a referência local pelo id de verdade.
+  const { id: _idDoCliente, ...conteudo } = payload;
+  void _idDoCliente;
+  const novoId = await callAppsScript<string>("proximoIdSequencial", { tab: ITEM_TAB[tipo] });
   const row: ItemRowBase = {
     ...conteudo,
-    // Reaproveita o id do cliente quando informado (etapa 6 — item criado offline já nasce com
-    // um uuid local; se o servidor gerasse outro, o item apareceria "duplicado" na UI até a
-    // próxima sincronização trocar a referência). Mesmo padrão do createTrip do TravelTrack.
-    id: idDoCliente || randomUUID(),
+    id: novoId,
     user_owner: sessionUserId,
     user_access: payload.user_access ?? "",
     // O criador sempre entra em user_edit (mesmo já sendo o dono, ensureInEditList não duplica) -

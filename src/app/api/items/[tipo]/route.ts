@@ -11,10 +11,11 @@ function parseTipo(raw: string): ItemType | null {
 }
 
 // Conteúdo do item é livre (varia por tipo: beer_nome, wine_cor, ...) — validado como um mapa de
-// strings. createItem() é quem neutraliza qualquer tentativa de mandar user_owner/updated_at
-// no corpo (sempre sobrescritos com o valor calculado no servidor), então não precisa filtrar
-// aqui; só garante que o formato geral é são. `id` é opcional — ver createItem, etapa 6: o
-// cliente manda o uuid gerado localmente quando cria offline, pra manter a mesma referência.
+// strings. createItem() é quem neutraliza qualquer tentativa de mandar user_owner/updated_at/id
+// no corpo (sempre sobrescritos com o valor calculado no servidor - o id agora é sempre
+// sequencial, decisão do Carlos 2026-09-02, nunca aceito do cliente mesmo que venha um uuid
+// temporário de criação offline), então não precisa filtrar aqui; só garante que o formato geral
+// é são.
 const createSchema = z.record(z.string(), z.string());
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ tipo: string }> }) {

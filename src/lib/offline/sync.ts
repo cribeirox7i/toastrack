@@ -32,6 +32,19 @@ function notifyChange() {
   syncEvents.dispatchEvent(new Event("change"));
 }
 
+/** Detalhe de um evento "remap" - ver remapItemId. Quem estiver com uma tela aberta olhando pro
+ *  id antigo (ex.: DetailScreen num rascunho criado offline) escuta isto pra trocar de referência
+ *  sem precisar sair da tela. */
+export interface RemapDetail {
+  tab: ItemTab;
+  oldId: string;
+  newId: string;
+}
+
+function notifyRemap(detail: RemapDetail) {
+  syncEvents.dispatchEvent(new CustomEvent<RemapDetail>("remap", { detail }));
+}
+
 export function isOnline(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine;
 }
@@ -146,6 +159,13 @@ export async function getCachedLookups(): Promise<LookupsResponse | null> {
 export const MAX_OUTBOX_ATTEMPTS = 5;
 let pushing = false;
 
+/** Resultado de tentar mandar uma entrada da fila. `remap` só existe pra "createItem" quando o
+ *  servidor devolveu um id diferente do que o cliente mandou - ver ITEM_ID_SEQUENCIAL abaixo. */
+type SendResult =
+  | { status: "ok"; remap?: { tab: ItemTab; oldId: string; newId: string } }
+  | { status: "network-error" }
+  | { status: "error"; message: string };
+
 export async function pushOutbox(): Promise<void> {
   if (pushing || !isOnline()) return;
   pushing = true;
@@ -154,11 +174,12 @@ export async function pushOutbox(): Promise<void> {
     for (const entry of entries) {
       if (entry.attempts >= MAX_OUTBOX_ATTEMPTS) continue;
       const result = await sendOutboxEntry(entry);
-      if (result === "network-error") break; // provavelmente caiu o sinal de novo - tenta depois
-      if (result === "ok") {
+      if (result.status === "network-error") break; // provavelmente caiu o sinal - tenta depois
+      if (result.status === "ok") {
         await removeOutboxEntry(entry.localId);
+        if (result.remap) await remapItemId(result.remap.tab, result.remap.oldId, result.remap.newId, entries);
       } else {
-        await updateOutboxEntry({ ...entry, attempts: entry.attempts + 1, lastError: result });
+        await updateOutboxEntry({ ...entry, attempts: entry.attempts + 1, lastError: result.message });
       }
       notifyChange();
     }
@@ -167,7 +188,33 @@ export async function pushOutbox(): Promise<void> {
   }
 }
 
-async function sendOutboxEntry(entry: OutboxEntry): Promise<"ok" | "network-error" | string> {
+/**
+ * O id de um item novo é sempre sequencial e atribuído pelo SERVIDOR (ITEM_ID_SEQUENCIAL, pedido
+ * do Carlos 2026-09-02: "a chave das tabelas precisa ser sequencial") - o servidor ignora
+ * completamente o id que o cliente manda em `createItem`. Só que a criação otimista (ver
+ * `createItemOffline`) precisa de um id NA HORA, antes de qualquer resposta do servidor, pra
+ * gravar local e mostrar o item na tela - por isso ainda gera um id temporário (uuid) no
+ * aparelho. Quando o outbox sincroniza esse `createItem` e o servidor devolve o id real (que
+ * nunca bate com o temporário), a linha local muda de chave (o id antigo deixa de existir) e
+ * qualquer outra escrita já enfileirada pra esse mesmo item (uma edição feita antes de
+ * sincronizar, por exemplo) precisa apontar pro id novo - é isso que `remapItemId` faz.
+ */
+async function remapItemId(tab: ItemTab, oldId: string, newId: string, pendingEntries: OutboxEntry[]): Promise<void> {
+  const row = await getOne(tab, oldId);
+  if (row) {
+    await deleteOne(tab, oldId);
+    await putOne(tab, { ...row, id: newId });
+  }
+  for (const other of pendingEntries) {
+    if (other.tab === tab && other.itemId === oldId) {
+      other.itemId = newId;
+      await updateOutboxEntry(other);
+    }
+  }
+  notifyRemap({ tab, oldId, newId });
+}
+
+async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
   try {
     let res: Response;
     switch (entry.kind) {
@@ -189,11 +236,20 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<"ok" | "network-erro
         res = await fetch(`/api/items/${entry.tab}/${entry.itemId}`, { method: "DELETE" });
         break;
     }
-    if (res.ok) return "ok";
-    const body = await res.json().catch(() => ({}));
-    return body.error ?? `Erro ${res.status}`;
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return { status: "error", message: body.error ?? `Erro ${res.status}` };
+    }
+    if (entry.kind === "createItem") {
+      const row = (await res.json().catch(() => null)) as RawItemRow | null;
+      const tempId = entry.payload.id;
+      if (row?.id && tempId && row.id !== tempId) {
+        return { status: "ok", remap: { tab: entry.tab, oldId: tempId, newId: row.id } };
+      }
+    }
+    return { status: "ok" };
   } catch {
-    return "network-error";
+    return { status: "network-error" };
   }
 }
 
@@ -206,10 +262,12 @@ export async function discardOutboxEntry(localId: string): Promise<void> {
 
 // ---------- Ações otimistas (grava local + enfileira + tenta sincronizar) ----------
 
-/** Cria um item otimista — devolve o id na hora (gerado localmente, reaproveitado pelo servidor,
- *  ver createItem em src/lib/sheets/items.ts) sem esperar a rede. `fields` são só os campos de
- *  conteúdo (ex.: beer_nome); dono/edição são calculados aqui pra a UI já mostrar "posso editar"
- *  antes de qualquer sincronização — o servidor recalcula os mesmos valores por conta própria. */
+/** Cria um item otimista — devolve um id temporário na hora (uuid gerado localmente) sem esperar
+ *  a rede, só pro item existir/aparecer offline; o servidor NÃO reaproveita esse id (é sempre
+ *  sequencial, ver createItem em src/lib/sheets/items.ts) - quando o outbox sincronizar, a linha
+ *  local é remapeada pro id de verdade (ver `remapItemId`). `fields` são só os campos de conteúdo
+ *  (ex.: beer_nome); dono/edição são calculados aqui pra a UI já mostrar "posso editar" antes de
+ *  qualquer sincronização — o servidor recalcula os mesmos valores por conta própria. */
 export async function createItemOffline(
   tab: ItemTab,
   fields: Record<string, string>,

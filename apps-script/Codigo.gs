@@ -108,6 +108,7 @@ function api(action, payload) {
       // única credencial aceita aqui, ficaria alcançável por qualquer chamador que o conheça.
       // `resetarAba` continua existindo no arquivo só para uso manual pelo editor.
       case 'metaGet':          return ok(metaGet(payload.chave));
+      case 'proximoIdSequencial': return ok(proximoIdSequencial(abaValida(payload.tab)));
       case 'driveUploadFile':  return ok(driveUploadFile(payload));
       case 'driveListFiles':   return ok(driveListFiles(payload));
       case 'driveDeleteFile':  return ok(driveDeleteFile(payload));
@@ -248,6 +249,55 @@ function metaSet(chave, valor) {
 /** Se `nome` for uma aba de item, atualiza o carimbo dela em SyncMeta com o instante atual. */
 function tocarMeta(nome) {
   if (ABAS_ITEM.indexOf(nome) !== -1) metaSet(nome, new Date().toISOString());
+}
+
+/**
+ * Devolve o próximo id sequencial (inteiro, como texto) de uma aba de item - decisão do Carlos
+ * 2026-09-02: "a chave das tabelas (ID) precisa ser sequencial, sempre acréscimo do maior número
+ * que está na tabela" - cada aba (beer/wine/dest/drink) com a própria contagem, não uma única
+ * global. Guarda o contador em SyncMeta (chave `nextId:{tab}`), tudo sob UM lock (não reaproveita
+ * metaGet/metaSet, que teriam seu próprio lock cada - evita depender de o lock do Apps Script ser
+ * reentrante), pra duas criações concorrentes (dois usuários ao mesmo tempo) nunca saírem com o
+ * mesmo número.
+ *
+ * Se o contador ainda não existe (primeira chamada depois desta mudança), inicializa varrendo o
+ * maior `id` numérico já usado na aba - preserva a continuidade com os ids antigos (que já eram
+ * sequenciais antes da migração pra Sheets, ver MIGRACAO_SHEETS.md seção 3) em vez de reiniciar
+ * do 1 e colidir com uma linha existente. Esse é o ÚNICO ponto que lê a aba inteira; depois disso
+ * o contador fica em SyncMeta e as chamadas seguintes são baratas.
+ */
+function proximoIdSequencial(tab) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const chave = 'nextId:' + tab;
+    const sh = getSheet('SyncMeta');
+    const valores = sh.getDataRange().getValues();
+    let linha = -1;
+    let atual = '';
+    for (let r = 1; r < valores.length; r++) {
+      if (valores[r][0] === chave) { linha = r; atual = valores[r][1]; break; }
+    }
+    const proximo = atual ? (Number(atual) + 1) : (maiorIdNumericoAtual(tab) + 1);
+    if (linha !== -1) {
+      sh.getRange(linha + 1, 2).setValue(String(proximo));
+    } else {
+      sh.appendRow([chave, String(proximo)]);
+    }
+    return String(proximo);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function maiorIdNumericoAtual(tab) {
+  const linhas = lerTabela(tab);
+  let maior = 0;
+  linhas.forEach(function (linha) {
+    const n = Number(linha.id);
+    if (!isNaN(n) && n > maior) maior = n;
+  });
+  return maior;
 }
 
 /**

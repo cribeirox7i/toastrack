@@ -4,9 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
-import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, type ItemType } from "@/lib/catalog";
+import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
 import { uploadItemPhoto } from "@/lib/photoUpload";
+import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
@@ -106,6 +107,19 @@ export default function DetailScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId, type]);
+
+  // Rede de segurança pro caso raro do rascunho ter sido criado offline (sem internet o id
+  // sequencial não pode ser atribuído na hora - ver createNewItem em itemSchema.ts): se esta
+  // tela continuar aberta até a sincronização remapear o id temporário pro id real, troca a
+  // referência sem sair da tela em vez de deixar currentId apontando pra uma linha que sumiu.
+  useEffect(() => {
+    function onRemap(e: Event) {
+      const { tab, oldId, newId } = (e as CustomEvent<RemapDetail>).detail;
+      if (tab === TYPE_TAB[type] && oldId === currentId) setCurrentId(newId);
+    }
+    syncEvents.addEventListener("remap", onRemap);
+    return () => syncEvents.removeEventListener("remap", onRemap);
+  }, [type, currentId]);
 
   const paisName = useMemo(() => {
     const map = new Map(lookup.pais.map((p) => [String(p.pais_id), p.pais_nome]));
