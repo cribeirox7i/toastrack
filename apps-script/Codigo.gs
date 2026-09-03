@@ -112,6 +112,7 @@ function api(action, payload) {
       case 'metaGet':          return ok(metaGet(payload.chave));
       case 'proximoIdSequencial': return ok(proximoIdSequencial(abaValida(payload.tab)));
       case 'driveUploadFile':  return ok(driveUploadFile(payload));
+      case 'itemFotoUpload':   return ok(itemFotoUpload(payload));
       case 'driveListFiles':   return ok(driveListFiles(payload));
       case 'driveDeleteFile':  return ok(driveDeleteFile(payload));
       case 'driveDownloadFile': return ok(driveDownloadFile(payload));
@@ -744,6 +745,34 @@ function driveUploadFile(payload) {
     mimeType: file.getMimeType(),
     criadoEm: file.getDateCreated().toISOString()
   };
+}
+
+/**
+ * Sobe a foto E grava as colunas de imagem do item numa execução só.
+ *
+ * Por que existe: medido contra a produção em 2026-09-03, cada ida ao Apps Script é uma loteria
+ * de 3s a 60s (a variação vem do lado do Google, não do tamanho do arquivo), e a rota de foto do
+ * app fazia TRÊS - readById pra conferir permissão, driveUploadFile, updateById. Isso
+ * multiplicava por três a chance de pegar um minuto ruim, e era o que virava "Enviando..." por
+ * 2-3 minutos e erro no fim. Juntando as duas escritas aqui, sobram duas idas (a leitura de
+ * permissão e esta).
+ *
+ * A checagem de permissão continua no Next.js, onde mora a regra de dono/user_edit - este verbo
+ * não decide quem pode escrever, e não precisa: quem chega até aqui já provou saber o segredo
+ * compartilhado, exatamente o mesmo nível de confiança que `updateById` sempre teve.
+ */
+function itemFotoUpload(payload) {
+  if (!payload.colUrl || !payload.colNome) {
+    throw new Error('itemFotoUpload: colUrl e colNome são obrigatórios');
+  }
+  const aba = abaValida(payload.tab);
+  const enviado = driveUploadFile(payload);
+  const patch = {};
+  patch[payload.colUrl] = enviado.url;
+  patch[payload.colNome] = enviado.name;
+  patch['updated_at'] = payload.updatedAt || new Date().toISOString();
+  atualizarPorId(aba, payload.id, patch);
+  return enviado;
 }
 
 /** Lista as fotos de um usuário numa categoria. */
