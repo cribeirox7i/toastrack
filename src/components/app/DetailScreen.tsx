@@ -7,6 +7,7 @@ import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
 import { uploadItemPhoto } from "@/lib/photoUpload";
+import { photoDateForInput, toDateInputValue } from "@/lib/photoDate";
 import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
@@ -43,6 +44,7 @@ export default function DetailScreen({
   const nameField = fieldByRole(type, "name")!;
   const producerField = fieldByRole(type, "producer")!;
   const ratingField = fieldByRole(type, "rating")!;
+  const dateField = useMemo(() => fields.find((f) => f.kind === "date"), [fields]);
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
   // true enquanto o item é novo e ainda não teve um "Salvar" de verdade do usuário. A linha na
@@ -63,6 +65,10 @@ export default function DetailScreen({
   useEffect(() => {
     valuesRef.current = values;
   }, [values]);
+  // true enquanto a data de degustação em tela veio do app (o "hoje" que um item novo já nasce
+  // preenchido, ou a data lida da foto anexada) e não da mão do usuário. Só nesse estado a data
+  // da foto pode sobrescrever o que está no campo - digitou a data, ela manda. Ver applyPhotoDate.
+  const dateIsAuto = useRef(false);
   const [imgUrl, setImgUrl] = useState("");
   const [canEdit, setCanEdit] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -99,14 +105,17 @@ export default function DetailScreen({
           setValues(v);
           setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
           setCanEdit(row ? canEditRow(row, ownUserId) : false);
+          dateIsAuto.current = false;
         } else {
           // Item novo: só monta o formulário vazio na hora, SEM criar nada. A linha só nasce
           // quando o usuário anexa uma foto (ensureRow) ou dá Salvar - antes disso, abrir "novo
           // item" nunca toca a rede nem o IndexedDB, então a tela abre na hora.
           const v: Record<string, string> = {};
           for (const f of fields) v[f.col] = "";
-          const dateField = fields.find((f) => f.kind === "date");
-          if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
+          if (dateField) {
+            v[dateField.col] = toDateInputValue(new Date());
+            dateIsAuto.current = true;
+          }
           setValues(v);
           setImgUrl("");
           setCanEdit(true);
@@ -159,6 +168,10 @@ export default function DetailScreen({
   }, [lookup.bjcp]);
 
   function set(col: string, v: string) {
+    if (col === dateField?.col) dateIsAuto.current = false;
+    // Espelha na hora (e não só no efeito, que roda depois do render): `ensureRow` pode ler
+    // valuesRef no mesmo tick em que a data da foto é aplicada.
+    valuesRef.current = { ...valuesRef.current, [col]: v };
     setValues((prev) => ({ ...prev, [col]: v }));
   }
 
@@ -203,11 +216,30 @@ export default function DetailScreen({
     for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
     setValues(v);
     setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
+    dateIsAuto.current = false; // os valores voltaram a ser os do banco, nada aqui é palpite do app
     setEditing(false);
   }
 
   function pickPhoto() {
     fileInputRef.current?.click();
+  }
+
+  /**
+   * Pedido do Carlos (2026-09-03): a foto escolhida na galeria carrega a data em que foi tirada
+   * (EXIF) - ou, na falta dela, a data do arquivo - e é essa a data de degustação de verdade,
+   * não o dia em que o item foi cadastrado. Só preenche quando o campo está vazio ou ainda tem
+   * uma data posta pelo app; data escolhida pelo usuário nunca é sobrescrita.
+   * Devolve a data aplicada ("yyyy-mm-dd") ou "" se não mexeu em nada.
+   */
+  async function applyPhotoDate(file: File): Promise<string> {
+    if (!dateField) return "";
+    const current = (valuesRef.current[dateField.col] ?? "").trim();
+    if (current !== "" && !dateIsAuto.current) return "";
+    const photoDate = await photoDateForInput(file);
+    if (!photoDate || photoDate === current) return "";
+    set(dateField.col, photoDate);
+    dateIsAuto.current = true; // veio do app, não do usuário: outra foto ainda pode substituir
+    return photoDate;
   }
 
   async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -225,8 +257,9 @@ export default function DetailScreen({
     setUploadingPhoto(false);
     if (result.ok && result.url) {
       setImgUrl(result.url);
+      const dataDaFoto = await applyPhotoDate(file);
       onChanged();
-      showToast("Foto enviada");
+      showToast(dataDaFoto ? `Foto enviada · data ${formatDate(dataDaFoto)}` : "Foto enviada");
     } else {
       showToast(result.error ?? "Erro ao enviar a foto.");
     }

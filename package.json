@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
     "test:permissions": "node scripts/test-permissions.mjs",
+    "test:photo-date": "node scripts/test-photo-date.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
     "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
     "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
