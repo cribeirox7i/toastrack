@@ -506,6 +506,68 @@ Fechadas com o Carlos em **2026-08-26**:
 **Arquivado (2026-09-02, decisão do Carlos)**: 2FA e sessão de 15 dias estavam no plano do
 Supabase; não entram na reimplementação com NextAuth. Sem previsão de retomar.
 
+## 8.1 Upload de foto travando (2026-09-03) — diagnóstico e correção
+
+**Sintoma:** anexar foto num item novo de cerveja ficava 2-3 minutos em "Enviando…" e terminava
+com "Erro ao enviar a foto." (a mensagem genérica de `photoUpload.ts` quando a rota devolve algo
+que não é o JSON esperado — inclusive um 504 da função).
+
+**Como foi medido:** reprodução por HTTP contra `toastrack.vercel.app`, com conta descartável
+criada e apagada no próprio teste (nunca pela Browser pane, ver regra do projeto).
+
+- O tamanho do payload **não** é a causa, apesar de uma primeira leitura sugerir isso: 5 KB de
+  base64 levaram 11s, 200 KB levaram 9,8s, 250 KB levaram 38s, 350 KB levaram 80s numa rodada e
+  10,8s noutra, 500 KB levaram 12,6s e 700 KB, 25,8s. A variação é do lado do Google.
+- A mesma chamada pequena ao Apps Script (`createUser`, `createItem`) oscilou entre 5s e 60s em
+  momentos diferentes da mesma sessão.
+- Leituras concorrentes **não** se atrapalham: um `read` de 17s da aba beer rodou junto com um
+  `readById` de 3s sem atrasá-lo.
+- Escritas simultâneas **serializam** no `LockService` (todo write pega o mesmo script lock, e
+  ainda de novo no `tocarMeta`): 3 `updateById` juntos custaram 11-13s cada, contra 4,2s sozinho.
+
+**Conclusão:** cada ida ao Apps Script é uma loteria de ~3s a ~60s, e a rota `/foto` fazia TRÊS
+(`readById` de permissão + `driveUploadFile` + `updateById`), multiplicando por três a chance de
+pegar um minuto ruim — com o cliente esperando em silêncio e o `callAppsScript` ainda repetindo
+cada chamada até 3x, sem timeout nenhum.
+
+**O que foi feito** (nesta ordem):
+
+1. `photoUpload.ts`: escadinha de compressão com teto de 400 KB de base64 (1600px/0.78 →
+   1600/0.62 → 1280/0.68 → 1280/0.55 → 1024/0.55). Antes era 1600px/0.82 **sem teto**, que dá
+   600 KB-1 MB numa foto de celular. Mais `AbortSignal.timeout` de 3 min — antes o "Enviando…"
+   não tinha fim.
+2. `client.ts`: teto de 60s por tentativa (não havia nenhum), configurável por chamada.
+3. `items.ts`: `driveUploadFile` passa a ir com `tentativas: 1`. **Ela não é idempotente** —
+   repetir cria outra cópia no Drive exatamente no caso que motivou a retentativa (o Google
+   responde uma página de erro tendo executado certo). Já a exclusão continua com as
+   retentativas padrão, porque mandar pro lixo duas vezes é inofensivo.
+4. **Upload em segundo plano** (pedido do Carlos: "enquanto o usuário preenche os demais campos,
+   a foto está subindo"): a imagem aparece na hora do `blob:` local, a data sai do EXIF na hora
+   (sempre foi leitura local), e o envio segue solto. `save()` espera o upload pendente antes de
+   gravar — sem isso criaria uma SEGUNDA linha, já que quem cria a linha do rascunho é o próprio
+   upload (`ensureRow`). Por isso `currentId` ganhou um ref: o handler assíncrono que continua
+   depois do `ensureRow` ainda enxergaria `null` no closure dele.
+5. **Rollback no Cancelar** (`removeItemPhoto` + `DELETE /api/items/[tipo]/[id]/foto`): antes não
+   existia nenhum — o arquivo ficava no Drive pra sempre mesmo quando o item nunca era salvo.
+   Rascunho cancelado apaga a linha e a foto; item existente devolve a foto anterior nas colunas
+   e apaga do Drive a que subiu agora. A limpeza roda solta depois da tela fechar, mas só COMEÇA
+   depois do upload terminar (apagar a linha no meio do envio deixaria arquivo órfão). Coberto
+   por `npm run test:photo-rollback-integration` (5/5 contra o Drive real).
+6. **`itemFotoUpload` no `Codigo.gs`**: sobe pro Drive E grava as colunas de imagem numa execução
+   só, no lugar de `driveUploadFile` + `updateById`. A rota passa de três idas ao Apps Script
+   para duas. A permissão continua sendo conferida no Next.js — o verbo novo não ganha nenhuma
+   autoridade que `updateById` já não tivesse. Exigiu reimplantação manual (feita pelo Carlos em
+   2026-09-03, confirmada por script antes de o lado do Next.js passar a usar a ação).
+
+**Depois de tudo, em produção, com o payload máximo de 400 KB: 11,4s / 13,0s / 9,8s.** Três
+amostras num minuto bom não provam que os picos sumiram — a oscilação do Google continua lá. O
+que mudou é a exposição (duas idas em vez de três, foto menor) e o fato de a tela não esperar
+mais por nada disso.
+
+**Fica de fora, aceito:** trocar a foto de um item **salvo** continua deixando a anterior órfã no
+Drive (o rollback só cobre a edição cancelada). E se o app for fechado no meio da limpeza do
+Cancelar, o arquivo fica lá.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
