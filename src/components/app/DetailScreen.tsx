@@ -44,6 +44,11 @@ export default function DetailScreen({
   const ratingField = fieldByRole(type, "rating")!;
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
+  // true enquanto o item só existe pra permitir anexar foto antes de preencher o resto (ver
+  // efeito abaixo) - ainda não é um "salvar" de verdade do usuário. Cancelar nesse estado apaga a
+  // linha em vez de tentar reverter (não tem pra onde reverter, nunca houve um save real).
+  const [isDraft, setIsDraft] = useState(itemId == null);
+  const draftCreationStarted = useRef(false);
   const [editing, setEditing] = useState(initialEditing);
   const [loading, setLoading] = useState(true);
   const [lookup, setLookup] = useState<Lookup>({ pais: [], bjcp: [] });
@@ -75,14 +80,23 @@ export default function DetailScreen({
         setValues(v);
         setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
         setCanEdit(row ? canEditRow(row, ownUserId) : false);
-      } else {
+      } else if (!draftCreationStarted.current) {
+        // Item novo: cria a linha (rascunho) na hora, vazia, só pra existir um id real - é isso
+        // que permite anexar a foto ANTES de preencher o resto (pedido do Carlos 2026-09-02: "a
+        // jornada de cadastro tem que começar pela imagem" - antes, o upload exigia salvar
+        // primeiro). `createItemOffline` (dentro de saveItem) é local-first, então isto não
+        // espera rede. Vira um item de verdade só quando o usuário der Salvar (ver save()).
+        draftCreationStarted.current = true;
         const v: Record<string, string> = {};
         for (const f of fields) v[f.col] = "";
         const dateField = fields.find((f) => f.kind === "date");
         if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
+        const draftId = await saveItem(type, null, v, ownUserId);
+        if (!alive) return;
         setValues(v);
         setImgUrl("");
         setCanEdit(true);
+        if (draftId != null) setCurrentId(draftId);
       }
       setLookup(lk);
       setLoading(false);
@@ -120,12 +134,21 @@ export default function DetailScreen({
     }
     onChanged();
     if (currentId == null) setCurrentId(id);
+    setIsDraft(false);
     setEditing(false);
     showToast("Salvo");
   }
 
   async function cancel() {
     if (currentId == null) {
+      onClose();
+      return;
+    }
+    if (isDraft) {
+      // Rascunho criado só pra permitir foto antes de salvar (ver efeito de criação) - o usuário
+      // desistiu sem confirmar nada, então apaga a linha em vez de "reverter" pra ela.
+      await deleteItem(type, currentId);
+      onChanged();
       onClose();
       return;
     }
@@ -140,7 +163,7 @@ export default function DetailScreen({
 
   function pickPhoto() {
     if (currentId == null) {
-      showToast("Salve o item antes de adicionar uma foto.");
+      showToast("Aguarde só um instante e tente de novo.");
       return;
     }
     fileInputRef.current?.click();
@@ -254,7 +277,7 @@ export default function DetailScreen({
               />
               <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 rounded-b-2xl bg-black/55 py-2 text-[12.5px] font-bold text-white">
                 <Icon name="edit" size={13} />
-                {uploadingPhoto ? "Enviando…" : currentId == null ? "Salve para adicionar foto" : "Trocar foto"}
+                {uploadingPhoto ? "Enviando…" : currentId == null ? "Só um instante…" : imgUrl ? "Trocar foto" : "Adicionar foto"}
               </span>
             </button>
 
