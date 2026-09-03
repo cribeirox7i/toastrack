@@ -16,7 +16,7 @@ import type { SecondaryProfile } from "@/lib/profiles";
 
 type ViewMode = "deck" | "table" | "gallery";
 type SearchField = "all" | "name" | "manufacturer" | "country";
-type SortField = "name" | "manufacturer" | "category" | "date" | "rating";
+type SortField = "name" | "manufacturer" | "category" | "date" | "rating" | "id";
 
 const SEARCH_FIELDS: { value: SearchField; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -31,6 +31,8 @@ const VIEW_MODES: { key: ViewMode; icon: string; label: string }[] = [
   { key: "gallery", icon: "gallery", label: "Galeria" },
 ];
 
+// Usado pelos cabeçalhos da Tabela — precisa bater 1:1 com as colunas fixas renderizadas ali
+// embaixo (TableView), por isso "id" não entra aqui (a Tabela não tem coluna de id pra mostrar).
 const SORT_COLS: { key: SortField; label: string }[] = [
   { key: "name", label: "Nome" },
   { key: "manufacturer", label: "Fabricante" },
@@ -38,6 +40,10 @@ const SORT_COLS: { key: SortField; label: string }[] = [
   { key: "date", label: "Data" },
   { key: "rating", label: "Avaliação" },
 ];
+
+// Usado pelo menu "Ordenar" ao lado da busca — vale pras 3 visões (Deck/Tabela/Galeria), então
+// pode ter uma opção a mais que a Tabela não expõe como coluna.
+const SORT_MENU_COLS: { key: SortField; label: string }[] = [...SORT_COLS, { key: "id", label: "ID" }];
 
 function matchesSearch(item: Item, field: SearchField, q: string): boolean {
   if (!q) return true;
@@ -187,14 +193,14 @@ export default function ListScreen({
           >
             <Icon name="sort" size={15} />
             <span className="hidden sm:inline">
-              {SORT_COLS.find((c) => c.key === sortField)?.label}
+              {SORT_MENU_COLS.find((c) => c.key === sortField)?.label}
             </span>
           </button>
           {sortMenuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
               <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[190px] rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
-                {SORT_COLS.map((c) => {
+                {SORT_MENU_COLS.map((c) => {
                   const active = sortField === c.key;
                   return (
                     <button
