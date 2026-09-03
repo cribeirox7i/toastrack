@@ -267,13 +267,20 @@ export async function uploadItemPhoto(
   if (!row) return { ok: false, reason: "not_found" };
   if (!canWrite(row, sessionUserId)) return { ok: false, reason: "forbidden" };
 
-  const uploaded = await callAppsScript<DriveUploadResult>("driveUploadFile", {
-    categoria: ITEM_DRIVE_CATEGORY[tipo],
-    userId: sessionUserId,
-    base64Data: foto.base64Data,
-    mimeType: foto.mimeType,
-    filename: foto.filename,
-  });
+  // `tentativas: 1` de propósito: repetir um upload que talvez já tenha funcionado cria uma
+  // cópia da foto no Drive (ver comentário de idempotência em client.ts). Timeout mais folgado
+  // que o padrão porque aqui trafega o arquivo inteiro.
+  const uploaded = await callAppsScript<DriveUploadResult>(
+    "driveUploadFile",
+    {
+      categoria: ITEM_DRIVE_CATEGORY[tipo],
+      userId: sessionUserId,
+      base64Data: foto.base64Data,
+      mimeType: foto.mimeType,
+      filename: foto.filename,
+    },
+    { tentativas: 1, timeoutMs: 120_000 },
+  );
 
   await callAppsScript("updateById", {
     tab: ITEM_TAB[tipo],
