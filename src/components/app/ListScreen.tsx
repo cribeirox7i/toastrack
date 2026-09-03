@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
@@ -44,6 +44,14 @@ const SORT_COLS: { key: SortField; label: string }[] = [
 // Usado pelo menu "Ordenar" ao lado da busca — vale pras 3 visões (Deck/Tabela/Galeria), então
 // pode ter uma opção a mais que a Tabela não expõe como coluna.
 const SORT_MENU_COLS: { key: SortField; label: string }[] = [...SORT_COLS, { key: "id", label: "ID" }];
+
+// Renderiza aos poucos em vez da lista inteira de uma vez — a aba `beer` tem ~3600 itens reais e
+// as 3 visões (Deck/Tabela/Galeria) fazem .map() direto sobre o array inteiro, sem paginação
+// nenhuma; montar ~3600 linhas de DOM do zero é o que fica lento (o Carlos reportou 2026-09-02:
+// "clico no botão voltar, demora muito pra voltar" ao sair do Detalhe de uma cerveja — não é
+// rede/cache, ListScreen desmonta e remonta ao trocar de tela, então essas ~3600 linhas são
+// reconstruídas na hora). wine/dest/drink têm poucas dezenas de itens, nunca sentem isso.
+const PAGE_SIZE = 60;
 
 function matchesSearch(item: Item, field: SearchField, q: string): boolean {
   if (!q) return true;
@@ -130,6 +138,32 @@ export default function ListScreen({
     });
     return arr;
   }, [filtered, sortField, sortDir]);
+
+  // Quantos itens de `sorted` de fato viram DOM agora — cresce de PAGE_SIZE em PAGE_SIZE
+  // conforme o usuário rola (ver sentinela mais abaixo), reseta quando a lista muda de baixo
+  // (busca/ordenação/visão/categoria), senão "carregar mais" ficaria preso num ponto que não
+  // existe mais no resultado novo.
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [listType, query, searchField, sortField, sortDir, viewMode]);
+  const visibleItems = useMemo(() => sorted.slice(0, visibleCount), [sorted, visibleCount]);
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((c) => Math.min(c + PAGE_SIZE, sorted.length));
+        }
+      },
+      { rootMargin: "600px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [sorted.length]);
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -323,7 +357,11 @@ export default function ListScreen({
       {/* Count + view-only badge */}
       <div className="px-5 pb-1 pt-2">
         <div className="text-[12.5px] text-muted">
-          {loading ? "Carregando…" : `${filtered.length} itens exibidos`}
+          {loading
+            ? "Carregando…"
+            : visibleCount < filtered.length
+              ? `${visibleCount} de ${filtered.length} itens exibidos`
+              : `${filtered.length} itens exibidos`}
         </div>
         {viewedProfile && (
           <div className="mt-0.5 text-[12.5px] font-semibold text-accent">
@@ -338,7 +376,7 @@ export default function ListScreen({
           <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
         ) : viewMode === "deck" ? (
           <DeckView
-            items={sorted}
+            items={visibleItems}
             onOpen={onOpenItem}
             onEdit={onEditItem}
             onDuplicate={doDuplicate}
@@ -346,7 +384,7 @@ export default function ListScreen({
           />
         ) : viewMode === "table" ? (
           <TableView
-            items={sorted}
+            items={visibleItems}
             showActionsCol={sorted.some((i) => i.canEdit)}
             sortField={sortField}
             sortDir={sortDir}
@@ -356,7 +394,12 @@ export default function ListScreen({
             onDelete={setConfirmItem}
           />
         ) : (
-          <GalleryView items={sorted} onOpen={onOpenItem} />
+          <GalleryView items={visibleItems} onOpen={onOpenItem} />
+        )}
+        {!loading && visibleCount < sorted.length && (
+          <div ref={sentinelRef} className="py-6 text-center text-[12.5px] text-muted">
+            Carregando mais…
+          </div>
         )}
       </div>
 
