@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
+import RefreshButton from "@/components/RefreshButton";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
 import { useCatalog } from "@/components/CatalogProvider";
@@ -293,6 +294,7 @@ export default function ListScreen({
             </>
           )}
         </div>
+        <RefreshButton className="sm:hidden" />
         <button
           onClick={onOpenProfile}
           aria-label="Perfil"

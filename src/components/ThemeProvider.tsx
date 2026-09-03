@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import {
+  BG_COLOR,
   DEFAULT_HUE,
   DEFAULT_MODE,
   HUES,
@@ -56,6 +57,15 @@ export default function ThemeProvider({ children }: { children: ReactNode }) {
     setModeState(readAttr("data-mode", ["light", "dark"] as const, DEFAULT_MODE));
     setMounted(true);
   }, []);
+
+  // Mantém <meta name="theme-color"> igual ao fundo do modo atual — é a cor atrás dos ícones da
+  // barra de status quando o app roda como PWA no Android (antes ficava fixa em verde).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", BG_COLOR[mode]);
+  }, [mode]);
 
   const setHue = useCallback((next: HueName) => {
     setHueState(next);

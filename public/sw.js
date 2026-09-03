@@ -7,7 +7,7 @@
  * Registered by src/components/ServiceWorkerRegister.tsx. Its scope is whatever
  * path it's served from (root in dev, /toastrack/ on GitHub Pages).
  */
-const CACHE = "toastrack-v1";
+const CACHE = "toastrack-v2";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
@@ -29,6 +29,12 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // don't touch Supabase / cross-origin
+
+  // Rotas de API são dados vivos (itens, lookups, carimbo de sincronização) — NUNCA passam pelo
+  // cache do service worker. Cachear aqui congelava o app numa foto dos dados: o carimbo de
+  // SyncMeta era servido do cache e o cliente nunca via edição nenhuma (nem manual na planilha,
+  // nem de outro aparelho). Deixa a chamada seguir direto pra rede.
+  if (url.pathname.startsWith("/api/")) return;
 
   // Navigations: network-first, fall back to cached shell when offline.
   if (request.mode === "navigate") {

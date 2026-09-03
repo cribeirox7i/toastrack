@@ -45,15 +45,24 @@ export default function DetailScreen({
   const ratingField = fieldByRole(type, "rating")!;
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
-  // true enquanto o item só existe pra permitir anexar foto antes de preencher o resto (ver
-  // efeito abaixo) - ainda não é um "salvar" de verdade do usuário. Cancelar nesse estado apaga a
-  // linha em vez de tentar reverter (não tem pra onde reverter, nunca houve um save real).
+  // true enquanto o item é novo e ainda não teve um "Salvar" de verdade do usuário. A linha na
+  // planilha pode até já existir (criada sob demanda pra permitir anexar a foto antes de preencher
+  // o resto) - nesse estado, Cancelar apaga a linha em vez de tentar reverter (não tem pra onde
+  // reverter, nunca houve um save real).
   const [isDraft, setIsDraft] = useState(itemId == null);
-  const draftCreationStarted = useRef(false);
+  // Quando a linha é criada sob demanda (ensureRow), `currentId` muda e dispararia o efeito de
+  // carga abaixo, que releria a linha do cache e sobrescreveria o que o usuário já digitou. Este
+  // sinal faz o efeito pular essa recarga uma vez - a tela já tem os valores certos na mão.
+  const skipNextLoad = useRef(false);
   const [editing, setEditing] = useState(initialEditing);
   const [loading, setLoading] = useState(true);
   const [lookup, setLookup] = useState<Lookup>({ pais: [], bjcp: [] });
   const [values, setValues] = useState<Record<string, string>>({});
+  // Espelho de `values` pra `ensureRow` ler o estado mais recente sem depender do closure.
+  const valuesRef = useRef(values);
+  useEffect(() => {
+    valuesRef.current = values;
+  }, [values]);
   const [imgUrl, setImgUrl] = useState("");
   const [canEdit, setCanEdit] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -71,42 +80,61 @@ export default function DetailScreen({
   useEffect(() => {
     let alive = true;
     (async () => {
-      setLoading(true);
-      const lk = await fetchLookups();
-      if (currentId != null) {
-        const row = await fetchFullItem(type, currentId);
-        if (!alive) return;
-        const v: Record<string, string> = {};
-        for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
-        setValues(v);
-        setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
-        setCanEdit(row ? canEditRow(row, ownUserId) : false);
-      } else if (!draftCreationStarted.current) {
-        // Item novo: cria a linha (rascunho) na hora, vazia, só pra existir um id real - é isso
-        // que permite anexar a foto ANTES de preencher o resto (pedido do Carlos 2026-09-02: "a
-        // jornada de cadastro tem que começar pela imagem" - antes, o upload exigia salvar
-        // primeiro). `createItemOffline` (dentro de saveItem) é local-first, então isto não
-        // espera rede. Vira um item de verdade só quando o usuário der Salvar (ver save()).
-        draftCreationStarted.current = true;
-        const v: Record<string, string> = {};
-        for (const f of fields) v[f.col] = "";
-        const dateField = fields.find((f) => f.kind === "date");
-        if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
-        const draftId = await saveItem(type, null, v, ownUserId);
-        if (!alive) return;
-        setValues(v);
-        setImgUrl("");
-        setCanEdit(true);
-        if (draftId != null) setCurrentId(draftId);
+      if (skipNextLoad.current) {
+        // A linha acabou de ser criada sob demanda (ensureRow) - os valores em tela já são os
+        // certos, não relê nada (evita corrida com o que o usuário digita).
+        skipNextLoad.current = false;
+        return;
       }
-      setLookup(lk);
-      setLoading(false);
+      setLoading(true);
+      try {
+        const lk = await fetchLookups();
+        if (!alive) return;
+        setLookup(lk);
+        if (currentId != null) {
+          const row = await fetchFullItem(type, currentId);
+          if (!alive) return;
+          const v: Record<string, string> = {};
+          for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
+          setValues(v);
+          setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
+          setCanEdit(row ? canEditRow(row, ownUserId) : false);
+        } else {
+          // Item novo: só monta o formulário vazio na hora, SEM criar nada. A linha só nasce
+          // quando o usuário anexa uma foto (ensureRow) ou dá Salvar - antes disso, abrir "novo
+          // item" nunca toca a rede nem o IndexedDB, então a tela abre na hora.
+          const v: Record<string, string> = {};
+          for (const f of fields) v[f.col] = "";
+          const dateField = fields.find((f) => f.kind === "date");
+          if (dateField) v[dateField.col] = new Date().toISOString().slice(0, 10);
+          setValues(v);
+          setImgUrl("");
+          setCanEdit(true);
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
     })();
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId, type]);
+
+  /**
+   * Garante que a linha existe na planilha e devolve o id real - criando-a agora se este ainda
+   * for um item novo sem id. É o que permite "a jornada de cadastro começa pela imagem" sem criar
+   * um rascunho logo que a tela abre (o que travava a abertura quando a criação falhava).
+   */
+  async function ensureRow(): Promise<string | null> {
+    if (currentId != null) return currentId;
+    const id = await saveItem(type, null, valuesRef.current, ownUserId);
+    if (id != null) {
+      skipNextLoad.current = true;
+      setCurrentId(id);
+    }
+    return id;
+  }
 
   // Rede de segurança pro caso raro do rascunho ter sido criado offline (sem internet o id
   // sequencial não pode ser atribuído na hora - ver createNewItem em itemSchema.ts): se esta
@@ -147,7 +175,10 @@ export default function DetailScreen({
       return;
     }
     onChanged();
-    if (currentId == null) setCurrentId(id);
+    if (currentId == null) {
+      skipNextLoad.current = true;
+      setCurrentId(id);
+    }
     setIsDraft(false);
     setEditing(false);
     showToast("Salvo");
@@ -176,19 +207,21 @@ export default function DetailScreen({
   }
 
   function pickPhoto() {
-    if (currentId == null) {
-      showToast("Aguarde só um instante e tente de novo.");
-      return;
-    }
     fileInputRef.current?.click();
   }
 
   async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
-    if (!file || currentId == null) return;
+    if (!file) return;
     setUploadingPhoto(true);
-    const result = await uploadItemPhoto(type, currentId, file);
+    const id = await ensureRow();
+    if (id == null) {
+      setUploadingPhoto(false);
+      showToast("Não foi possível preparar o item. Tente de novo.");
+      return;
+    }
+    const result = await uploadItemPhoto(type, id, file);
     setUploadingPhoto(false);
     if (result.ok && result.url) {
       setImgUrl(result.url);
@@ -245,7 +278,7 @@ export default function DetailScreen({
   }
 
   const title = editing
-    ? currentId == null
+    ? isDraft
       ? "Novo item"
       : "Editar"
     : values[nameField.col] || TYPE_LABEL_SINGULAR[type];
@@ -255,10 +288,10 @@ export default function DetailScreen({
       {/* Header */}
       <header className="flex items-center border-b border-border px-5 py-3">
         <button
-          onClick={editing && currentId != null ? cancel : onClose}
+          onClick={editing ? cancel : onClose}
           className="text-[13px] font-bold text-accent"
         >
-          {editing && currentId != null ? "Cancelar" : "← Voltar"}
+          {editing ? "Cancelar" : "← Voltar"}
         </button>
         <div className="mx-auto truncate px-3 text-[16px] font-extrabold">{title}</div>
         {editing ? (
@@ -291,7 +324,7 @@ export default function DetailScreen({
               />
               <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 rounded-b-2xl bg-black/55 py-2 text-[12.5px] font-bold text-white">
                 <Icon name="edit" size={13} />
-                {uploadingPhoto ? "Enviando…" : currentId == null ? "Só um instante…" : imgUrl ? "Trocar foto" : "Adicionar foto"}
+                {uploadingPhoto ? "Enviando…" : imgUrl ? "Trocar foto" : "Adicionar foto"}
               </span>
             </button>
 

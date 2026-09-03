@@ -54,6 +54,17 @@ export function hueToPaletteEnum(hue: HueName): string {
 export const DEFAULT_HUE: HueName = "orange";
 export const DEFAULT_MODE: Mode = "dark";
 
+/**
+ * Cor sólida do fundo por modo (neutra, independente do tema) — usada na tag
+ * <meta name="theme-color"> pra a barra de status do Android/PWA acompanhar o fundo do app em vez
+ * de ficar sempre verde (pedido do Carlos 2026-09-03). Precisa ser hex literal: alguns navegadores
+ * mobile ainda não aceitam oklch() em theme-color. Bate com `--bg` de globals.css.
+ */
+export const BG_COLOR: Record<Mode, string> = {
+  light: "#fafafa",
+  dark: "#171717",
+};
+
 export const STORAGE_KEYS = {
   hue: "tt.hue",
   mode: "tt.mode",

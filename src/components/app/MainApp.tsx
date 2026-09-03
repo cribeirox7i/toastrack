@@ -5,6 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { useCatalog } from "@/components/CatalogProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
+import RefreshButton from "@/components/RefreshButton";
 import { initialsFor } from "@/lib/utils";
 import { paletteEnumToHue } from "@/lib/theme";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
@@ -143,7 +144,10 @@ export default function MainApp() {
               </button>
             ))}
           </div>
-          <div className="ml-auto">{avatarBtn}</div>
+          <div className="ml-auto flex items-center gap-2">
+            <RefreshButton />
+            {avatarBtn}
+          </div>
         </nav>
       )}
 
@@ -161,7 +165,10 @@ export default function MainApp() {
               className="w-full rounded-full border border-border bg-surface py-2.5 pl-9 pr-4 text-[14px] outline-none placeholder:text-muted focus:border-accent"
             />
           </div>
-          <div className="sm:hidden">{avatarBtn}</div>
+          <div className="flex items-center gap-2 sm:hidden">
+            <RefreshButton />
+            {avatarBtn}
+          </div>
         </header>
       )}
       {(view === "profile" || view === "stats") && (
@@ -172,7 +179,7 @@ export default function MainApp() {
           <div className="mx-auto text-[16px] font-extrabold">
             {view === "profile" ? "Perfil" : TYPE_LABELS[statsType]}
           </div>
-          <div className="w-14" />
+          <RefreshButton />
         </header>
       )}
 

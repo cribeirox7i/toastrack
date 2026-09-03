@@ -38,7 +38,9 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#2e9e67",
+  // Padrão = fundo do modo escuro (DEFAULT_MODE). ThemeProvider atualiza esta tag em tempo real
+  // conforme o usuário troca claro/escuro, pra a barra de status do Android acompanhar o fundo.
+  themeColor: "#171717",
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,

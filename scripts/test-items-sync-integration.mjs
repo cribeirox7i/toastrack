@@ -2,8 +2,8 @@ import "./_loadEnv.mjs";
 /**
  * Teste de integração da etapa 6 (cache local — MIGRACAO_SHEETS.md seção 5) contra o Apps Script
  * REAL: confirma que getItemsStamp é barato e reflete escritas, que listVisibleItemsSince só
- * devolve o delta, e que createItem reaproveita um id vindo do cliente (necessário pro item
- * criado offline manter a mesma referência local até sincronizar). Cria e apaga UM item de teste
+ * devolve o delta, e que createItem ignora qualquer id vindo do cliente e atribui um id
+ * sequencial próprio (decisão do Carlos 2026-09-02). Cria e apaga UM item de teste
  * na aba `beer`, sempre limpando no final (try/finally), mesmo padrão de
  * test-sheets-integration.mjs.
  *
@@ -42,14 +42,15 @@ try {
     assert.equal(delta.length, 0, "nada deveria ter mudado entre pegar o carimbo e checar o delta");
   });
 
-  await check("createItem reaproveita o id vindo do cliente (payload.id)", async () => {
+  await check("createItem ignora o id do cliente e atribui um id sequencial", async () => {
     const row = await createItem(
       "beer",
       { id: ID_CLIENTE, beer_nome: "TESTE-INTEGRACAO-SYNC-APAGAR" },
       DONO
     );
     itemId = row.id;
-    assert.equal(row.id, ID_CLIENTE, "id deveria ser o mesmo que o cliente mandou, não um novo uuid");
+    assert.notEqual(row.id, ID_CLIENTE, "o id do cliente nunca deve ser reaproveitado");
+    assert.ok(/^\d+$/.test(row.id), `id deveria ser um inteiro sequencial, veio '${row.id}'`);
   });
 
   let stamp2;

@@ -12,6 +12,7 @@ const ICON_PATHS: Record<string, string> = {
   chevronDown: "m6 9 6 6 6-6",
   check: "M20 6 9 17l-5-5",
   plus: "M12 5v14 M5 12h14",
+  refresh: "M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   deck: "M4 6h16 M4 12h16 M4 18h16",
   table: "M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v18",
   gallery: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",

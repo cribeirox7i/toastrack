@@ -20,6 +20,28 @@ import {
 
 const nowIso = () => new Date().toISOString();
 
+/**
+ * Próximo id sequencial de uma aba. Caminho normal: ação `proximoIdSequencial` do Apps Script
+ * (contador em SyncMeta, sob lock). Se essa ação ainda não estiver publicada no Web App (deploy
+ * do Codigo.gs atrasado), cai pra um fallback que lê a aba e usa maior id numérico + 1 - mais
+ * caro e sem proteção contra duas criações simultâneas, mas impede que criar item quebre de vez
+ * enquanto o script não é atualizado.
+ */
+async function proximoId(tipo: ItemType): Promise<string> {
+  const tab = ITEM_TAB[tipo];
+  try {
+    return await callAppsScript<string>("proximoIdSequencial", { tab });
+  } catch {
+    const linhas = await callAppsScript<Record<string, string>[]>("read", { tab });
+    let maior = 0;
+    for (const l of linhas) {
+      const n = Number(l.id);
+      if (Number.isFinite(n) && n > maior) maior = n;
+    }
+    return String(maior + 1);
+  }
+}
+
 /** Lista os itens de um tipo visíveis pro usuário da sessão (dono, ou em user_access/user_edit). */
 export async function listVisibleItems(
   tipo: ItemType,
@@ -88,7 +110,7 @@ export async function createItem(
   // cliente (src/lib/offline/sync.ts, `remapItemId`) troca a referência local pelo id de verdade.
   const { id: _idDoCliente, ...conteudo } = payload;
   void _idDoCliente;
-  const novoId = await callAppsScript<string>("proximoIdSequencial", { tab: ITEM_TAB[tipo] });
+  const novoId = await proximoId(tipo);
   const row: ItemRowBase = {
     ...conteudo,
     id: novoId,
