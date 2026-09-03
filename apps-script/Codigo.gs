@@ -269,7 +269,7 @@ function hashLinha(linha, headers) {
   };
   for (var i = 0; i < headers.length; i++) {
     if (!headers[i]) continue;
-    var s = String(sanitizarValor(linha[i]));
+    var s = valorParaHash(linha[i]);
     for (var j = 0; j < s.length; j++) mistura(s.charCodeAt(j));
     mistura(1); // separador de coluna
   }
@@ -390,14 +390,36 @@ function maiorIdNumericoAtual(tab) {
  * Datas "puras" (meia-noite no fuso da planilha) viram "yyyy-MM-dd"; qualquer outro Date
  * (não deveria ocorrer aqui, mas por segurança) cai para ISO completo.
  */
+/**
+ * Fuso do script, resolvido UMA vez por execução. `Session.getScriptTimeZone()` é uma chamada de
+ * ponte pro host do Apps Script (cara, na casa do milissegundo) e `sanitizarValor` roda em CADA
+ * célula: na aba `beer` (3599 linhas × 2 colunas de data) isso eram ~7200 chamadas por leitura,
+ * uma das razões de `read`/`readIndex` levarem dezenas de segundos.
+ */
+var _fusoDoScript = null;
+function fusoDoScript() {
+  if (_fusoDoScript === null) _fusoDoScript = Session.getScriptTimeZone();
+  return _fusoDoScript;
+}
+
 function sanitizarValor(v) {
   if (v instanceof Date) {
-    const fuso = Session.getScriptTimeZone();
-    const meiaNoite = Utilities.formatDate(v, fuso, 'HH:mm:ss') === '00:00:00';
-    return meiaNoite
-      ? Utilities.formatDate(v, fuso, 'yyyy-MM-dd')
-      : v.toISOString();
+    // Um único formatDate em vez de dois (era um só pra testar se é meia-noite e outro pra
+    // formatar) - mesma economia de chamada de ponte descrita acima.
+    const s = Utilities.formatDate(v, fusoDoScript(), 'yyyy-MM-dd HH:mm:ss');
+    return s.slice(11) === '00:00:00' ? s.slice(0, 10) : v.toISOString();
   }
+  return v === null || v === undefined ? '' : String(v);
+}
+
+/**
+ * Versão do valor usada SÓ pelo hash do índice. Uma data vira o timestamp numérico em vez de
+ * passar por `Utilities.formatDate` — o hash só precisa ser estável entre duas leituras, ninguém
+ * lê esse texto. É o que tira as chamadas de ponte de dentro do laço que roda em cada célula das
+ * 3599 linhas.
+ */
+function valorParaHash(v) {
+  if (v instanceof Date) return String(v.getTime());
   return v === null || v === undefined ? '' : String(v);
 }
 
