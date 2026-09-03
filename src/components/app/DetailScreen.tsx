@@ -164,11 +164,15 @@ export default function DetailScreen({
 
   async function doDuplicate() {
     if (currentId == null) return;
-    const ok = await duplicateItem(type, currentId, ownUserId);
-    if (ok) {
+    const newId = await duplicateItem(type, currentId, ownUserId);
+    if (newId) {
       onChanged();
-      showToast("Item duplicado");
-    } else showToast("Erro ao duplicar");
+      // Troca pra cópia nova, já em edição, sem sair da tela (pedido do Carlos 2026-09-02).
+      setCurrentId(newId);
+      setEditing(true);
+    } else {
+      showToast("Erro ao duplicar");
+    }
   }
 
   async function doDelete() {

@@ -142,11 +142,16 @@ export default function ListScreen({
   // Quantos itens de `sorted` de fato viram DOM agora — cresce de PAGE_SIZE em PAGE_SIZE
   // conforme o usuário rola (ver sentinela mais abaixo), reseta quando a lista muda de baixo
   // (busca/ordenação/visão/categoria), senão "carregar mais" ficaria preso num ponto que não
-  // existe mais no resultado novo.
+  // existe mais no resultado novo. Ajuste durante o render (padrão recomendado do React pra
+  // "resetar estado quando algo muda") em vez de um efeito, pra não disparar setState fora da
+  // renderização por um valor que já dava pra saber na hora.
+  const resetKey = `${listType}|${query}|${searchField}|${sortField}|${sortDir}|${viewMode}`;
+  const [prevResetKey, setPrevResetKey] = useState(resetKey);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  useEffect(() => {
+  if (resetKey !== prevResetKey) {
+    setPrevResetKey(resetKey);
     setVisibleCount(PAGE_SIZE);
-  }, [listType, query, searchField, sortField, sortDir, viewMode]);
+  }
   const visibleItems = useMemo(() => sorted.slice(0, visibleCount), [sorted, visibleCount]);
 
   const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -164,6 +169,25 @@ export default function ListScreen({
     obs.observe(el);
     return () => obs.disconnect();
   }, [sorted.length]);
+
+  // "Início da lista" / "Fim da lista" flutuantes (pedido do Carlos 2026-09-02, mesma ideia do
+  // botão de "ir pro fim" do WhatsApp) - só aparecem depois de rolar uma distância razoável, não
+  // no primeiro pixel de scroll.
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const [showJumpTop, setShowJumpTop] = useState(false);
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
+  const SCROLL_JUMP_THRESHOLD = 480;
+
+  function handleBodyScroll() {
+    const el = bodyRef.current;
+    if (!el) return;
+    setShowJumpTop(el.scrollTop > SCROLL_JUMP_THRESHOLD);
+    setShowJumpBottom(el.scrollHeight - el.scrollTop - el.clientHeight > SCROLL_JUMP_THRESHOLD);
+  }
+
+  function jumpTo(edge: "top" | "bottom") {
+    bodyRef.current?.scrollTo({ top: edge === "top" ? 0 : bodyRef.current.scrollHeight, behavior: "smooth" });
+  }
 
   function toggleSort(field: SortField) {
     if (sortField === field) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -183,11 +207,19 @@ export default function ListScreen({
   }
 
   async function doDuplicate(item: Item) {
-    const ok = item.canEdit && (await duplicateItem(item.type, item.id, ownUserId));
-    if (ok) {
+    if (!item.canEdit) {
+      showToast("Erro ao duplicar");
+      return;
+    }
+    const newId = await duplicateItem(item.type, item.id, ownUserId);
+    if (newId) {
       onCatalogChanged();
-      showToast("Item duplicado");
-    } else showToast("Erro ao duplicar");
+      // Abre a cópia direto em edição (pedido do Carlos 2026-09-02) - é raro duplicar um item e
+      // querer ele idêntico ao original, então poupa o "abrir > Editar" manual de cada vez.
+      onEditItem({ ...item, id: newId });
+    } else {
+      showToast("Erro ao duplicar");
+    }
   }
 
   const activeProfileInitials = initialsFor(viewedProfile ? viewedProfile.name : ownName);
@@ -371,7 +403,7 @@ export default function ListScreen({
       </div>
 
       {/* Body */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={bodyRef} onScroll={handleBodyScroll} className="min-h-0 flex-1 overflow-y-auto">
         {!loading && filtered.length === 0 ? (
           <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
         ) : viewMode === "deck" ? (
@@ -400,6 +432,28 @@ export default function ListScreen({
           <div ref={sentinelRef} className="py-6 text-center text-[12.5px] text-muted">
             Carregando mais…
           </div>
+        )}
+      </div>
+
+      {/* Início/Fim da lista - só depois de rolar uma distância razoável */}
+      <div className="pointer-events-none fixed bottom-20 right-4 z-20 flex flex-col items-end gap-2">
+        {showJumpTop && (
+          <button
+            onClick={() => jumpTo("top")}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12.5px] font-bold text-text shadow-lg"
+          >
+            <Icon name="chevronDown" size={13} className="rotate-180" />
+            Início da lista
+          </button>
+        )}
+        {showJumpBottom && (
+          <button
+            onClick={() => jumpTo("bottom")}
+            className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12.5px] font-bold text-text shadow-lg"
+          >
+            Fim da lista
+            <Icon name="chevronDown" size={13} />
+          </button>
         )}
       </div>
 
