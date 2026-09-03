@@ -664,34 +664,52 @@ function driveDownloadFile(payload) {
  * (selecionar a função no dropdown de cima e clicar em Executar), com os logs em Ver > Logs.
  * Idempotente: rodar de novo não mexe nos arquivos já corrigidos.
  */
+var COLUNA_IMG_URL_POR_ABA = { beer: 'beer_img_url', wine: 'wine_img_url', dest: 'dest_img_url', drink: 'drink_img_url' };
+
+/**
+ * Roda `corrigirCompartilhamentoDeUmaAba` só nas abas que precisam - NÃO inclui `beer` por padrão. `beer` tem 3591 fotos; cada uma
+ * exige uma chamada ao Drive só pra checar o compartilhamento (getSharingAccess), e já foi
+ * confirmado por curl (2026-09-02) que as fotos de cerveja já respondem 200 direto (públicas) -
+ * reprocessar todas de novo aqui só gastaria minutos à toa e, pior, o Apps Script mata a execução
+ * depois de 6 minutos: como `beer` vinha primeiro na ordem antiga, a função MORRIA no meio dele e
+ * nunca chegava a logar nada, nem a tentar `wine` (o problema real relatado pelo Carlos em
+ * 2026-09-02) - parecia travada porque não tinha log nenhum pra mostrar. Se um dia precisar
+ * reconferir `beer` mesmo assim, chame `corrigirCompartilhamentoDeUmaAba('beer')` direto.
+ */
 function corrigirCompartilhamentoDeFotosAntigas() {
-  var colunaPorAba = { beer: 'beer_img_url', wine: 'wine_img_url', dest: 'dest_img_url', drink: 'drink_img_url' };
-  Object.keys(colunaPorAba).forEach(function (aba) {
-    var coluna = colunaPorAba[aba];
-    var linhas = lerTabela(aba);
-    var corrigidas = 0, jaEstavamOk = 0, semFoto = 0, falharam = 0;
-    linhas.forEach(function (linha) {
-      var raw = linha[coluna];
-      var m = raw && /\/d\/([\w-]+)/.exec(String(raw));
-      if (!m) { semFoto++; return; }
-      var fileId = m[1];
-      try {
-        var file = DriveApp.getFileById(fileId);
-        var acessoAtual = file.getSharingAccess();
-        if (acessoAtual === DriveApp.Access.ANYONE_WITH_LINK || acessoAtual === DriveApp.Access.ANYONE) {
-          jaEstavamOk++;
-        } else {
-          file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-          corrigidas++;
-        }
-      } catch (err) {
-        falharam++;
-        Logger.log(aba + ' id=' + linha.id + ' fileId=' + fileId + ': erro - ' + err);
+  ['wine', 'dest', 'drink'].forEach(corrigirCompartilhamentoDeUmaAba);
+}
+
+/** Processa uma aba só - loga o progresso a cada 10 fotos (não só no final) pra dar pra
+ *  acompanhar no Ver > Logs mesmo enquanto ainda está rodando. */
+function corrigirCompartilhamentoDeUmaAba(aba) {
+  var coluna = COLUNA_IMG_URL_POR_ABA[aba];
+  if (!coluna) throw new Error('Aba sem coluna de imagem configurada: ' + aba);
+  var linhas = lerTabela(aba);
+  var corrigidas = 0, jaEstavamOk = 0, semFoto = 0, falharam = 0, processadas = 0;
+  linhas.forEach(function (linha) {
+    var raw = linha[coluna];
+    var m = raw && /\/d\/([\w-]+)/.exec(String(raw));
+    if (!m) { semFoto++; return; }
+    var fileId = m[1];
+    try {
+      var file = DriveApp.getFileById(fileId);
+      var acessoAtual = file.getSharingAccess();
+      if (acessoAtual === DriveApp.Access.ANYONE_WITH_LINK || acessoAtual === DriveApp.Access.ANYONE) {
+        jaEstavamOk++;
+      } else {
+        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+        corrigidas++;
       }
-    });
-    Logger.log(aba + ': ' + corrigidas + ' corrigidas, ' + jaEstavamOk + ' já estavam ok, ' +
-      semFoto + ' sem foto, ' + falharam + ' falharam');
+    } catch (err) {
+      falharam++;
+      Logger.log(aba + ' id=' + linha.id + ' fileId=' + fileId + ': erro - ' + err);
+    }
+    processadas++;
+    if (processadas % 10 === 0) Logger.log(aba + ': ' + processadas + '/' + linhas.length + ' processadas...');
   });
+  Logger.log(aba + ': ' + corrigidas + ' corrigidas, ' + jaEstavamOk + ' já estavam ok, ' +
+    semFoto + ' sem foto, ' + falharam + ' falharam');
 }
 
 // ---------- TESTE DE AUTORIZAÇÃO (executar no editor para conceder os escopos) ----------

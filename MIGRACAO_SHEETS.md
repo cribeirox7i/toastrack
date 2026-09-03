@@ -465,13 +465,22 @@ real e a rota de auth de produção, nunca pela Browser pane (banida neste proje
   da migração; as 76 de vinho nunca passaram por isso — ficaram sem "Qualquer pessoa com o link".
   Fotos enviadas PELO app (`driveUploadFile`, seção 7.2 acima) já nascem com essa permissão certa
   — o problema é só o acervo antigo. Adicionada `corrigirCompartilhamentoDeFotosAntigas()` em
-  `apps-script/Codigo.gs` (checa as 4 abas de item, corrige quem não está público, idempotente) —
-  **de propósito fora do `api()`/doPost** (tornar um arquivo público a partir só de um fileId da
-  rede, sem a checagem de pasta que `arquivoDoUsuario` faz pro resto dos verbos de Drive, seria
-  uma superfície de ataque desnecessária no Web App público). **Pendente**: o Carlos precisa
-  colar o `Codigo.gs` atualizado no editor do Apps Script e rodar essa função manualmente uma vez
-  (mesmo fluxo do `testeAutorizacao`) — não tenho como executar Apps Script direto desta máquina.
-  Depois de rodar, `npm run check-photo-sharing wine` confirma (deveria virar 47 públicas).
+  `apps-script/Codigo.gs` — **de propósito fora do `api()`/doPost** (tornar um arquivo público a
+  partir só de um fileId da rede, sem a checagem de pasta que `arquivoDoUsuario` faz pro resto dos
+  verbos de Drive, seria uma superfície de ataque desnecessária no Web App público).
+
+  **Incidente na primeira versão (2026-09-02)**: rodava nas 4 abas na ordem `beer, wine, dest,
+  drink` — `beer` tem 3591 fotos, cada uma custando uma chamada ao Drive só pra checar o
+  compartilhamento, e como o log só saía no fim de cada aba, a execução **morria no meio do
+  `beer`** (limite de 6 min do Apps Script) sem nunca logar nada nem chegar em `wine` — parecia
+  travada. Corrigido: a função agora só roda em `wine`/`dest`/`drink` por padrão (`beer` já está
+  confirmado público, reprocessar não muda nada) e loga o progresso a cada 10 fotos, não só no
+  final — `corrigirCompartilhamentoDeUmaAba('beer')` continua disponível se precisar reconferir.
+
+  **Pendente**: o Carlos precisa colar o `Codigo.gs` atualizado no editor do Apps Script e rodar
+  `corrigirCompartilhamentoDeFotosAntigas` manualmente uma vez (mesmo fluxo do `testeAutorizacao`)
+  — não tenho como executar Apps Script direto desta máquina. Depois de rodar,
+  `npm run check-photo-sharing wine` confirma (deveria virar 47 públicas).
 
 ## 8. Decisões
 
