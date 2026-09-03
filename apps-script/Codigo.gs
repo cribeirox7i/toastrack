@@ -97,6 +97,8 @@ function api(action, payload) {
       case 'read':             return ok(lerTabela(abaValida(payload.tab)));
       case 'readSince':        return ok(lerTabelaDesde(abaValida(payload.tab), payload.desde || ''));
       case 'readById':         return ok(lerLinhaPorId(abaValida(payload.tab), payload.id));
+      case 'readIndex':        return ok(lerIndice(abaValida(payload.tab)));
+      case 'readByIds':        return ok(lerLinhasPorIds(abaValida(payload.tab), payload.ids || []));
       case 'append':           return ok(inserirLinhas(abaValida(payload.tab), payload.rows || []));
       case 'updateById':       return ok(atualizarPorId(abaValida(payload.tab), payload.id, payload.patch || {}));
       case 'updateManyById':   return ok(atualizarVariosPorId(abaValida(payload.tab), payload.updates || []));
@@ -215,6 +217,89 @@ function lerLinhaPorId(nome, id) {
   const obj = {};
   headers.forEach(function (h, i) { if (h) obj[h] = sanitizarValor(valores[i]); });
   return obj;
+}
+
+/**
+ * Índice de sincronização de uma aba: uma entrada por linha, só com o `id`, um hash do conteúdo
+ * da linha inteira e as 3 colunas de permissão (que o servidor precisa pra filtrar o que cada
+ * usuário pode ver).
+ *
+ * Existe porque `read` da aba `beer` é inviável: 3593 linhas viram 1,84 MB e a chamada levou de
+ * 10s a 2min38 nas medições de 2026-09-03, com 1 em 5 respondendo HTTP 500 — o app pulava a aba
+ * em silêncio e o usuário via "atualizei e não mudou nada". O índice das mesmas 3593 linhas dá
+ * ~55 KB, então o cliente descobre o que mudou barato e baixa só as linhas diferentes (readByIds).
+ *
+ * O hash é do conteúdo, NÃO do `updated_at`: é isso que faz uma edição feita à mão na planilha
+ * (que não mexe em `updated_at`) ser detectada. Um id que sumiu do índice é uma exclusão — o que
+ * fecha o caso do item "fantasma" que o delta por `readSince` nunca conseguiu enxergar.
+ */
+function lerIndice(nome) {
+  const sh = getSheet(nome);
+  const values = sh.getDataRange().getValues();
+  const headers = (values[0] || []).map(String);
+  const iId = headers.indexOf('id');
+  const iOwner = headers.indexOf('user_owner');
+  const iAccess = headers.indexOf('user_access');
+  const iEdit = headers.indexOf('user_edit');
+  const col = function (linha, i) { return i === -1 ? '' : sanitizarValor(linha[i]); };
+  const out = [];
+  for (let r = 1; r < values.length; r++) {
+    const linha = values[r];
+    if (linha.join('') === '') continue;
+    out.push({
+      id: col(linha, iId),
+      h: hashLinha(linha, headers),
+      user_owner: col(linha, iOwner),
+      user_access: col(linha, iAccess),
+      user_edit: col(linha, iEdit)
+    });
+  }
+  return out;
+}
+
+/** FNV-1a de 32 bits sobre os valores já sanitizados da linha. Só precisa ser estável entre duas
+ *  chamadas (quem compara é o cliente, contra o hash que ele guardou da vez anterior) — não é
+ *  hash criptográfico e não precisa ser. O separador entre colunas evita que mover um caractere
+ *  de uma coluna pra vizinha passe despercebido. */
+function hashLinha(linha, headers) {
+  var h = 0x811c9dc5;
+  var mistura = function (c) {
+    h ^= c;
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  };
+  for (var i = 0; i < headers.length; i++) {
+    if (!headers[i]) continue;
+    var s = String(sanitizarValor(linha[i]));
+    for (var j = 0; j < s.length; j++) mistura(s.charCodeAt(j));
+    mistura(1); // separador de coluna
+  }
+  return h.toString(36);
+}
+
+/**
+ * Lê só as linhas cujos ids foram pedidos. É o par de `lerIndice`: o cliente descobre pelo índice
+ * quais linhas mudaram e busca só essas, em lotes — nunca a aba inteira de uma vez. Numa carga
+ * inicial (cache vazio) são vários lotes, e cada lote que falhar é reprocessado sozinho, em vez
+ * de derrubar a sincronização toda como acontecia com uma única resposta de 1,84 MB.
+ */
+function lerLinhasPorIds(nome, ids) {
+  const alvo = {};
+  (ids || []).forEach(function (i) { alvo[String(i)] = true; });
+  const sh = getSheet(nome);
+  const values = sh.getDataRange().getValues();
+  const headers = (values[0] || []).map(String);
+  const iId = headers.indexOf('id');
+  if (iId === -1) return [];
+  const out = [];
+  for (let r = 1; r < values.length; r++) {
+    const linha = values[r];
+    if (linha.join('') === '') continue;
+    if (!alvo[String(sanitizarValor(linha[iId]))]) continue;
+    const obj = {};
+    headers.forEach(function (h, i) { if (h) obj[h] = sanitizarValor(linha[i]); });
+    out.push(obj);
+  }
+  return out;
 }
 
 /** Lê o valor de uma chave da aba SyncMeta (carimbo de última escrita por aba). '' se não existir. */

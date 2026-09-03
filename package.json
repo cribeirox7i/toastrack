@@ -12,6 +12,7 @@
     "test:photo-date": "node scripts/test-photo-date.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
     "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
+    "test:index-sync-integration": "tsx --conditions=react-server scripts/test-index-sync-integration.mjs",
     "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
     "test:photo-upload-integration": "tsx --conditions=react-server scripts/test-photo-upload-integration.mjs",
     "test:sequential-id-integration": "tsx --conditions=react-server scripts/test-sequential-id-integration.mjs",

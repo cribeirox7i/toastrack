@@ -70,6 +70,81 @@ export async function listVisibleItemsSince(
   return linhas.filter((row) => canRead(row, sessionUserId));
 }
 
+/** Uma entrada do índice de sincronização: id + hash do conteúdo da linha. */
+export interface ItemIndexEntry {
+  id: string;
+  h: string;
+}
+
+/**
+ * Índice das linhas visíveis pro usuário: id + hash do conteúdo, sem os campos de dado. As mesmas
+ * 3593 linhas do `beer` que dão 1,84 MB em `listVisibleItems` cabem em ~55 KB aqui — e o `read`
+ * completo dessa aba chegou a levar 2min38 e a falhar 1 em 5 vezes (medido 2026-09-03), o que
+ * fazia o app pular a aba em silêncio. Com o índice o cliente descobre barato o que mudou e pede
+ * só isso em `listVisibleItemsByIds`.
+ *
+ * O hash cobre o conteúdo inteiro da linha, não o `updated_at` — por isso enxerga edição feita à
+ * mão na planilha, que é justamente o que o carimbo de SyncMeta e o `readSince` nunca viram.
+ */
+export async function listVisibleIndex(
+  tipo: ItemType,
+  sessionUserId: string
+): Promise<ItemIndexEntry[]> {
+  let linhas: (ItemIndexEntry & ItemRowBase)[];
+  try {
+    linhas = await callAppsScript<(ItemIndexEntry & ItemRowBase)[]>("readIndex", {
+      tab: ITEM_TAB[tipo],
+    });
+  } catch {
+    // Enquanto o Codigo.gs com `readIndex` não estiver publicado, cai pra ler a aba e calcular o
+    // hash aqui. Não traz o ganho nenhum (a resposta grande do Apps Script é justamente o
+    // problema), mas mantém o app funcionando entre o deploy do código e o do script — foi
+    // exatamente essa lacuna que quebrou a criação de item no 7d220f4.
+    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
+    linhas = todas.map((row) => ({ ...row, h: hashRow(row) }) as ItemIndexEntry & ItemRowBase);
+  }
+  return linhas.filter((row) => canRead(row, sessionUserId)).map(({ id, h }) => ({ id, h }));
+}
+
+/** As linhas pedidas por id, já filtradas por permissão — par de `listVisibleIndex`. O cliente
+ *  chama em lotes; um id que ele não pode ver simplesmente não volta. */
+export async function listVisibleItemsByIds(
+  tipo: ItemType,
+  ids: string[],
+  sessionUserId: string
+): Promise<ItemRowBase[]> {
+  if (!ids.length) return [];
+  const pedidos = new Set(ids.map(String));
+  let linhas: ItemRowBase[];
+  try {
+    linhas = await callAppsScript<ItemRowBase[]>("readByIds", { tab: ITEM_TAB[tipo], ids });
+  } catch {
+    // Mesmo motivo do fallback de listVisibleIndex.
+    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
+    linhas = todas.filter((row) => pedidos.has(String(row.id)));
+  }
+  return linhas.filter((row) => canRead(row, sessionUserId));
+}
+
+/**
+ * Mesma FNV-1a de 32 bits do `hashLinha` do Codigo.gs, pro fallback acima produzir hashes
+ * comparáveis. Não precisa bater byte a byte com o do Apps Script: se divergirem, o cliente só
+ * rebaixa as linhas uma vez e volta a convergir — nunca mostra dado errado.
+ */
+function hashRow(row: Record<string, unknown>): string {
+  let h = 0x811c9dc5;
+  const mistura = (c: number) => {
+    h ^= c;
+    h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0;
+  };
+  for (const chave of Object.keys(row)) {
+    const s = String(row[chave] ?? "");
+    for (let j = 0; j < s.length; j++) mistura(s.charCodeAt(j));
+    mistura(1);
+  }
+  return h.toString(36);
+}
+
 /** Carimbo (ISO) da última escrita na aba deste tipo, segundo a aba SyncMeta — não lê a aba de
  *  item, só uma célula de SyncMeta. '' se a aba nunca foi escrita (ou ensureStructure é recente
  *  o bastante pra SyncMeta ainda não ter entrada). Usado pelo cliente pra saber, antes de puxar

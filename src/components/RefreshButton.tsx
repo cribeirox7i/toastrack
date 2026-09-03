@@ -40,8 +40,15 @@ export default function RefreshButton({ className = "" }: { className?: string }
       if (falhas.length) {
         flash(`Falha em ${falhas.map((f) => TAB_LABEL[f.tab] ?? f.tab).join(", ")}: ${falhas[0].erro}`);
       } else {
-        const total = results.reduce((soma, r) => soma + r.linhas, 0);
-        flash(`Atualizado · ${total} itens`);
+        const soma = (campo: "linhas" | "baixadas" | "apagadas") =>
+          results.reduce((s, r) => s + r[campo], 0);
+        const mudou = [
+          soma("baixadas") ? `${soma("baixadas")} novos/alterados` : "",
+          soma("apagadas") ? `${soma("apagadas")} removidos` : "",
+        ].filter(Boolean);
+        flash(
+          `Atualizado · ${soma("linhas")} itens${mudou.length ? ` (${mudou.join(", ")})` : " · nada mudou"}`
+        );
       }
     } catch (err) {
       flash(`Erro ao atualizar: ${err instanceof Error ? err.message : String(err)}`);

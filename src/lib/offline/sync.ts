@@ -60,6 +60,20 @@ async function getJson<T>(url: string): Promise<T | null> {
   }
 }
 
+async function postJson<T>(url: string, body: unknown): Promise<T | null> {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 const syncedAtKey = (tab: ItemTab) => `syncedAt:${tab}`;
 
 /**
@@ -74,9 +88,11 @@ export async function pullItemsIfStale(tab: ItemTab): Promise<void> {
   const local = (await getMeta(syncedAtKey(tab))) as string | undefined;
 
   if (!local) {
-    const rows = await getJson<RawItemRow[]>(`/api/items/${tab}`);
-    if (rows === null) return;
-    await putAll(tab, rows);
+    // Primeira carga neste aparelho: vai pelo índice + lotes, nunca por um `read` da aba inteira
+    // (o `beer` real são 1,84 MB numa resposta só, que chegou a levar 2min38 e a falhar 1 em 5
+    // vezes — ver syncTabByIndex). Em lotes, um lote que falhe não derruba a carga inteira.
+    const r = await syncTabByIndex(tab);
+    if (r.erro) return;
     const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
     if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
     notifyChange();
@@ -98,35 +114,95 @@ export async function pullItemsIfStale(tab: ItemTab): Promise<void> {
 export interface RefreshTabResult {
   tab: ItemTab;
   linhas: number;
+  baixadas: number;
+  apagadas: number;
   erro?: string;
 }
 
+/** Ids por lote ao buscar linhas mudadas. Segura a resposta na casa das centenas de KB — passar
+ *  disso é voltar ao problema que motivou tudo isto (ver syncTabByIndex). Bate com o `max(500)`
+ *  aceito pela rota `by-ids`. */
+const FETCH_CHUNK = 300;
+
 /**
- * Reconciliação completa: relê as 4 abas por inteiro (contra o `beer` real, ~25s só ele) — é o
- * único jeito de enxergar uma edição feita fora do app, porque o carimbo de SyncMeta só avança em
- * escrita feita PELO app e o delta (`readSince`) nunca devolve exclusões. Por isso é só sob
- * pedido explícito do usuário (botão "atualizar" da barra superior), nunca automático.
+ * Sincroniza uma aba comparando hashes, sem nunca baixar a aba inteira.
  *
- * As 4 abas vão em paralelo (antes era em série, somando o tempo de cada uma) e cada uma é
- * isolada: se uma falhar, as outras ainda entram e o cache local é sempre notificado no fim.
+ * O `GET /api/items/beer` (aba inteira) é inviável: 3593 linhas = 1,84 MB, de 10s a 2min38, com 1
+ * em 5 respondendo HTTP 500 — medido contra produção em 2026-09-03. O cliente pulava a aba em
+ * silêncio e o usuário via "atualizei e não mudou nada". Aqui:
+ *
+ * 1. baixa o índice (`{id, h}` por linha, ~55 KB no `beer`);
+ * 2. compara com o hash que guardou junto de cada linha (`_h`);
+ * 3. apaga o que sumiu do índice, e busca em lotes só o que mudou.
+ *
+ * O hash é do conteúdo da linha, não do `updated_at` — é isso que faz uma edição feita à mão na
+ * planilha aparecer, que era o problema original. E um id que sumiu do índice é uma exclusão, o
+ * que fecha o caso do item "fantasma" que o `readSince` nunca conseguiu enxergar.
+ */
+async function syncTabByIndex(tab: ItemTab): Promise<RefreshTabResult> {
+  const vazio = { tab, linhas: 0, baixadas: 0, apagadas: 0 };
+
+  const index = await getJson<{ id: string; h: string }[]>(`/api/items/${tab}/sync-index`);
+  if (index === null) return { ...vazio, erro: "o índice não respondeu" };
+
+  const locais = await listAll(tab);
+  const hLocal = new Map(locais.map((r) => [r.id, r._h ?? ""]));
+  const hRemoto = new Map(index.map((e) => [e.id, e.h]));
+
+  const paraApagar = locais.filter((r) => !hRemoto.has(r.id)).map((r) => r.id);
+  for (const id of paraApagar) await deleteOne(tab, id);
+
+  const paraBuscar = index.filter((e) => hLocal.get(e.id) !== e.h).map((e) => e.id);
+  let baixadas = 0;
+  for (let i = 0; i < paraBuscar.length; i += FETCH_CHUNK) {
+    const ids = paraBuscar.slice(i, i + FETCH_CHUNK);
+    const rows = await postJson<RawItemRow[]>(`/api/items/${tab}/by-ids`, { ids });
+    if (rows === null) {
+      return {
+        tab,
+        linhas: index.length,
+        baixadas,
+        apagadas: paraApagar.length,
+        erro: `falhou ao baixar ${ids.length} itens`,
+      };
+    }
+    // O hash vai junto da linha: é o que a próxima sincronização compara. Se a linha não fosse
+    // gravada com ele, toda sincronização baixaria tudo de novo.
+    await putAll(tab, rows.map((r) => ({ ...r, _h: hRemoto.get(r.id) ?? "" })));
+    baixadas += rows.length;
+  }
+
+  return { tab, linhas: index.length, baixadas, apagadas: paraApagar.length };
+}
+
+/**
+ * Reconciliação completa, sob pedido explícito do usuário (botão "atualizar" da barra superior).
+ * As 4 abas vão em paralelo e cada uma é isolada num try/catch: se uma falhar, as outras ainda
+ * entram e o cache local é sempre notificado no fim.
  */
 export async function refreshAllNow(): Promise<RefreshTabResult[]> {
   if (!isOnline()) {
-    return ITEM_TABS.map((tab) => ({ tab, linhas: 0, erro: "sem conexão" }));
+    return ITEM_TABS.map((tab) => ({ tab, linhas: 0, baixadas: 0, apagadas: 0, erro: "sem conexão" }));
   }
   await pushOutbox().catch(() => {});
 
   const results = await Promise.all(
     ITEM_TABS.map(async (tab): Promise<RefreshTabResult> => {
       try {
-        const rows = await getJson<RawItemRow[]>(`/api/items/${tab}`);
-        if (rows === null) return { tab, linhas: 0, erro: "a rota de itens não respondeu" };
-        await putAll(tab, rows);
-        const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
-        if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
-        return { tab, linhas: rows.length };
+        const r = await syncTabByIndex(tab);
+        if (!r.erro) {
+          const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
+          if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
+        }
+        return r;
       } catch (err) {
-        return { tab, linhas: 0, erro: err instanceof Error ? err.message : String(err) };
+        return {
+          tab,
+          linhas: 0,
+          baixadas: 0,
+          apagadas: 0,
+          erro: err instanceof Error ? err.message : String(err),
+        };
       }
     })
   );
