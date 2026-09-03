@@ -15,6 +15,7 @@ import {
   updateOutboxEntry,
   type ItemTab,
 } from "./db";
+import { noCacheUrl } from "@/lib/utils";
 
 /**
  * Motor de sincronização dos 4 tipos de item (etapa 6 do plano — MIGRACAO_SHEETS.md seção 5).
@@ -51,7 +52,7 @@ export function isOnline(): boolean {
 
 async function getJson<T>(url: string): Promise<T | null> {
   try {
-    const res = await fetch(url, { cache: "no-store" });
+    const res = await fetch(noCacheUrl(url), { cache: "no-store" });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -92,21 +93,47 @@ export async function pullItemsIfStale(tab: ItemTab): Promise<void> {
   notifyChange();
 }
 
-/** Reconciliação completa (mesmo custo do full read, ~18s no `beer`) — só quando o usuário pede
- *  explicitamente (ex.: puxar-pra-atualizar). É o que corrige um item apagado fora do app (ver
- *  caveat do plano: `readSince` nunca devolve exclusões). */
-export async function refreshAllNow(): Promise<void> {
-  if (!isOnline()) return;
-  await pushOutbox();
-  for (const tab of ITEM_TABS) {
-    const rows = await getJson<RawItemRow[]>(`/api/items/${tab}`);
-    if (rows === null) continue;
-    await putAll(tab, rows);
-    const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
-    if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
+/** O que aconteceu com uma aba numa reconciliação — o botão de atualizar mostra isso pro usuário
+ *  em vez de terminar em silêncio (era impossível saber se "nada mudou" era sucesso ou falha). */
+export interface RefreshTabResult {
+  tab: ItemTab;
+  linhas: number;
+  erro?: string;
+}
+
+/**
+ * Reconciliação completa: relê as 4 abas por inteiro (contra o `beer` real, ~25s só ele) — é o
+ * único jeito de enxergar uma edição feita fora do app, porque o carimbo de SyncMeta só avança em
+ * escrita feita PELO app e o delta (`readSince`) nunca devolve exclusões. Por isso é só sob
+ * pedido explícito do usuário (botão "atualizar" da barra superior), nunca automático.
+ *
+ * As 4 abas vão em paralelo (antes era em série, somando o tempo de cada uma) e cada uma é
+ * isolada: se uma falhar, as outras ainda entram e o cache local é sempre notificado no fim.
+ */
+export async function refreshAllNow(): Promise<RefreshTabResult[]> {
+  if (!isOnline()) {
+    return ITEM_TABS.map((tab) => ({ tab, linhas: 0, erro: "sem conexão" }));
   }
-  await pullLookups();
+  await pushOutbox().catch(() => {});
+
+  const results = await Promise.all(
+    ITEM_TABS.map(async (tab): Promise<RefreshTabResult> => {
+      try {
+        const rows = await getJson<RawItemRow[]>(`/api/items/${tab}`);
+        if (rows === null) return { tab, linhas: 0, erro: "a rota de itens não respondeu" };
+        await putAll(tab, rows);
+        const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
+        if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
+        return { tab, linhas: rows.length };
+      } catch (err) {
+        return { tab, linhas: 0, erro: err instanceof Error ? err.message : String(err) };
+      }
+    })
+  );
+
+  await pullLookups().catch(() => {});
   notifyChange();
+  return results;
 }
 
 export async function getCachedItem(tab: ItemTab, id: string): Promise<RawItemRow | undefined> {

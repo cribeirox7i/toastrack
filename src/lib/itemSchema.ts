@@ -1,4 +1,5 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
+import { noCacheUrl } from "@/lib/utils";
 import {
   applyServerPatch,
   createItemOffline,
@@ -115,7 +116,7 @@ async function fetchLookupsNetwork(): Promise<{
   paises: { pais_id: string; pais_nome: string }[];
   bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
 }> {
-  const res = await fetch("/api/lookups", { cache: "no-store" });
+  const res = await fetch(noCacheUrl("/api/lookups"), { cache: "no-store" });
   if (!res.ok) return { paises: [], bjcp: [] };
   return (await res.json()) as { paises: { pais_id: string; pais_nome: string }[]; bjcp: { bjcp21_id: string; bjcp21_cod: string }[] };
 }
@@ -132,7 +133,7 @@ export async function fetchFullItem(
   const tab = TYPE_TAB[type] as ItemTab;
   const cached = await getCachedItem(tab, id);
   if (cached) return cached as Record<string, string>;
-  const res = await fetch(`/api/items/${tab}/${id}`, { cache: "no-store" });
+  const res = await fetch(noCacheUrl(`/api/items/${tab}/${id}`), { cache: "no-store" });
   if (!res.ok) return null;
   return (await res.json()) as Record<string, string>;
 }

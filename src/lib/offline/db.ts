@@ -61,12 +61,20 @@ export function getDB(): Promise<IDBPDatabase<ToastrackDB>> {
   return dbPromise;
 }
 
+/** Uma transação só com as ~3600 linhas do `beer` é grande demais pra alguns navegadores mobile
+ *  (a transação pode ser abortada no meio, e aí NENHUMA linha entra). Gravar em lotes mantém cada
+ *  transação curta; se uma falhar, as anteriores já estão salvas. */
+const PUT_CHUNK = 400;
+
 export async function putAll(tab: ItemTab, rows: RawItemRow[]): Promise<void> {
   if (!rows.length) return;
   const db = await getDB();
-  const tx = db.transaction(tab, "readwrite");
-  await Promise.all(rows.map((r) => tx.store.put(r)));
-  await tx.done;
+  for (let i = 0; i < rows.length; i += PUT_CHUNK) {
+    const lote = rows.slice(i, i + PUT_CHUNK);
+    const tx = db.transaction(tab, "readwrite");
+    await Promise.all(lote.map((r) => tx.store.put(r)));
+    await tx.done;
+  }
 }
 
 export async function putOne(tab: ItemTab, row: RawItemRow): Promise<void> {

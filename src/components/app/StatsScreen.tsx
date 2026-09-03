@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
 import { Stars } from "@/components/ui";
+import { noCacheUrl } from "@/lib/utils";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 
 type Group = { name: string; count: number };
@@ -73,7 +74,7 @@ export default function StatsScreen({ type }: { type: ItemType }) {
   const [flags, setFlags] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
-    fetch("/api/lookups", { cache: "no-store" })
+    fetch(noCacheUrl("/api/lookups"), { cache: "no-store" })
       .then((res) => (res.ok ? res.json() : { paises: [] }))
       .then((data: { paises: { pais_nome: string; pais_img: string | null }[] }) => {
         const m = new Map<string, string>();

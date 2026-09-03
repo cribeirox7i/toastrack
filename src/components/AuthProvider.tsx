@@ -12,6 +12,7 @@ import {
 import { SessionProvider, useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import type { PublicUser } from "@/lib/sheets/users";
 import { wipeLocalData } from "@/lib/offline/db";
+import { noCacheUrl } from "@/lib/utils";
 
 type AppUser = PublicUser;
 
@@ -42,7 +43,7 @@ function AuthInner({ children }: { children: ReactNode }) {
   const loadAppUser = useCallback(async () => {
     setProfileLoading(true);
     try {
-      const res = await fetch("/api/profile", { cache: "no-store" });
+      const res = await fetch(noCacheUrl("/api/profile"), { cache: "no-store" });
       setAppUser(res.ok ? await res.json() : null);
     } finally {
       setProfileLoading(false);

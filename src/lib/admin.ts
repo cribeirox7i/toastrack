@@ -1,3 +1,5 @@
+import { noCacheUrl } from "@/lib/utils";
+
 export type AdminUser = {
   user_id: string;
   user_nome: string;
@@ -16,7 +18,7 @@ export type LogEntry = {
 
 /** Todos os usuários (só admin — a rota confere `requireAdmin`). */
 export async function fetchAllUsers(): Promise<AdminUser[]> {
-  const res = await fetch("/api/admin/users", { cache: "no-store" });
+  const res = await fetch(noCacheUrl("/api/admin/users"), { cache: "no-store" });
   if (!res.ok) return [];
   const users = (await res.json()) as AdminUser[];
   return [...users].sort((a, b) => a.user_nome.localeCompare(b.user_nome));
@@ -34,7 +36,7 @@ export async function setUserStatus(userId: string, status: "S" | "N"): Promise<
 
 /** Log de acesso recente (só admin) — mais novo primeiro. */
 export async function fetchAccessLog(limit = 50): Promise<LogEntry[]> {
-  const res = await fetch("/api/admin/log", { cache: "no-store" });
+  const res = await fetch(noCacheUrl("/api/admin/log"), { cache: "no-store" });
   if (!res.ok) return [];
   const rows = (await res.json()) as {
     log_id: string;
