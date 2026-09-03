@@ -251,7 +251,7 @@ export type UploadPhotoResult =
   | { ok: false; reason: "not_found" | "forbidden" };
 
 /**
- * Sobe uma foto pro Drive (pasta {categoria}/{sessionUserId}/, ver Codigo.gs `driveUploadFile`)
+ * Sobe uma foto pro Drive (pasta {categoria}/{sessionUserId}/, ver Codigo.gs `itemFotoUpload`)
  * e grava o link + nome do arquivo nas colunas de imagem do item — mesmas colunas já usadas
  * pelos ~3600 itens reais (ver ITEM_IMG_URL_COL/ITEM_IMG_NOME_COL). Igual a updateItem: exige
  * permissão de escrita (dono ou user_edit), nunca aceita categoria/pasta vinda do corpo da
@@ -267,30 +267,30 @@ export async function uploadItemPhoto(
   if (!row) return { ok: false, reason: "not_found" };
   if (!canWrite(row, sessionUserId)) return { ok: false, reason: "forbidden" };
 
+  // Uma chamada só: `itemFotoUpload` sobe pro Drive E grava as colunas de imagem na mesma
+  // execução do Apps Script (ver Codigo.gs). Eram duas chamadas separadas; como cada ida ao Apps
+  // Script leva de 3s a 60s conforme o humor do Google (medido em 2026-09-03), juntar as duas é
+  // o que tira essa rota da faixa em que ela estourava o tempo da função.
+  //
   // `tentativas: 1` de propósito: repetir um upload que talvez já tenha funcionado cria uma
   // cópia da foto no Drive (ver comentário de idempotência em client.ts). Timeout mais folgado
   // que o padrão porque aqui trafega o arquivo inteiro.
   const uploaded = await callAppsScript<DriveUploadResult>(
-    "driveUploadFile",
+    "itemFotoUpload",
     {
       categoria: ITEM_DRIVE_CATEGORY[tipo],
       userId: sessionUserId,
       base64Data: foto.base64Data,
       mimeType: foto.mimeType,
       filename: foto.filename,
+      tab: ITEM_TAB[tipo],
+      id,
+      colUrl: ITEM_IMG_URL_COL[tipo],
+      colNome: ITEM_IMG_NOME_COL[tipo],
+      updatedAt: nowIso(),
     },
     { tentativas: 1, timeoutMs: 120_000 },
   );
-
-  await callAppsScript("updateById", {
-    tab: ITEM_TAB[tipo],
-    id,
-    patch: {
-      [ITEM_IMG_URL_COL[tipo]]: uploaded.url,
-      [ITEM_IMG_NOME_COL[tipo]]: uploaded.name,
-      updated_at: nowIso(),
-    },
-  });
 
   return { ok: true, url: uploaded.url, imgNome: uploaded.name };
 }
