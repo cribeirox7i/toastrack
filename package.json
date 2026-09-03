@@ -15,6 +15,7 @@
     "test:index-sync-integration": "tsx --conditions=react-server scripts/test-index-sync-integration.mjs",
     "test:users-integration": "tsx --conditions=react-server scripts/test-users-integration.mjs",
     "test:photo-upload-integration": "tsx --conditions=react-server scripts/test-photo-upload-integration.mjs",
+    "test:photo-rollback-integration": "tsx --conditions=react-server scripts/test-photo-rollback-integration.mjs",
     "test:sequential-id-integration": "tsx --conditions=react-server scripts/test-sequential-id-integration.mjs",
     "check-photo-sharing": "tsx --conditions=react-server scripts/check-photo-sharing.mjs",
     "create-admin": "tsx --conditions=react-server scripts/create-admin.mjs",

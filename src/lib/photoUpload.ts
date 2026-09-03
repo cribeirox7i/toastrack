@@ -14,24 +14,25 @@ import { SCHEMA } from "@/lib/itemSchema";
 /**
  * Escadinha de compressão: cada degrau é uma tentativa de deixar a foto abaixo de ALVO_BASE64.
  *
- * Por que menor que antes (era 1600px/0.82 fixo): medido contra a produção real em 2026-09-03,
+ * Por que existe um teto (antes era 1600px/0.82 fixo, sem teto): medido contra a produção real em 2026-09-03,
  * a rota /foto leva de 10s a 80s pro MESMO trabalho — a variação vem do lado do Google (a mesma
  * chamada ao Apps Script oscila entre 3s e 60s), não do tamanho do arquivo. O tamanho é o fator
  * secundário, mas é o único que dá pra controlar daqui: uma foto de celular a 1600px/0.82 dá
  * 600 KB-1 MB de base64, e a rota encadeia três chamadas ao Apps Script, então num minuto ruim
- * isso vira os 2-3 minutos + erro que o Carlos viu. 1280px cobre a tela do detalhe e o zoom do
- * PhotoViewer num celular (390 CSS px × 3 de DPR).
+ * isso vira os 2-3 minutos + erro que o Carlos viu. O teto (não a resolução) é o que resolve:
+ * começa em 1600px, que é bom pro zoom do PhotoViewer, e só desce se não couber.
  */
 const DEGRAUS = [
-  { maxDim: 1280, quality: 0.72 },
-  { maxDim: 1280, quality: 0.6 },
-  { maxDim: 1024, quality: 0.6 },
-  { maxDim: 800, quality: 0.55 },
+  { maxDim: 1600, quality: 0.78 },
+  { maxDim: 1600, quality: 0.62 },
+  { maxDim: 1280, quality: 0.68 },
+  { maxDim: 1280, quality: 0.55 },
+  { maxDim: 1024, quality: 0.55 },
 ] as const;
 
-/** ~250 KB de base64 (~185 KB de JPEG) — foto de celular típica cabe no primeiro ou segundo
- *  degrau, sem perda visível na tela do detalhe. */
-const ALVO_BASE64 = 250_000;
+/** Teto de 400 KB de base64 (~300 KB de JPEG) — escolha do Carlos 2026-09-03, com folga sobre a
+ *  medição de produção (500 KB levaram 12,6s; 700 KB, 25,8s) e sem apertar a foto à toa. */
+const ALVO_BASE64 = 400_000;
 
 /** Rede de segurança: sem isso o "Enviando..." fica indefinidamente na tela se a requisição
  *  travar (foi o que aconteceu: 2-3 minutos parados até um erro genérico). */
@@ -135,5 +136,35 @@ export async function uploadItemPhoto(type: ItemType, id: string, file: File): P
       return { ok: false, error: "A foto demorou demais pra subir. Tente de novo." };
     }
     return { ok: false, error: "Erro de rede ao enviar a foto." };
+  }
+}
+
+/**
+ * Desfaz uma foto que acabou de subir: apaga o arquivo do Drive e devolve as colunas de imagem ao
+ * estado anterior (`restaurar`) ou a vazio. É o que roda quando o usuário cancela a edição depois
+ * de anexar a foto — antes disso a foto ficava gravada e o arquivo órfão no Drive mesmo com o
+ * item nunca tendo sido salvo. Atualiza o cache local na volta, como o upload faz.
+ */
+export async function rollbackItemPhoto(
+  type: ItemType,
+  id: string,
+  restaurar?: { url: string; nome: string },
+): Promise<boolean> {
+  const tab = TYPE_TAB[type] as ItemTab;
+  try {
+    const res = await fetch(`/api/items/${tab}/${id}/foto`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ restaurarUrl: restaurar?.url ?? "", restaurarNome: restaurar?.nome ?? "" }),
+    });
+    if (!res.ok) return false;
+    await applyServerPatch(tab, id, {
+      [IMG_URL_COL[type]]: restaurar?.url ?? "",
+      [SCHEMA[type].imgNomeCol]: restaurar?.nome ?? "",
+      updated_at: new Date().toISOString(),
+    });
+    return true;
+  } catch {
+    return false;
   }
 }
