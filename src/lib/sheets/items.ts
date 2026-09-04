@@ -21,6 +21,21 @@ import {
 const nowIso = () => new Date().toISOString();
 
 /**
+ * Nome do arquivo de foto = o id sequencial do item, com 4 dígitos (pedido do Carlos 2026-09-04:
+ * "item 3400, imagem 3400.jpg") - substitui QUALQUER nome que o cliente mande (nome de arquivo do
+ * celular, que não diz nada sobre o item). A extensão vem do `mimeType` de verdade (o que
+ * `preparePhoto`/`sniffFormat` no cliente detectaram nos bytes), não do nome do arquivo original,
+ * que pode mentir (ver MIGRACAO_SHEETS.md 8.3). `id` aqui é sempre o id REAL, nunca o temporário -
+ * a rota só chama isto depois que `waitForRealId` (cliente) resolve.
+ */
+function nomeArquivoFoto(id: string, mimeType: string): string {
+  const ext = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+  const numero = Number(id);
+  const base = Number.isFinite(numero) ? String(numero).padStart(4, "0") : id;
+  return `${base}.${ext}`;
+}
+
+/**
  * Próximo id sequencial de uma aba. Caminho normal: ação `proximoIdSequencial` do Apps Script
  * (contador em SyncMeta, sob lock). Se essa ação ainda não estiver publicada no Web App (deploy
  * do Codigo.gs atrasado), cai pra um fallback que lê a aba e usa maior id numérico + 1 - mais
@@ -282,7 +297,7 @@ export async function uploadItemPhoto(
       userId: sessionUserId,
       base64Data: foto.base64Data,
       mimeType: foto.mimeType,
-      filename: foto.filename,
+      filename: nomeArquivoFoto(id, foto.mimeType),
       tab: ITEM_TAB[tipo],
       id,
       colUrl: ITEM_IMG_URL_COL[tipo],

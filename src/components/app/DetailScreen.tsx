@@ -21,6 +21,7 @@ import { setLocalPreview } from "@/lib/localPhotoPreview";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
+  buildFieldRows,
   fieldByRole,
   fetchLookups,
   fetchFullItem,
@@ -54,6 +55,10 @@ export default function DetailScreen({
   const producerField = fieldByRole(type, "producer")!;
   const ratingField = fieldByRole(type, "rating")!;
   const dateField = useMemo(() => fields.find((f) => f.kind === "date"), [fields]);
+  const fieldRows = useMemo(
+    () => buildFieldRows(fields.filter((f) => f.role === "field")),
+    [fields],
+  );
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
   const [editing, setEditing] = useState(initialEditing);
@@ -213,8 +218,16 @@ export default function DetailScreen({
     const map = new Map(lookup.pais.map((p) => [String(p.pais_id), p.pais_nome]));
     return (id: string) => map.get(id) ?? "";
   }, [lookup.pais]);
+  // Exibição mostra código + descrição do subestilo (pedido do Carlos 2026-09-04) - a coluna
+  // `bjcp21_subestilo` pode vir vazia pra algumas linhas da aba `list_bjcp_21`; nesse caso fica só
+  // o código, como antes.
   const bjcpLabel = useMemo(() => {
-    const map = new Map(lookup.bjcp.map((b) => [String(b.bjcp21_id), b.bjcp21_cod]));
+    const map = new Map(
+      lookup.bjcp.map((b) => [
+        String(b.bjcp21_id),
+        b.bjcp21_subestilo ? `${b.bjcp21_cod} - ${b.bjcp21_subestilo}` : b.bjcp21_cod,
+      ]),
+    );
     return (id: string) => map.get(id) ?? "";
   }, [lookup.bjcp]);
 
@@ -589,10 +602,23 @@ export default function DetailScreen({
               onChange={(v) => set(ratingField.col, String(v))}
             />
 
-            {[nameField, producerField, ...fields.filter((f) => f.role === "field")].map((f) => (
+            {[nameField, producerField].map((f) => (
               <div key={f.col}>
                 <label className={labelCls}>{f.label}</label>
                 <EditField f={f} value={values[f.col] ?? ""} onChange={(v) => set(f.col, v)} lookup={lookup} />
+              </div>
+            ))}
+
+            {/* Duas colunas pros pares Data/País e IBU/ABV (pedido do Carlos 2026-09-04) - o
+                resto ocupa a linha toda. Ver buildFieldRows em itemSchema.ts. */}
+            {fieldRows.map((row) => (
+              <div key={row.map((f) => f.col).join("+")} className={row.length === 2 ? "flex gap-3" : undefined}>
+                {row.map((f) => (
+                  <div key={f.col} className={row.length === 2 ? "min-w-0 flex-1" : undefined}>
+                    <label className={labelCls}>{f.label}</label>
+                    <EditField f={f} value={values[f.col] ?? ""} onChange={(v) => set(f.col, v)} lookup={lookup} />
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -618,7 +644,7 @@ export default function DetailScreen({
                 <>
                   <ActionBtn label="Editar" onClick={() => setEditing(true)} icon="edit" />
                   <ActionBtn label="Duplicar" onClick={doDuplicate} text="⧉" />
-                  <ActionBtn label="Excluir" onClick={() => setConfirmDel(true)} text="✕" danger />
+                  <ActionBtn label="Excluir" onClick={() => setConfirmDel(true)} icon="trash" danger />
                 </>
               )}
             </div>

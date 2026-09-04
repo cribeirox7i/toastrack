@@ -910,6 +910,39 @@ confirmam que nada nas dependências compartilhadas (`catalog.ts`, `offline/sync
 **Não verificável daqui**: o efeito é só visual, na lista, dependente do fluxo completo
 salvar→outbox→upload - confirmação fica pro aparelho do Carlos.
 
+## 8.6 Ajustes de jornada (2026-09-04, mesmo dia)
+
+Sete pedidos pequenos do Carlos, sem relação entre si:
+
+1. **Deck**: a nota (★) saiu da linha da categoria e passou a acompanhar a data - a categoria fica
+   sozinha na linha dela (nunca quebra) e nota+data também nunca quebram, então o card parou de
+   variar entre 3 e 5 linhas conforme o texto.
+2. **Ícone de excluir**: trocado de `✕` (lido como "fechar") pra uma lixeira, nas 3 telas que
+   tinham isso (Deck, Tabela, Detalhe). Ícone novo em `Icon.tsx` (`trash`).
+3. **Filtro de busca**: o `<select>` largo virou um botão circular com dropdown, no mesmo padrão
+   visual do botão Ordenar (ícone `filter` novo). O campo de busca ganhou a largura que sobrou.
+4. **Ordenação padrão**: passou de "data" pra "código" (id), decrescente. Nisso apareceu um bug
+   preexistente que a mudança tornou visível: `id` é string, e o comparador genérico fazia
+   comparação léxica ("10" < "9"). Corrigido com comparação numérica só pra este campo - as
+   outras (nome, fabricante, categoria) continuam texto, que é o certo pra elas.
+5. **Nome do arquivo da foto**: passou a ser o id sequencial do item com 4 dígitos (`3400.jpg`),
+   em vez do nome que o celular dava ao arquivo. Mudança só no servidor (`items.ts`,
+   `uploadItemPhoto`) - o nome que o cliente manda é ignorado; a extensão vem do `mimeType` real
+   (JPEG/PNG/WebP), não do nome original. Não precisa reimplantar o Apps Script: `Codigo.gs` só
+   usa `payload.filename` como veio, sempre usou.
+6. **Duas colunas na edição**: Data+País e IBU+ABV lado a lado (IBU só existe na cerveja - nos
+   outros tipos, ABV fica sozinho, ocupando a linha toda). `buildFieldRows` (`itemSchema.ts`) é
+   genérico por `kind`/sufixo de coluna, não por tipo - continua funcionando se os schemas
+   mudarem. Testado à mão (`tsx` fora do build) contra os 4 tipos antes de ligar na tela.
+7. **Estilo BJCP na exibição**: passou a mostrar código + descrição do subestilo (coluna
+   `bjcp21_subestilo` de `list_bjcp_21`), em vez de só o código. A tabela `read` do Apps Script já
+   devolvia a coluna inteira; só faltava o tipo do lookup carregar e a tela usar. O dropdown de
+   edição continua só com o código (a lista já é longa, não pedido).
+
+**Verificação:** `tsc`, lint e build limpos; os 4 conjuntos de testes puros continuam verdes.
+Nenhum é sobre telas (são bibliotecas puras) - a conferência visual das 7 mudanças fica pro
+Carlos, Browser pane seguindo banida neste projeto.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

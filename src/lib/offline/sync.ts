@@ -272,7 +272,10 @@ export async function getCachedItems(tab: ItemTab): Promise<RawItemRow[]> {
 
 export interface LookupsResponse {
   paises: { pais_id: string; pais_nome: string }[];
-  bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
+  // bjcp21_subestilo: descrição do subestilo (pedido do Carlos 2026-09-04, exibição da cerveja
+  // mostra código + descrição) - opcional porque a aba pode não ter essa coluna preenchida em
+  // toda linha.
+  bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
 }
 
 const LOOKUPS_KEY = "lookups";

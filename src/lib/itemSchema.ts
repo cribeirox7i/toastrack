@@ -95,7 +95,61 @@ export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined 
   return SCHEMA[type].fields.find((f) => f.role === role);
 }
 
-export type Lookup = { pais: { pais_id: number; pais_nome: string }[]; bjcp: { bjcp21_id: number; bjcp21_cod: string }[] };
+/**
+ * Agrupa os campos "field" da tela de edição em linhas de 1 ou 2, pra layout de duas colunas
+ * (pedido do Carlos 2026-09-04): Data e País lado a lado, e IBU e ABV lado a lado (quando ambos
+ * existem - só a cerveja tem IBU; wine/dest/drink têm só ABV, que fica sozinho). O resto segue
+ * cada um na sua própria linha, ocupando a largura toda.
+ *
+ * Genérico por design (não hardcoded por tipo): casa por `kind` (date+country) e por sufixo de
+ * coluna (`_ibu`/`_abv`), então continua funcionando se os schemas de tipo mudarem sem precisar
+ * mexer aqui. A ordem de emissão segue a ordem original de `fields` - só a posição do PAR muda pra
+ * onde o primeiro membro dele aparecia.
+ */
+export function buildFieldRows(fields: Field[]): Field[][] {
+  const usado = new Set<string>();
+  const rows: Field[][] = [];
+
+  function achar(pred: (f: Field) => boolean): Field | undefined {
+    return fields.find((f) => !usado.has(f.col) && pred(f));
+  }
+
+  for (const f of fields) {
+    if (usado.has(f.col)) continue;
+
+    if (f.kind === "date" || f.kind === "country") {
+      const dataF = f.kind === "date" ? f : achar((x) => x.kind === "date");
+      const paisF = f.kind === "country" ? f : achar((x) => x.kind === "country");
+      if (dataF && paisF) {
+        rows.push([dataF, paisF]);
+        usado.add(dataF.col);
+        usado.add(paisF.col);
+        continue;
+      }
+    }
+
+    if (f.col.endsWith("_ibu") || f.col.endsWith("_abv")) {
+      const ibuF = f.col.endsWith("_ibu") ? f : achar((x) => x.col.endsWith("_ibu"));
+      const abvF = f.col.endsWith("_abv") ? f : achar((x) => x.col.endsWith("_abv"));
+      if (ibuF && abvF) {
+        rows.push([ibuF, abvF]);
+        usado.add(ibuF.col);
+        usado.add(abvF.col);
+        continue;
+      }
+    }
+
+    rows.push([f]);
+    usado.add(f.col);
+  }
+
+  return rows;
+}
+
+export type Lookup = {
+  pais: { pais_id: number; pais_nome: string }[];
+  bjcp: { bjcp21_id: number; bjcp21_cod: string; bjcp21_subestilo: string }[];
+};
 
 /** Cache-first (IndexedDB, etapa 6): países/BJCP quase não mudam, então servir do que já está
  *  salvo e disparar um refresh em segundo plano evita esperar rede toda vez que a tela de
@@ -106,17 +160,24 @@ export async function fetchLookups(): Promise<Lookup> {
   void pullLookups(); // sempre atualiza em segundo plano, tendo cache ou não
   return {
     pais: data.paises.map((p) => ({ pais_id: Number(p.pais_id), pais_nome: p.pais_nome })),
-    bjcp: data.bjcp.map((b) => ({ bjcp21_id: Number(b.bjcp21_id), bjcp21_cod: b.bjcp21_cod })),
+    bjcp: data.bjcp.map((b) => ({
+      bjcp21_id: Number(b.bjcp21_id),
+      bjcp21_cod: b.bjcp21_cod,
+      bjcp21_subestilo: b.bjcp21_subestilo ?? "",
+    })),
   };
 }
 
 async function fetchLookupsNetwork(): Promise<{
   paises: { pais_id: string; pais_nome: string }[];
-  bjcp: { bjcp21_id: string; bjcp21_cod: string }[];
+  bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
 }> {
   const res = await fetch(noCacheUrl("/api/lookups"), { cache: "no-store" });
   if (!res.ok) return { paises: [], bjcp: [] };
-  return (await res.json()) as { paises: { pais_id: string; pais_nome: string }[]; bjcp: { bjcp21_id: string; bjcp21_cod: string }[] };
+  return (await res.json()) as {
+    paises: { pais_id: string; pais_nome: string }[];
+    bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
+  };
 }
 
 /** Linha crua de um item (todas as colunas), incluindo user_owner/user_access/user_edit — usado

@@ -102,10 +102,13 @@ export default function ListScreen({
   const [viewMode, setViewMode] = useState<ViewMode>("deck");
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<SearchField>("all");
-  const [sortField, setSortField] = useState<SortField>("date");
+  // Padrão por código (id), decrescente - pedido do Carlos 2026-09-04: o item mais recente
+  // (maior id sequencial) primeiro, em vez de por data de degustação.
+  const [sortField, setSortField] = useState<SortField>("id");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [menuOpen, setMenuOpen] = useState(false);
   const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const [searchMenuOpen, setSearchMenuOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<Item | null>(null);
   const [toast, setToast] = useState("");
 
@@ -131,6 +134,15 @@ export default function ListScreen({
       } else if (sortField === "date") {
         av = a.date;
         bv = b.date;
+      } else if (sortField === "id") {
+        // Comparação NUMÉRICA - id é string ("3591"), e comparar string faz "10" vir antes de
+        // "9". Passou despercebido enquanto "ID" era só uma opção a mais no menu; virou bug real
+        // ao se tornar o padrão (pedido do Carlos 2026-09-04: "ordenação padrão por código, desc").
+        // Item local ainda não sincronizado tem id de uuid (não numérico) - Number() vira NaN, que
+        // nenhuma comparação `<`/`>` numérica bate, então essas linhas ficam empatadas entre si;
+        // aceitável (é uma janela de poucos segundos até o outbox sincronizar).
+        av = Number(a.id) || 0;
+        bv = Number(b.id) || 0;
       } else {
         av = (a[sortField] || "").toLowerCase();
         bv = (b[sortField] || "").toLowerCase();
@@ -240,17 +252,45 @@ export default function ListScreen({
             className="w-full rounded-full border border-border bg-surface py-2.5 pl-9 pr-3 text-[14px] outline-none placeholder:text-muted focus:border-accent"
           />
         </div>
-        <select
-          value={searchField}
-          onChange={(e) => setSearchField(e.target.value as SearchField)}
-          className="rounded-full border border-border bg-surface px-3 py-2.5 text-[13px] outline-none focus:border-accent"
-        >
-          {SEARCH_FIELDS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
-        </select>
+        {/* Filtro de campo da busca - mesmo padrão visual do botão Ordenar (pedido do Carlos
+            2026-09-04), no lugar do <select> largo que sobrava espaço do campo de busca. */}
+        <div className="relative">
+          <button
+            onClick={() => setSearchMenuOpen((v) => !v)}
+            title="Filtrar busca"
+            aria-label="Filtrar busca"
+            className="flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-2.5 text-[13px] font-semibold text-muted"
+          >
+            <Icon name="filter" size={15} />
+            <span className="hidden sm:inline">
+              {SEARCH_FIELDS.find((f) => f.value === searchField)?.label}
+            </span>
+          </button>
+          {searchMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setSearchMenuOpen(false)} />
+              <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[160px] rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
+                {SEARCH_FIELDS.map((f) => {
+                  const active = searchField === f.value;
+                  return (
+                    <button
+                      key={f.value}
+                      onClick={() => {
+                        setSearchField(f.value);
+                        setSearchMenuOpen(false);
+                      }}
+                      className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold"
+                      style={{ background: active ? "var(--accent-soft)" : "transparent" }}
+                    >
+                      <span className={active ? "text-accent" : ""}>{f.label}</span>
+                      {active && <Icon name="check" size={14} className="text-accent" strokeWidth={2.5} />}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
         <div className="relative">
           <button
             onClick={() => setSortMenuOpen((v) => !v)}
@@ -544,7 +584,7 @@ function RowActions({
         className="flex size-7 items-center justify-center rounded-lg border border-danger text-danger"
         title="Excluir"
       >
-        ✕
+        <Icon name="trash" size={13} />
       </button>
     </div>
   );
@@ -575,18 +615,22 @@ function DeckView({
           <div className="min-w-0 flex-1">
             <div className="truncate text-[15.5px] font-extrabold">{item.name}</div>
             <div className="truncate text-[12.5px] text-muted">{item.manufacturer}</div>
-            <div className="mt-2 flex flex-wrap items-center gap-1.5">
-              {item.category && (
+            {item.category && (
+              <div className="mt-2">
                 <span className="max-w-[9.5rem] truncate rounded-full bg-accent-soft px-2 py-0.5 text-[10.5px] font-bold text-accent">
                   {item.category}
                 </span>
-              )}
-              <span className="flex items-center gap-1 rounded-full bg-track px-2 py-0.5 text-[11px] font-bold">
+              </div>
+            )}
+            {/* Nota na mesma linha da data (pedido do Carlos 2026-09-04) - as duas são curtas e
+                nunca quebram, ao contrário da categoria+nota juntas antes disso. */}
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-muted">
+              <span>{formatDate(item.date)}</span>
+              <span className="flex items-center gap-1 rounded-full bg-track px-2 py-0.5 text-[11px] font-bold text-text">
                 <span className="text-accent">★</span>
                 {item.rating.toFixed(1)}
               </span>
             </div>
-            <div className="mt-1.5 text-[11.5px] text-muted">{formatDate(item.date)}</div>
           </div>
           {item.canEdit && (
             <RowActions item={item} onEdit={onEdit} onDuplicate={onDuplicate} onDelete={onDelete} />
@@ -663,7 +707,7 @@ function TableView({
                       className="flex size-6 items-center justify-center rounded border border-danger text-danger"
                       title="Excluir"
                     >
-                      ✕
+                      <Icon name="trash" size={12} />
                     </button>
                   </>
                 )}
