@@ -28,6 +28,17 @@ export function Stars({ value, className = "text-[13px]" }: { value: number; cla
  *  item sem foto (src vazio) quanto pra link do Drive quebrado (onError). */
 export function Thumb({ label, src, className = "" }: { label: string; src?: string; className?: string }) {
   const [failed, setFailed] = useState(false);
+  // Sem isto, uma foto que falhou uma vez (link quebrado, hiccup de rede) prendia este Thumb no
+  // placeholder pra sempre - trocar `src` depois (ex.: anexar uma foto nova por cima da que
+  // falhou) não voltava a tentar, porque `failed` só nasce false e nunca é resetado sozinho.
+  // Ajuste de estado durante a renderização (padrão recomendado do React pra "resetar estado
+  // quando uma prop muda"), não num efeito - evita o round-trip extra de render que um efeito
+  // causaria aqui.
+  const [prevSrc, setPrevSrc] = useState(src);
+  if (src !== prevSrc) {
+    setPrevSrc(src);
+    setFailed(false);
+  }
 
   if (src && !failed) {
     return (
