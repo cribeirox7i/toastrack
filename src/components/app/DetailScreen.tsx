@@ -6,7 +6,14 @@ import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
-import { getPendingPhotoUpload, queuePhotoUpload } from "@/lib/photoUpload";
+import {
+  formatDiagnostics,
+  getPendingPhotoUpload,
+  preparePhoto,
+  queuePhotoUpload,
+  type PhotoDiagnostics,
+  type PreparedPhoto,
+} from "@/lib/photoUpload";
 import { photoDateForInput, toDateInputValue } from "@/lib/photoDate";
 import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
@@ -70,12 +77,18 @@ export default function DetailScreen({
   // true também ao reabrir um item cujo upload de uma edição anterior ainda não terminou (ver
   // efeito de carga, `getPendingPhotoUpload`).
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  // Arquivo escolhido nesta edição, ainda não enviado - o upload de verdade só começa no Salvar
-  // (queuePhotoUpload). Cancelar, portanto, nunca precisa desfazer nada no servidor: só descarta
-  // isto (pedido do Carlos 2026-09-03: a foto não pode travar o cadastro nem subir antes de o
-  // usuário confirmar Salvar).
-  const pendingPhotoFile = useRef<File | null>(null);
-  // URL local (blob:) do preview da foto escolhida - precisa ser revogada pra não vazar memória.
+  // Estado da foto DESTA edição, antes de qualquer rede. "preparando" é a compressão local (ver
+  // preparePhoto); "erro" é o que antes só aparecia depois do Salvar, num toast, quando já não
+  // dava pra fazer nada - agora aparece aqui, com a tela aberta e outra foto a um toque.
+  const [photoStatus, setPhotoStatus] = useState<"idle" | "preparando" | "pronta" | "erro">("idle");
+  const [photoError, setPhotoError] = useState("");
+  const [photoDiag, setPhotoDiag] = useState<PhotoDiagnostics | null>(null);
+  const [diagOpen, setDiagOpen] = useState(false);
+  // Foto já comprimida e pronta pra subir - o upload só começa no Salvar (queuePhotoUpload).
+  // Cancelar, portanto, nunca precisa desfazer nada no servidor: só descarta isto (pedido do
+  // Carlos 2026-09-03: a foto não pode travar o cadastro nem subir antes de o usuário salvar).
+  const preparedPhoto = useRef<PreparedPhoto | null>(null);
+  // URL local (blob:) do preview - precisa ser revogada pra não vazar memória.
   const previewRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
@@ -85,13 +98,31 @@ export default function DetailScreen({
     window.setTimeout(() => setToast(""), 2200);
   }
 
-  useEffect(() => {
-    let alive = true;
-    // Trocar de item (ex.: "Duplicar" troca currentId sem desmontar a tela) descarta qualquer
-    // foto escolhida e ainda não salva - ela pertencia ao item anterior.
+  // Trocar de item sem desmontar a tela ("Duplicar" troca currentId no lugar) descarta a foto
+  // escolhida e ainda não salva - ela pertencia ao item anterior. Ajuste de estado durante a
+  // renderização, o padrão do React pra "resetar estado quando uma prop muda" (mesmo que o Thumb
+  // usa em ui.tsx); num efeito isto viraria um render em cascata.
+  const chaveDoItem = `${type}:${currentId}`;
+  const [prevChave, setPrevChave] = useState(chaveDoItem);
+  if (chaveDoItem !== prevChave) {
+    setPrevChave(chaveDoItem);
+    descartarFotoLocal();
+  }
+
+  /** Joga fora a foto escolhida nesta edição e o preview dela. Nada disso chegou ao servidor -
+   *  a preparação é local e o envio só começa no Salvar -, então não há o que desfazer lá. */
+  function descartarFotoLocal() {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     previewRef.current = null;
-    pendingPhotoFile.current = null;
+    preparedPhoto.current = null;
+    setPhotoStatus("idle");
+    setPhotoError("");
+    setPhotoDiag(null);
+    setDiagOpen(false);
+  }
+
+  useEffect(() => {
+    let alive = true;
     (async () => {
       setLoading(true);
       try {
@@ -188,6 +219,12 @@ export default function DetailScreen({
       showToast("Informe o nome.");
       return;
     }
+    // A foto ainda está sendo comprimida: esperar aqui custa no máximo um segundo e evita salvar
+    // o item sem ela. É a ÚNICA espera que o Salvar faz por foto - o envio em si nunca é esperado.
+    if (photoStatus === "preparando") {
+      showToast("Preparando a foto…");
+      return;
+    }
     setSaving(true);
     const idAtual = currentId;
     const id = await saveItem(type, idAtual, values, ownUserId);
@@ -196,12 +233,15 @@ export default function DetailScreen({
       showToast("Erro ao salvar.");
       return;
     }
-    // A foto (se houver uma escolhida) sobe em segundo plano a partir daqui - o Salvar não espera
-    // por ela. `queuePhotoUpload` sobrevive à tela fechando: o resultado chega pelo toast global
-    // (ver GlobalPhotoToast em MainApp.tsx) e, se der certo, direto no cache local.
-    if (pendingPhotoFile.current) {
-      queuePhotoUpload(type, id, pendingPhotoFile.current);
-      pendingPhotoFile.current = null;
+    // A foto (se houver uma pronta) sobe em segundo plano a partir daqui - o Salvar não espera por
+    // ela. `queuePhotoUpload` sobrevive à tela fechando: o resultado chega pelo toast global (ver
+    // GlobalPhotoToast em MainApp.tsx) e, dando certo, direto no cache local. Como a foto já vem
+    // comprimida da escolha, o que resta aqui é só a requisição - sem CPU, sem risco de falhar
+    // por memória com a tela já fechada.
+    const pronta = preparedPhoto.current;
+    if (pronta) {
+      queuePhotoUpload(type, id, pronta);
+      preparedPhoto.current = null;
     }
     if (previewRef.current) {
       URL.revokeObjectURL(previewRef.current);
@@ -219,11 +259,7 @@ export default function DetailScreen({
     // Nada foi enviado ao servidor ainda - o upload só começa em queuePhotoUpload, chamado por
     // save() -, então cancelar é só descartar o que foi escolhido localmente. Sem rollback nenhum
     // no servidor: nunca chegou a existir uma foto órfã lá pra desfazer.
-    if (previewRef.current) {
-      URL.revokeObjectURL(previewRef.current);
-      previewRef.current = null;
-    }
-    pendingPhotoFile.current = null;
+    descartarFotoLocal();
 
     if (currentId == null) {
       onClose();
@@ -263,23 +299,44 @@ export default function DetailScreen({
 
   /**
    * Escolher a foto NUNCA sobe nada (pedido do Carlos 2026-09-03: "aplicação mostra a foto no
-   * controle de imagem, sem subir, localmente"). Só guarda o arquivo e mostra o preview local; o
-   * envio de verdade só começa quando o item é salvo (ver save/queuePhotoUpload).
+   * controle de imagem, sem subir, localmente"). O que mudou em 2026-09-04: a compressão passou a
+   * acontecer AQUI, e o preview mostrado é o resultado dela - não mais um `blob:` do arquivo cru.
+   *
+   * Isso é o que faz o preview valer como garantia: se a foto aparece, é porque o JPEG que vai
+   * subir já existe na memória, pronto. E quando o navegador não dá conta do arquivo (HEIC do
+   * iPhone, foto grande demais pra RAM do aparelho), o erro aparece agora - com a tela aberta e o
+   * usuário podendo escolher outra - em vez de depois do Salvar, num toast, já de volta na lista.
    */
   async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
     if (!file) return;
 
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    const preview = URL.createObjectURL(file);
-    previewRef.current = preview;
-    pendingPhotoFile.current = file;
-    setImgUrl(preview);
+    descartarFotoLocal();
+    setPhotoStatus("preparando");
 
-    // EXIF é leitura local, roda em segundo plano sem esperar rede nenhuma (ver photoDate.ts).
+    // EXIF é leitura local e barata: sai na frente pra a data já aparecer enquanto a compressão
+    // (que é o passo pesado) ainda está rodando.
     const dataDaFoto = await applyPhotoDate(file);
-    showToast(dataDaFoto ? `Foto anexada · data ${formatDate(dataDaFoto)}` : "Foto anexada");
+
+    const resultado = await preparePhoto(file);
+    if (!resultado.ok) {
+      setPhotoStatus("erro");
+      setPhotoError(resultado.error);
+      setPhotoDiag(resultado.diagnostics);
+      return;
+    }
+
+    preparedPhoto.current = resultado.photo;
+    previewRef.current = resultado.photo.previewUrl;
+    setImgUrl(resultado.photo.previewUrl);
+    setPhotoDiag(resultado.photo.diagnostics);
+    setPhotoStatus("pronta");
+    showToast(
+      dataDaFoto
+        ? `Foto pronta (${resultado.photo.larguraKb} KB) · data ${formatDate(dataDaFoto)}`
+        : `Foto pronta (${resultado.photo.larguraKb} KB)`,
+    );
   }
 
   async function doDuplicate() {
@@ -366,7 +423,11 @@ export default function DetailScreen({
               className="hidden"
               onChange={(e) => void onPhotoSelected(e)}
             />
-            <button onClick={pickPhoto} disabled={uploadingPhoto} className="relative mb-2 w-full">
+            <button
+              onClick={pickPhoto}
+              disabled={uploadingPhoto || photoStatus === "preparando"}
+              className="relative mb-2 w-full"
+            >
               <Thumb
                 label={values[nameField.col] || "novo item"}
                 src={imgUrl}
@@ -374,9 +435,50 @@ export default function DetailScreen({
               />
               <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1.5 rounded-b-2xl bg-black/55 py-2 text-[12.5px] font-bold text-white">
                 <Icon name="edit" size={13} />
-                {uploadingPhoto ? "Enviando…" : imgUrl ? "Trocar foto" : "Adicionar foto"}
+                {photoStatus === "preparando"
+                  ? "Preparando…"
+                  : uploadingPhoto
+                    ? "Enviando…"
+                    : imgUrl
+                      ? "Trocar foto"
+                      : "Adicionar foto"}
               </span>
             </button>
+
+            {photoStatus === "pronta" && (
+              <div className="mb-2 text-[12px] font-semibold text-muted">
+                Foto pronta — sobe quando você salvar.
+              </div>
+            )}
+
+            {photoStatus === "erro" && (
+              <div className="mb-2 rounded-xl border border-danger px-3 py-2.5">
+                <div className="text-[12.5px] font-semibold" style={{ color: "var(--danger)" }}>
+                  {photoError}
+                </div>
+                <div className="mt-1.5 flex gap-3">
+                  <button onClick={pickPhoto} className="text-[12px] font-bold text-accent">
+                    Escolher outra
+                  </button>
+                  {photoDiag && (
+                    // Sem isto não há como diagnosticar uma falha que só acontece no aparelho do
+                    // Carlos: a Browser pane é proibida neste projeto e o console de um celular
+                    // não está ao meu alcance. Um print deste bloco é o laudo.
+                    <button
+                      onClick={() => setDiagOpen((v) => !v)}
+                      className="text-[12px] font-bold text-muted"
+                    >
+                      {diagOpen ? "Ocultar detalhes" : "Detalhes"}
+                    </button>
+                  )}
+                </div>
+                {diagOpen && photoDiag && (
+                  <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-bg p-2 font-mono text-[10.5px] leading-snug text-muted">
+                    {formatDiagnostics(photoDiag)}
+                  </pre>
+                )}
+              </div>
+            )}
 
             <label className={labelCls}>{ratingField.label}</label>
             <RatingInput

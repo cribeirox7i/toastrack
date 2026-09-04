@@ -1,27 +1,44 @@
 import { IMG_URL_COL, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { applyServerPatch, type ItemTab } from "@/lib/offline/sync";
 import { SCHEMA } from "@/lib/itemSchema";
+import {
+  blobToBase64,
+  closeDrawable,
+  decodeImage,
+  descreveErro,
+  drawableSize,
+  encodeJpeg,
+} from "@/lib/imageDecode";
 
 /**
- * Upload de foto de item (etapa "fora de escopo" da migração original — ver MIGRACAO_SHEETS.md
- * seção 7, etapa 6: img_url/img_nome sempre existiram na planilha, nenhuma tela subia foto nova).
+ * Foto de item: preparar (local, ao escolher) e enviar (rede, ao salvar).
  *
- * Redesenhado 2026-09-03 (pedido do Carlos): a foto NUNCA sobe na hora de escolher — só quando o
- * item é salvo, e mesmo aí em segundo plano (`queuePhotoUpload`), sem travar a tela nem esperar a
- * rede pra voltar pra lista. Isso também é o que elimina a necessidade de desfazer no Cancelar:
- * como nada sobe antes do Salvar, cancelar é só descartar o arquivo escolhido localmente — nunca
- * chega a existir uma foto órfã no servidor pra reverter.
+ * Redesenho de 2026-09-04, depois de o upload falhar SÓ no celular do Carlos por três rodadas
+ * seguidas ("Não foi possível processar essa imagem.", sempre passando no desktop). O que mudou
+ * de verdade não foi o algoritmo de compressão e sim QUANDO ele roda:
+ *
+ * - Antes: escolher a foto guardava o `File` cru e mostrava um preview `blob:` dele; a compressão
+ *   só acontecia lá na frente, dentro do upload disparado pelo Salvar. Preview e upload passavam
+ *   por decodificadores DIFERENTES (o `<img>` do preview, o canvas do upload), então podiam
+ *   discordar — e discordavam. Pior: a falha aparecia depois do Salvar, num toast, com o usuário
+ *   já de volta na lista e sem nada a fazer a respeito.
+ * - Agora: `preparePhoto` roda na hora da escolha e produz o JPEG final. O preview é ESSE JPEG.
+ *   Se a foto aparece na tela, ela vai subir — é o mesmo arquivo, já pronto, esperando só a rede.
+ *   E quando não dá pra processar, o erro é imediato, com a tela aberta e o usuário podendo
+ *   escolher outra foto.
+ *
+ * O que não mudou (pedido do Carlos em 2026-09-03, seção 8.2): escolher a foto não sobe nada. A
+ * preparação é 100% local; o envio continua começando só no Salvar, em segundo plano, sem a tela
+ * esperar por ele.
  */
 
 /**
- * Escadinha de compressão: cada degrau é uma tentativa de deixar a foto abaixo de ALVO_BASE64.
+ * Escadinha de compressão: o primeiro degrau que couber em ALVO_BASE64 vence.
  *
- * Por que existe um teto (antes era 1600px/0.82 fixo, sem teto): medido contra a produção real em
- * 2026-09-03, a rota /foto leva de 10s a 80s pro MESMO trabalho — a variação vem do lado do
- * Google (a mesma chamada ao Apps Script oscila entre 3s e 60s), não do tamanho do arquivo. O
- * tamanho é o fator secundário, mas é o único que dá pra controlar daqui: uma foto de celular a
- * 1600px/0.82 dá 600 KB-1 MB de base64. O teto (não a resolução) é o que resolve: começa em
- * 1600px, que é bom pro zoom do PhotoViewer, e só desce se não couber.
+ * O teto existe por latência, não por banda: medido contra a produção em 2026-09-03, a rota /foto
+ * leva de 10s a 80s pro mesmo trabalho (a oscilação vem do Apps Script, ver seção 8.1), e o
+ * tamanho é o único fator que dá pra controlar daqui. 1600px é o topo porque é o que o
+ * PhotoViewer usa pra dar zoom.
  */
 const DEGRAUS = [
   { maxDim: 1600, quality: 0.78 },
@@ -31,135 +48,245 @@ const DEGRAUS = [
   { maxDim: 1024, quality: 0.55 },
 ] as const;
 
-/** Teto de 400 KB de base64 (~300 KB de JPEG) — escolha do Carlos 2026-09-03, com folga sobre a
- *  medição de produção (500 KB levaram 12,6s; 700 KB, 25,8s) e sem apertar a foto à toa. */
+/** ~300 KB de JPEG. Escolha do Carlos em 2026-09-03 (500 KB levaram 12,6s; 700 KB, 25,8s). */
 const ALVO_BASE64 = 400_000;
 
-/** Rede de segurança: sem isso o "Enviando..." fica indefinidamente na tela se a requisição
- *  travar (foi o que aconteceu: 2-3 minutos parados até um erro genérico). */
+/** Teto do envio do arquivo original, quando a recompressão falha mas o arquivo já é pequeno.
+ *  Fica bem abaixo do limite de 6.000.000 da rota (`/api/items/[tipo]/[id]/foto`). */
+const MAX_BASE64_CRU = 3_000_000;
+
+/** Formatos que o `<img>` renderiza em qualquer navegador — os únicos que vale enviar sem
+ *  recomprimir, já que uma foto que o app não consegue exibir depois não serve de nada. */
+const TIPOS_RENDERIZAVEIS = ["image/jpeg", "image/png", "image/webp"];
+
+/** Rede de segurança do POST: sem isto o envio pode ficar pendurado indefinidamente. */
 const TIMEOUT_MS = 180_000;
+
+/**
+ * Laudo da última preparação de foto. Existe porque não há como depurar o celular do Carlos daqui
+ * (Browser pane é proibida neste projeto) e "Não foi possível processar essa imagem." não diz
+ * nada: agora a tela consegue mostrar em que etapa parou e por quê.
+ */
+export interface PhotoDiagnostics {
+  arquivo: string;
+  tipo: string;
+  tamanhoKb: number;
+  navegador: string;
+  etapas: string[];
+  erro?: string;
+}
+
+export interface PreparedPhoto {
+  /** JPEG final, pronto pra subir — é também a origem do preview. */
+  base64: string;
+  mimeType: string;
+  filename: string;
+  /** Object URL do blob preparado. Quem recebe é responsável por revogar. */
+  previewUrl: string;
+  larguraKb: number;
+  diagnostics: PhotoDiagnostics;
+}
+
+export type PreparePhotoResult =
+  | { ok: true; photo: PreparedPhoto }
+  | { ok: false; error: string; diagnostics: PhotoDiagnostics };
+
+function capacidadesDoNavegador(): string {
+  const tem = (nome: string, existe: boolean) => `${nome}=${existe ? "sim" : "não"}`;
+  return [
+    tem("createImageBitmap", typeof createImageBitmap === "function"),
+    tem("OffscreenCanvas", typeof OffscreenCanvas === "function"),
+    tem("toBlob", typeof HTMLCanvasElement !== "undefined" && typeof HTMLCanvasElement.prototype.toBlob === "function"),
+  ].join(" · ");
+}
+
+function trocaExtensao(nome: string, ext: string): string {
+  const base = nome.replace(/\.[^.]+$/, "").trim();
+  return `${base || "foto"}.${ext}`;
+}
+
+/**
+ * Transforma o arquivo escolhido no JPEG que vai subir. Roda inteiramente no navegador, sem tocar
+ * na rede — pode ser chamada no instante da escolha, que é justamente o ponto.
+ *
+ * Nunca lança: devolve `{ ok: false }` com uma mensagem pro usuário e o laudo pra diagnóstico.
+ */
+export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
+  const etapas: string[] = [];
+  const diagnostics: PhotoDiagnostics = {
+    arquivo: file.name || "(sem nome)",
+    tipo: file.type || "(desconhecido)",
+    tamanhoKb: Math.round(file.size / 1024),
+    navegador: capacidadesDoNavegador(),
+    etapas,
+  };
+  const registrar = (linha: string) => etapas.push(linha);
+
+  if (file.type && !file.type.startsWith("image/")) {
+    diagnostics.erro = `tipo ${file.type} não é imagem`;
+    return { ok: false, error: "Esse arquivo não é uma imagem.", diagnostics };
+  }
+
+  let img;
+  try {
+    img = await decodeImage(file, DEGRAUS[0].maxDim, registrar);
+  } catch (err) {
+    registrar(`decode: todos os caminhos falharam (${descreveErro(err)})`);
+    return falhaDeDecodificacao(file, diagnostics, registrar);
+  }
+
+  try {
+    const { width, height } = drawableSize(img);
+    registrar(`origem: ${width}x${height}`);
+
+    let melhor: { blob: Blob; degrau: (typeof DEGRAUS)[number] } | null = null;
+    let ultimoErro = "";
+    for (const degrau of DEGRAUS) {
+      try {
+        const blob = await encodeJpeg(img, degrau.maxDim, degrau.quality);
+        const base64Len = Math.ceil(blob.size / 3) * 4;
+        registrar(`encode ${degrau.maxDim}px q${degrau.quality}: ${Math.round(blob.size / 1024)} KB`);
+        melhor = { blob, degrau };
+        if (base64Len <= ALVO_BASE64) break;
+      } catch (err) {
+        // Um degrau falhando (memória, quase sempre) não derruba os menores ainda não tentados —
+        // era o que a versão anterior fazia, desistindo com tamanhos mais leves por tentar.
+        ultimoErro = descreveErro(err);
+        registrar(`encode ${degrau.maxDim}px q${degrau.quality}: falhou (${ultimoErro})`);
+      }
+    }
+
+    if (!melhor) {
+      registrar("encode: nenhum degrau funcionou");
+      diagnostics.erro = ultimoErro || "nenhum degrau de compressão funcionou";
+      return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível reduzir essa foto.");
+    }
+
+    const base64 = await blobToBase64(melhor.blob);
+    registrar(`base64: ${Math.round(base64.length / 1024)} KB`);
+    return {
+      ok: true,
+      photo: {
+        base64,
+        mimeType: "image/jpeg",
+        filename: trocaExtensao(file.name, "jpg"),
+        previewUrl: URL.createObjectURL(melhor.blob),
+        larguraKb: Math.round(melhor.blob.size / 1024),
+        diagnostics,
+      },
+    };
+  } catch (err) {
+    registrar(`preparação: erro inesperado (${descreveErro(err)})`);
+    diagnostics.erro = descreveErro(err);
+    return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível processar essa foto.");
+  } finally {
+    closeDrawable(img);
+  }
+}
+
+/** Nenhum decodificador do navegador leu o arquivo. Quase sempre é HEIC/HEIF do iPhone, que o
+ *  Chrome e o Firefox não decodificam — e nesse caso a orientação vale mais que a mensagem. */
+async function falhaDeDecodificacao(
+  file: File,
+  diagnostics: PhotoDiagnostics,
+  registrar: (l: string) => void,
+): Promise<PreparePhotoResult> {
+  const nome = file.name.toLowerCase();
+  const pareceHeic = /\.(heic|heif)$/.test(nome) || file.type === "image/heic" || file.type === "image/heif";
+  diagnostics.erro = "nenhum decodificador leu o arquivo";
+  if (pareceHeic) {
+    return {
+      ok: false,
+      error:
+        "Essa foto está em HEIC, formato que o navegador não abre. No iPhone: Ajustes › Câmera › Formatos › Mais Compatível. Ou compartilhe a foto pelo app de Fotos, que converte pra JPEG.",
+      diagnostics,
+    };
+  }
+  return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível abrir essa imagem.");
+}
+
+/**
+ * Último recurso: mandar o arquivo como está. Só vale a pena quando ele já é pequeno e de um
+ * formato que o app consegue exibir depois — subir algo que nunca vai renderizar é pior que
+ * recusar. Melhor uma foto maior no Drive do que um cadastro sem foto nenhuma.
+ */
+async function enviarCruOuFalhar(
+  file: File,
+  diagnostics: PhotoDiagnostics,
+  registrar: (l: string) => void,
+  mensagemDeFalha: string,
+): Promise<PreparePhotoResult> {
+  const base64Estimado = Math.ceil(file.size / 3) * 4;
+  if (!TIPOS_RENDERIZAVEIS.includes(file.type) || base64Estimado > MAX_BASE64_CRU) {
+    registrar(`cru: descartado (tipo ${file.type || "?"}, ~${Math.round(base64Estimado / 1024)} KB de base64)`);
+    return { ok: false, error: mensagemDeFalha, diagnostics };
+  }
+  try {
+    const base64 = await blobToBase64(file);
+    registrar(`cru: enviando o arquivo original (${Math.round(base64.length / 1024)} KB de base64)`);
+    return {
+      ok: true,
+      photo: {
+        base64,
+        mimeType: file.type,
+        filename: file.name || "foto",
+        previewUrl: URL.createObjectURL(file),
+        larguraKb: Math.round(file.size / 1024),
+        diagnostics,
+      },
+    };
+  } catch (err) {
+    registrar(`cru: falhou também (${descreveErro(err)})`);
+    return { ok: false, error: mensagemDeFalha, diagnostics };
+  }
+}
+
+// ---------- Envio ----------
 
 export interface UploadPhotoResult {
   ok: boolean;
   url?: string;
   error?: string;
-}
-
-/** Decodifica o arquivo pra um bitmap pronto pro <canvas>, sem passar por uma string base64
- *  intermediária — `readAsDataURL` + `<img>` chegava a manter arquivo + string base64 + bitmap
- *  decodificado na memória ao mesmo tempo, o que em celular com pouca RAM e uma foto de 10+ MB
- *  bastava pra derrubar a aba silenciosamente (era o "Não foi possível processar essa imagem."
- *  reportado pelo Carlos 2026-09-03: a PRIMEIRA tentativa de compressão já falhava, e como a
- *  função antiga desistia no primeiro erro, nunca chegava a tentar um tamanho menor).
- *  `createImageBitmap` decodifica direto do Blob; WebView muito antigo pode não ter, daí o
- *  fallback via `<img>` + FileReader. */
-async function decodeImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
-  if (typeof createImageBitmap === "function") {
-    try {
-      return await createImageBitmap(file);
-    } catch {
-      // decodificação nativa recusou o arquivo (formato exótico) - tenta o caminho de <img>
-      // antes de desistir, alguns navegadores são mais tolerantes por aí.
-    }
-  }
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler o arquivo"));
-    reader.readAsDataURL(file);
-  });
-  return new Promise<HTMLImageElement>((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error("Não foi possível ler a imagem"));
-    img.src = dataUrl;
-  });
-}
-
-function tamanhoDe(img: ImageBitmap | HTMLImageElement): { width: number; height: number } {
-  return img instanceof HTMLImageElement
-    ? { width: img.naturalWidth, height: img.naturalHeight }
-    : { width: img.width, height: img.height };
-}
-
-/** Um degrau da escadinha: redimensiona e recomprime em JPEG, devolvendo só o base64. Lança se o
- *  navegador recusar (canvas grande demais pra memória disponível, por exemplo) - cabe a quem
- *  chama decidir se tenta um degrau menor. */
-function encodeJpegBase64(img: ImageBitmap | HTMLImageElement, maxDim: number, quality: number): string {
-  const { width, height } = tamanhoDe(img);
-  const scale = Math.min(1, maxDim / Math.max(width, height));
-  const w = Math.round(width * scale) || 1;
-  const h = Math.round(height * scale) || 1;
-
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas indisponível");
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const jpegDataUrl = canvas.toDataURL("image/jpeg", quality);
-  const comma = jpegDataUrl.indexOf(",");
-  return comma === -1 ? jpegDataUrl : jpegDataUrl.slice(comma + 1);
+  diagnostics?: PhotoDiagnostics;
 }
 
 /**
- * Recomprime até ficar abaixo de ALVO_BASE64 — roda no navegador, nunca manda o arquivo original
- * de câmera (podem ser 5-10 MB) pro servidor. Cada degrau é tentado de forma independente: se um
- * tamanho falhar (memória, principalmente), tenta o próximo MENOR em vez de desistir de todos -
- * antes um único degrau falhando derrubava a função inteira mesmo havendo tamanhos mais leves
- * ainda não tentados.
+ * Manda pro servidor uma foto JÁ preparada e grava o link nas colunas de imagem (ver `Codigo.gs`,
+ * `itemFotoUpload`). Não processa imagem nenhuma: a essa altura é só rede.
+ *
+ * Atualiza o cache local na volta (`applyServerPatch`) pra a lista e o detalhe mostrarem a foto
+ * mesmo se a tela que pediu o envio já tiver fechado.
  */
-async function compressToJpegBase64(file: File): Promise<string> {
-  const img = await decodeImage(file);
-  try {
-    let base64 = "";
-    let ultimoErro: unknown;
-    for (const degrau of DEGRAUS) {
-      try {
-        base64 = encodeJpegBase64(img, degrau.maxDim, degrau.quality);
-        if (base64.length <= ALVO_BASE64) return base64;
-      } catch (err) {
-        ultimoErro = err;
-      }
-    }
-    if (base64) return base64; // nenhum coube no teto, mas pelo menos um degrau funcionou
-    throw ultimoErro ?? new Error("Nenhum tamanho de compressão funcionou");
-  } finally {
-    if (img instanceof ImageBitmap) img.close(); // libera a memória do bitmap decodificado
-  }
-}
-
-/** Sobe a foto de um item já existente e grava o link + nome do arquivo nas colunas de imagem —
- *  ver Codigo.gs `itemFotoUpload`. Atualiza o cache local na volta (`applyServerPatch`) pra a
- *  lista/detalhe mostrarem a foto nova mesmo se a tela que pediu o upload já tiver fechado. */
-export async function uploadItemPhoto(type: ItemType, id: string, file: File): Promise<UploadPhotoResult> {
-  if (!navigator.onLine) return { ok: false, error: "Sem conexão — a foto não foi enviada." };
-  if (!file.type.startsWith("image/")) return { ok: false, error: "Escolha um arquivo de imagem." };
-
-  let base64Data: string;
-  try {
-    base64Data = await compressToJpegBase64(file);
-  } catch (err) {
-    console.error("compressToJpegBase64 falhou pros 5 degraus", err);
-    return { ok: false, error: "Não foi possível processar essa imagem." };
+export async function uploadPreparedPhoto(
+  type: ItemType,
+  id: string,
+  photo: PreparedPhoto,
+): Promise<UploadPhotoResult> {
+  if (!navigator.onLine) {
+    return { ok: false, error: "Sem conexão — a foto não foi enviada.", diagnostics: photo.diagnostics };
   }
 
   const tab = TYPE_TAB[type] as ItemTab;
-  const filename = `${file.name.replace(/\.[^.]+$/, "") || "foto"}.jpg`;
-
   try {
     const res = await fetch(`/api/items/${tab}/${id}/foto`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64Data, mimeType: "image/jpeg", filename }),
-      // `in` porque WebView antigo pode não ter AbortSignal.timeout - sem ele o upload segue
-      // como antes (sem limite), em vez de a chamada explodir com TypeError.
+      body: JSON.stringify({
+        base64Data: photo.base64,
+        mimeType: photo.mimeType,
+        filename: photo.filename,
+      }),
+      // `in` porque WebView antigo pode não ter AbortSignal.timeout — sem ele o envio segue sem
+      // limite, em vez de a chamada explodir com TypeError.
       signal: "timeout" in AbortSignal ? AbortSignal.timeout(TIMEOUT_MS) : undefined,
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      return { ok: false, error: body.error ?? "Erro ao enviar a foto." };
+      return {
+        ok: false,
+        error: body.error ?? `Erro ao enviar a foto (HTTP ${res.status}).`,
+        diagnostics: photo.diagnostics,
+      };
     }
     const { url, imgNome } = (await res.json()) as { url: string; imgNome: string };
     await applyServerPatch(tab, id, {
@@ -170,13 +297,13 @@ export async function uploadItemPhoto(type: ItemType, id: string, file: File): P
     return { ok: true, url };
   } catch (err) {
     if (err instanceof DOMException && err.name === "TimeoutError") {
-      return { ok: false, error: "A foto demorou demais pra subir. Tente de novo." };
+      return { ok: false, error: "A foto demorou demais pra subir. Tente de novo.", diagnostics: photo.diagnostics };
     }
-    return { ok: false, error: "Erro de rede ao enviar a foto." };
+    return { ok: false, error: `Erro de rede ao enviar a foto (${descreveErro(err)}).`, diagnostics: photo.diagnostics };
   }
 }
 
-// ---------- Fila de upload em segundo plano ----------
+// ---------- Fila de envio em segundo plano ----------
 
 export interface PhotoUploadEventDetail {
   type: ItemType;
@@ -184,40 +311,52 @@ export interface PhotoUploadEventDetail {
   result: UploadPhotoResult;
 }
 
-/** Emite "done" com `PhotoUploadEventDetail` quando um upload em segundo plano termina (sucesso
- *  ou erro) - é como uma tela que já fechou (voltou pra lista antes do upload acabar) ainda
- *  consegue avisar o usuário. Ver GlobalPhotoToast em MainApp.tsx. */
+/** Emite "done" quando um envio em segundo plano termina — é como uma tela que já fechou (voltou
+ *  pra lista antes do envio acabar) ainda avisa o usuário. Ver `GlobalPhotoToast`. */
 export const photoUploadEvents = new EventTarget();
 
-/** Uploads em andamento, por `${type}:${id}` - permite que reabrir o MESMO item enquanto a foto
- *  dele ainda está subindo (upload dessa mesma tela, ou de uma edição anterior) mostre "Enviando"
- *  em vez de nada, e que `queuePhotoUpload` nunca dispare duas fotos em paralelo pro mesmo item. */
+/** Envios em andamento, por `${type}:${id}` — permite reabrir o MESMO item e ver "Enviando…" em
+ *  vez da foto velha, e impede dois envios paralelos pro mesmo item. */
 const emCurso = new Map<string, Promise<UploadPhotoResult>>();
 
 function chave(type: ItemType, id: string): string {
   return `${type}:${id}`;
 }
 
-/** Promise do upload em segundo plano deste item, se houver um rodando agora. */
 export function getPendingPhotoUpload(type: ItemType, id: string): Promise<UploadPhotoResult> | undefined {
   return emCurso.get(chave(type, id));
 }
 
 /**
- * Dispara o upload de `file` pro item `id` e NÃO espera terminar - quem chama segue em frente
- * (ex.: `DetailScreen.save()` já pode fechar a tela e voltar pra lista). O resultado chega via
- * `photoUploadEvents` e, em caso de sucesso, no cache local (`applyServerPatch`, dentro de
- * `uploadItemPhoto`) - não precisa de nenhuma tela aberta pra terminar de refletir.
+ * Dispara o envio e NÃO espera terminar — quem chama segue em frente (`DetailScreen.save()` fecha
+ * a tela na hora). O resultado chega pelo `photoUploadEvents` e, dando certo, direto no cache
+ * local, sem precisar de nenhuma tela aberta.
  */
-export function queuePhotoUpload(type: ItemType, id: string, file: File): void {
+export function queuePhotoUpload(type: ItemType, id: string, photo: PreparedPhoto): void {
   const k = chave(type, id);
-  const tarefa = uploadItemPhoto(type, id, file);
+  const tarefa = uploadPreparedPhoto(type, id, photo);
   emCurso.set(k, tarefa);
   void tarefa
     .then((result) => {
-      photoUploadEvents.dispatchEvent(new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id, result } }));
+      photoUploadEvents.dispatchEvent(
+        new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id, result } }),
+      );
     })
     .finally(() => {
       if (emCurso.get(k) === tarefa) emCurso.delete(k);
     });
+}
+
+/** Laudo em texto, pro botão "Detalhes" do erro — é isto que o Carlos me manda por print quando
+ *  algo falhar num aparelho que eu não tenho como inspecionar. */
+export function formatDiagnostics(d: PhotoDiagnostics): string {
+  return [
+    `arquivo: ${d.arquivo}`,
+    `tipo: ${d.tipo} · ${d.tamanhoKb} KB`,
+    `navegador: ${d.navegador}`,
+    ...d.etapas.map((e) => `· ${e}`),
+    d.erro ? `erro: ${d.erro}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }

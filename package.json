@@ -10,6 +10,7 @@
     "test:auth-crypto": "node scripts/test-auth-crypto.mjs",
     "test:permissions": "node scripts/test-permissions.mjs",
     "test:photo-date": "node scripts/test-photo-date.mjs",
+    "test:image-decode": "node scripts/test-image-decode.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
     "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
     "test:index-sync-integration": "tsx --conditions=react-server scripts/test-index-sync-integration.mjs",
