@@ -1,6 +1,7 @@
 import { IMG_URL_COL, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { applyServerPatch, type ItemTab } from "@/lib/offline/sync";
 import { SCHEMA } from "@/lib/itemSchema";
+import { clearLocalPreview } from "@/lib/localPhotoPreview";
 import {
   blobToBase64,
   closeDrawable,
@@ -415,6 +416,11 @@ export function queuePhotoUpload(type: ItemType, id: string, photo: PreparedPhot
       photoUploadEvents.dispatchEvent(
         new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id, result } }),
       );
+      // Termina o papel do preview local da lista (ver localPhotoPreview.ts): dando certo, a
+      // coluna *_img_url real já está no cache (`applyServerPatch`, dentro de uploadPreparedPhoto)
+      // e a lista já pode usar ela; falhando, não faz sentido segurar um preview de uma foto que
+      // não subiu.
+      clearLocalPreview(TYPE_TAB[type] as ItemTab, id);
     })
     .finally(() => {
       if (emCurso.get(k) === tarefa) emCurso.delete(k);

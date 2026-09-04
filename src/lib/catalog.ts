@@ -5,6 +5,7 @@ import {
   getCachedItem,
   type ItemTab,
 } from "@/lib/offline/sync";
+import { getLocalPreview } from "@/lib/localPhotoPreview";
 
 export type ItemType = "beer" | "wine" | "drink" | "spirit";
 
@@ -99,7 +100,9 @@ export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) =
     rating: Number(row[cfg.ratingCol]) || 0,
     date: row[cfg.dateCol] ?? "",
     category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
-    imgUrl: driveImageUrl(row[cfg.imgUrlCol]),
+    // A coluna real (planilha) sempre vence quando existe; o preview local é só um substituto
+    // enquanto o upload em segundo plano não termina - ver localPhotoPreview.ts.
+    imgUrl: driveImageUrl(row[cfg.imgUrlCol]) || getLocalPreview(TYPE_TAB[type], row.id ?? "") || "",
     canEdit: canEditRow(row, userId),
   };
 }

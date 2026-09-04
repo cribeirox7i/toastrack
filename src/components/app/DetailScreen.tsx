@@ -17,6 +17,7 @@ import {
 import { photoDateFromBytes, toDateInputValue } from "@/lib/photoDate";
 import { lerBytes } from "@/lib/imageDecode";
 import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
+import { setLocalPreview } from "@/lib/localPhotoPreview";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
@@ -268,13 +269,19 @@ export default function DetailScreen({
     // precisa do id real da planilha, então `waitForRealId` espera o remap sem travar nada aqui -
     // `queuePhotoUpload` só é chamado quando o id chega, e sobrevive à tela já ter fechado (o
     // resultado chega pelo toast global, ver GlobalPhotoToast em MainApp.tsx).
+    const tab = TYPE_TAB[type] as ItemTab;
     if (pronta) {
-      void waitForRealId(TYPE_TAB[type] as ItemTab, id).then((realId) => queuePhotoUpload(type, realId, pronta));
+      // Mesmo preview que a tela de edição mostrou, oferecido pra LISTA (ver localPhotoPreview.ts,
+      // pedido do Carlos 2026-09-04: "o item volta pra lista, mas o campo de imagem não traz a
+      // imagem"). Registra já no id local - `setLocalPreview` acompanha o remap sozinho, então não
+      // precisa esperar `waitForRealId` só pra isso aparecer.
+      setLocalPreview(tab, id, pronta.previewUrl);
+      void waitForRealId(tab, id).then((realId) => queuePhotoUpload(type, realId, pronta));
     }
-    if (previewRef.current) {
-      URL.revokeObjectURL(previewRef.current);
-      previewRef.current = null;
-    }
+    // A posse do object URL passou pro preview local (`setLocalPreview`) - `clearLocalPreview`
+    // é quem revoga, quando o envio de verdade terminar. Só limpa a REFERÊNCIA daqui, nunca
+    // revoga: revogar agora apagaria a imagem que acabou de aparecer na lista.
+    previewRef.current = null;
     onChanged();
     if (idAtual == null) setCurrentId(id);
     // Pedido do Carlos 2026-09-03 (e reafirmado em 2026-09-04): Salvar volta pra lista na hora

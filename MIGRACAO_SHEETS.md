@@ -876,6 +876,40 @@ do bitmap que `createImageBitmap` vai de fato devolver.
 Orientation=6/8 trocando eixos, 3/1 não trocando, big-endian, valor fora de 1-8 descartado). `tsc`,
 lint e build limpos.
 
+## 8.5 Preview local na lista, enquanto a foto está no outbox (2026-09-04, mesmo dia)
+
+**Pedido do Carlos**, depois de confirmar que o fluxo novo (8.4) funciona: "quando salvo, ele volta
+para a tela de listagem já mostrando o item na lista, e o upload está no outbox. Correto! Só que o
+campo de imagem da lista não traz a imagem. Só mostra a imagem na lista quando conclui o upload."
+
+**Causa, sem ser bug:** é o comportamento esperado do desenho atual. A lista lê a coluna
+`*_img_url` de cada linha do cache local; essa coluna só existe depois que o upload termina e
+`applyServerPatch` grava a URL do Drive. Entre o item aparecer (instantâneo, local-primeiro desde
+a 8.4) e o upload terminar (segundos, às vezes minutos - fila do outbox, latência do Apps Script),
+o item mostra o placeholder, mesmo já existindo um JPEG comprimido pronto no navegador desde a
+escolha da foto (`preparePhoto`, seção 8.3).
+
+**Correção, sem tocar no que já funciona:** `src/lib/localPhotoPreview.ts`, um módulo novo e
+isolado - um `Map` de `tab:id` pro object URL do preview, mais um listener de `remap` que segue o
+id sozinho quando um item novo sincroniza. Três pontos de contato, cada um de uma linha:
+
+1. `catalog.ts`, `mapRow`: `imgUrl` agora é `driveImageUrl(...) || getLocalPreview(...)` - a
+   coluna real da planilha sempre vence quando existe; o preview local é só um substituto.
+2. `DetailScreen.save()`: registra o preview no id (mesmo que ainda temporário) assim que
+   `saveItem` devolve, e para de revogar o object URL nesse caminho - a posse passa pro módulo.
+3. `photoUpload.ts`, fim de `queuePhotoUpload`: revoga e remove o preview quando o envio termina,
+   sucesso ou falha.
+
+`setLocalPreview`/`clearLocalPreview` disparam o mesmo evento `syncEvents "change"` que toda
+escrita otimista já dispara - é o canal que `useOfflineItems` já escuta, então a lista atualiza
+sozinha, sem assinatura nova em lugar nenhum.
+
+**Verificação:** `tsc`, lint e build limpos; os 4 conjuntos de testes puros (`image-decode`,
+`photo-date`, `permissions`, `auth-crypto`) continuam verdes - nenhum deles toca a lista, mas
+confirmam que nada nas dependências compartilhadas (`catalog.ts`, `offline/sync.ts`) quebrou.
+**Não verificável daqui**: o efeito é só visual, na lista, dependente do fluxo completo
+salvar→outbox→upload - confirmação fica pro aparelho do Carlos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
