@@ -11,6 +11,16 @@ import type { NextConfig } from "next";
  * liam essa env var (AuthScreen, layout, ServiceWorkerRegister) já caem em "" quando ela não
  * existe, então o comportamento continua correto sem precisar declará-la aqui.
  */
-const nextConfig: NextConfig = {};
+const nextConfig: NextConfig = {
+  /**
+   * Selo de versão do rodapé do Perfil (ver src/lib/version.ts). São lidas no build e embutidas
+   * no bundle do cliente - `VERCEL_GIT_COMMIT_SHA` é preenchida pelo Vercel a cada deploy e não
+   * existe em dev, daí o "local".
+   */
+  env: {
+    NEXT_PUBLIC_BUILD_SHA: process.env.VERCEL_GIT_COMMIT_SHA ?? "local",
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
+  },
+};
 
 export default nextConfig;

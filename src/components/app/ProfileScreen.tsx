@@ -8,6 +8,7 @@ import { initialsFor } from "@/lib/utils";
 import { validatePassword } from "@/lib/auth";
 import { saveUserPrefs, changePassword } from "@/lib/prefs";
 import { refreshAllNow } from "@/lib/offline/sync";
+import { buildLabel } from "@/lib/version";
 import {
   fetchAllUsers,
   setUserStatus,
@@ -353,6 +354,12 @@ export default function ProfileScreen() {
       >
         Sair
       </button>
+
+      {/* Selo de versão: é como saber, do lado de cá do telefone, se o aparelho já está rodando o
+          que acabou de subir. Ver src/lib/version.ts. */}
+      <div className="pb-2 pt-4 text-center font-mono text-[11px] text-muted">
+        Toastrack {buildLabel()}
+      </div>
 
       {toast && (
         <div className="fixed bottom-8 left-1/2 z-40 -translate-x-1/2 rounded-full bg-text px-4 py-2 text-[13px] font-semibold text-bg shadow-lg">
