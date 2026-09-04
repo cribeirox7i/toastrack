@@ -706,8 +706,12 @@ Carlos testou em seguida com **fotos tiradas na hora pela câmera** e deu o mesm
 origem e formato diferentes falhando igual só deixa uma explicação de pé: **os bytes não estavam
 chegando**, e nenhum decodificador tem o que fazer com um arquivo vazio.
 
-**A causa era uma linha em `onPhotoSelected`, presente desde o commit que criou o upload de foto
-(`9cbfd66`) e nunca tocada pelas rodadas 8.1, 8.2 e 8.3:**
+> **Atenção: a causa apontada nesta seção estava ERRADA.** A correção descrita aqui foi ao ar,
+> não resolveu, e a causa real só apareceu na 8.3.2 logo abaixo. O texto fica como registro do
+> raciocínio (e do erro), mas quem quer entender o bug deve ler direto a 8.3.2.
+
+**A hipótese era uma linha em `onPhotoSelected`, presente desde o commit que criou o upload de
+foto (`9cbfd66`) e nunca tocada pelas rodadas 8.1, 8.2 e 8.3:**
 
 ```js
 const file = e.target.files?.[0];
@@ -745,6 +749,68 @@ HEIF/HEIC, AVIF, PNG, WebP, GIF, TIFF/RAW, arquivo zerado e bytes desconhecidos)
 build limpos. A confirmação final continua sendo do aparelho do Carlos - e, se ainda falhar, o
 laudo agora distingue "arquivo vazio" de "formato não suportado", que era a ambiguidade que
 sobrava.
+
+### 8.3.2 A causa raiz de verdade: a leitura acontecia fora do tick do evento (2026-09-04)
+
+**Resolvido.** O Carlos confirmou: "agora o seletor principal funciona".
+
+Depois da correção errada da 8.3.1, o quadro ficou: falha idêntica no navegador comum, no PWA
+instalado e em aba anônima do mesmo aparelho, com qualquer origem de arquivo (print de tela,
+foto recém-tirada) e qualquer formato. Isso eliminou cache, service worker e o app instalado, e
+deixou de pé só uma explicação: o Android entregava um `File` com nome e tamanho corretos e
+**nenhum byte legível dentro**.
+
+**A causa**: a primeira leitura do arquivo só acontecia depois de um `await`.
+
+```js
+const file = e.target.files?.[0];
+...
+const dataDaFoto = await applyPhotoDate(file);  // primeiro await: devolve o controle ao navegador
+const resultado = await preparePhoto(file);     // aqui o File já não tinha mais conteúdo
+```
+
+No Android o `File` que o seletor devolve é respaldado por um URI `content://`, e a permissão de
+leitura desse URI pode acabar assim que o handler do evento de seleção devolve o controle ao
+navegador. Todo `await` antes da primeira leitura devolve o controle. No desktop o `File` aponta
+pra um arquivo real no disco e não depende de permissão nenhuma, que é **por que o bug só existia
+no celular** - e por que ele sobreviveu a quatro rodadas de correção testadas no desktop.
+
+**A correção** é uma linha, na posição certa: disparar a leitura como primeira instrução do
+handler, sem `await`, e passar a promessa adiante.
+
+```js
+const file = e.target.files?.[0];
+if (!file) return;
+const leituraIniciada = lerBytes(file);   // ainda dentro do tick do evento
+```
+
+O EXIF passou a sair desses mesmos bytes, em vez de uma segunda leitura do `File` - que era
+justamente a operação que falhava.
+
+**O que mais ficou desta caçada, e vale manter:**
+
+- **`lerBytes`** tenta cinco caminhos de leitura em ordem (`Blob.arrayBuffer`, `FileReader`,
+  objectURL+fetch, `Blob.stream`, `slice+arrayBuffer`) e registra qual venceu. Não foi o que
+  resolveu, mas é rede de segurança real e o laudo fica mais informativo.
+- **Três portas de entrada** no `DetailScreen`: "Adicionar foto" (Photo Picker), "Tirar foto"
+  (`capture`, sem passar por provider de mídia) e "Buscar em Arquivos" (sem `accept`, abre o
+  gerenciador de documentos). Entraram como contorno; ficam porque "Tirar foto" é o fluxo natural
+  de quem está cadastrando a bebida na hora.
+- **Trabalhar sobre os bytes, nunca sobre o `File`**: depois da leitura, o pipeline monta um Blob
+  a partir dos bytes em memória. Decodificação, preview e envio saem todos dele, sem vínculo
+  nenhum com o `content://`.
+- **`sniffFormat`**: identifica o formato pelos bytes (HEIF/HEIC, AVIF, TIFF/RAW, vazio...),
+  porque nome e MIME vêm do provider do Android e mentem. Não era o caso aqui, mas HEIC de iPhone
+  é uma recusa legítima que agora tem mensagem própria.
+- **Selo de versão** no rodapé do Perfil (`src/lib/version.ts`, pedido do Carlos): sequencial
+  legível + SHA do commit injetado pelo Vercel + hora do build. Nasceu porque uma rodada inteira
+  foi gasta em dúvida sobre se o aparelho estava com a versão nova.
+
+**A lição, agora com o desfecho:** o laudo de diagnóstico da 8.3 foi o que quebrou o impasse, mas
+não sozinho - ele deu o fato ("o arquivo chega vazio") e ainda assim a primeira leitura desse fato
+gerou uma causa errada (8.3.1). O que fechou o caso foram os testes que o Carlos fez a pedido e
+que **eliminaram** hipóteses: outra origem de foto, navegador comum, aba anônima. Instrumentar
+diz o que está acontecendo; são os testes de eliminação que dizem o porquê. Vale pedir os dois.
 
 ## 9. O que se perde e o que se ganha
 
