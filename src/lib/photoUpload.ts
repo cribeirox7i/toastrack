@@ -10,6 +10,7 @@ import {
   encodeJpeg,
   lerBytes,
   sniffFormat,
+  type LeituraArquivo,
   type Assinatura,
 } from "@/lib/imageDecode";
 
@@ -117,7 +118,18 @@ function trocaExtensao(nome: string, ext: string): string {
  *
  * Nunca lança: devolve `{ ok: false }` com uma mensagem pro usuário e o laudo pra diagnóstico.
  */
-export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
+export async function preparePhoto(
+  file: File,
+  /**
+   * Leitura JÁ INICIADA pelo chamador, no mesmo tick do evento de seleção.
+   *
+   * No Android a permissão do `content://` que respalda o `File` pode acabar quando o handler do
+   * evento devolve o controle - e todo `await` antes da primeira leitura devolve o controle. Por
+   * isso `onPhotoSelected` dispara `lerBytes` na primeira linha, sem esperar, e passa a promessa
+   * pra cá em vez de deixar esta função ler por conta própria mais tarde.
+   */
+  leituraIniciada?: Promise<LeituraArquivo>,
+): Promise<PreparePhotoResult> {
   const etapas: string[] = [];
   const diagnostics: PhotoDiagnostics = {
     arquivo: file.name || "(sem nome)",
@@ -136,7 +148,7 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
   // Ler os bytes é a PRIMEIRA coisa, por todos os caminhos disponíveis (ver `lerBytes`): no
   // celular do Carlos o `File` do seletor chega com nome e tamanho certos e conteúdo inacessível,
   // e qual API consegue lê-lo varia por navegador e por origem do arquivo.
-  const leitura = await lerBytes(file);
+  const leitura = await (leituraIniciada ?? lerBytes(file));
   for (const t of leitura.tentativas) registrar(`leitura ${t}`);
 
   if (!leitura.bytes) {

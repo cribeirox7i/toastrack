@@ -14,7 +14,8 @@ import {
   type PhotoDiagnostics,
   type PreparedPhoto,
 } from "@/lib/photoUpload";
-import { photoDateForInput, toDateInputValue } from "@/lib/photoDate";
+import { photoDateFromBytes, toDateInputValue } from "@/lib/photoDate";
+import { lerBytes } from "@/lib/imageDecode";
 import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
@@ -84,13 +85,23 @@ export default function DetailScreen({
   const [photoError, setPhotoError] = useState("");
   const [photoDiag, setPhotoDiag] = useState<PhotoDiagnostics | null>(null);
   const [diagOpen, setDiagOpen] = useState(false);
+  // De qual porta veio a foto atual - o bloco de erro usa pra oferecer as outras.
+  const [photoOrigem, setPhotoOrigem] = useState<"galeria" | "arquivos" | "camera">("galeria");
   // Foto já comprimida e pronta pra subir - o upload só começa no Salvar (queuePhotoUpload).
   // Cancelar, portanto, nunca precisa desfazer nada no servidor: só descarta isto (pedido do
   // Carlos 2026-09-03: a foto não pode travar o cadastro nem subir antes de o usuário salvar).
   const preparedPhoto = useRef<PreparedPhoto | null>(null);
   // URL local (blob:) do preview - precisa ser revogada pra não vazar memória.
   const previewRef = useRef<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Três portas de entrada pra mesma foto. Não é enfeite: no aparelho do Carlos (2026-09-04) o
+  // seletor de imagens devolve arquivos sem conteúdo legível, e qual seletor o Android trata bem
+  // varia. "galeria" usa accept=image/* (abre o Photo Picker no Android 13+), "arquivos" vai sem
+  // accept nenhum (abre o gerenciador de documentos, que entrega o arquivo por outro caminho) e
+  // "camera" usa capture (a foto nasce na hora, sem passar por provider de mídia).
+  const galeriaRef = useRef<HTMLInputElement | null>(null);
+  const arquivosRef = useRef<HTMLInputElement | null>(null);
+  const cameraRef = useRef<HTMLInputElement | null>(null);
+  type OrigemFoto = "galeria" | "arquivos" | "camera";
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
   function showToast(m: string) {
@@ -275,12 +286,15 @@ export default function DetailScreen({
     setEditing(false);
   }
 
-  function pickPhoto() {
+  function pickPhoto(origem: OrigemFoto = "galeria") {
+    const input =
+      origem === "arquivos" ? arquivosRef.current : origem === "camera" ? cameraRef.current : galeriaRef.current;
+    if (!input) return;
     // Limpa ANTES de abrir o seletor, nunca depois de receber o arquivo. É o que permite escolher
     // a mesma foto duas vezes seguidas (sem isto o `change` não dispara na segunda) sem cair no
     // bug descrito em onPhotoSelected.
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    fileInputRef.current?.click();
+    input.value = "";
+    input.click();
   }
 
   /**
@@ -290,11 +304,11 @@ export default function DetailScreen({
    * uma data posta pelo app; data escolhida pelo usuário nunca é sobrescrita.
    * Devolve a data aplicada ("yyyy-mm-dd") ou "" se não mexeu em nada.
    */
-  async function applyPhotoDate(file: File): Promise<string> {
+  function applyPhotoDateFromBytes(leitura: { bytes: ArrayBuffer | null }, file: File): string {
     if (!dateField) return "";
     const current = (valuesRef.current[dateField.col] ?? "").trim();
     if (current !== "" && !dateIsAuto.current) return "";
-    const photoDate = await photoDateForInput(file);
+    const photoDate = photoDateFromBytes(leitura.bytes, file.lastModified);
     if (!photoDate || photoDate === current) return "";
     set(dateField.col, photoDate);
     dateIsAuto.current = true; // veio do app, não do usuário: outra foto ainda pode substituir
@@ -311,9 +325,16 @@ export default function DetailScreen({
    * iPhone, foto grande demais pra RAM do aparelho), o erro aparece agora - com a tela aberta e o
    * usuário podendo escolher outra - em vez de depois do Salvar, num toast, já de volta na lista.
    */
-  async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>, origem: OrigemFoto) {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // PRIMEIRA linha depois de pegar o arquivo, de propósito e sem `await`: dispara a leitura
+    // ainda dentro do tick deste evento. No Android a permissão do `content://` que respalda o
+    // `File` pode acabar assim que o handler devolve o controle ao navegador, e qualquer `await`
+    // antes daqui devolve o controle. Era o caso até 2026-09-04: a leitura só começava depois do
+    // EXIF, e chegava num arquivo que o sistema já tinha soltado.
+    const leituraIniciada = lerBytes(file);
 
     // NÃO limpe `e.target.value` aqui. Esta linha existia desde o commit que criou o upload de
     // foto e sobreviveu a três rodadas de correção (8.1, 8.2, 8.3) sem nunca ser suspeita - era
@@ -331,18 +352,19 @@ export default function DetailScreen({
     // funcionando: quem limpa o input agora é `pickPhoto`, antes de abrir o seletor.
     descartarFotoLocal();
     setPhotoStatus("preparando");
+    setPhotoOrigem(origem);
 
-    // EXIF é leitura local e barata: sai na frente pra a data já aparecer enquanto a compressão
-    // (que é o passo pesado) ainda está rodando.
-    const dataDaFoto = await applyPhotoDate(file);
-
-    const resultado = await preparePhoto(file);
+    const resultado = await preparePhoto(file, leituraIniciada);
     if (!resultado.ok) {
       setPhotoStatus("erro");
       setPhotoError(resultado.error);
       setPhotoDiag(resultado.diagnostics);
       return;
     }
+
+    // EXIF a partir dos bytes que já foram lidos, em vez de uma segunda leitura do `File` (que
+    // é justamente a operação que anda falhando neste aparelho).
+    const dataDaFoto = applyPhotoDateFromBytes(await leituraIniciada, file);
 
     preparedPhoto.current = resultado.photo;
     previewRef.current = resultado.photo.previewUrl;
@@ -434,14 +456,30 @@ export default function DetailScreen({
           /* ---------- EDIT ---------- */
           <div className="mx-auto w-full max-w-md px-5 py-4">
             <input
-              ref={fileInputRef}
+              ref={galeriaRef}
               type="file"
               accept="image/*"
               className="hidden"
-              onChange={(e) => void onPhotoSelected(e)}
+              onChange={(e) => void onPhotoSelected(e, "galeria")}
+            />
+            {/* Sem `accept`: no Android isto abre o gerenciador de documentos em vez do seletor
+                de fotos, e o arquivo chega por outro caminho do sistema. */}
+            <input
+              ref={arquivosRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => void onPhotoSelected(e, "arquivos")}
+            />
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => void onPhotoSelected(e, "camera")}
             />
             <button
-              onClick={pickPhoto}
+              onClick={() => pickPhoto("galeria")}
               disabled={uploadingPhoto || photoStatus === "preparando"}
               className="relative mb-2 w-full"
             >
@@ -468,13 +506,37 @@ export default function DetailScreen({
               </div>
             )}
 
+            {/* As outras portas de entrada, sempre à mão. Enquanto o seletor de fotos entrega
+                arquivo vazio neste aparelho, é por aqui que dá pra anexar. */}
+            {photoStatus !== "preparando" && (
+              <div className="mb-2 flex gap-3 text-[12px] font-bold">
+                <button onClick={() => pickPhoto("camera")} className="text-accent">
+                  Tirar foto
+                </button>
+                <button onClick={() => pickPhoto("arquivos")} className="text-accent">
+                  Buscar em Arquivos
+                </button>
+              </div>
+            )}
+
             {photoStatus === "erro" && (
               <div className="mb-2 rounded-xl border border-danger px-3 py-2.5">
                 <div className="text-[12.5px] font-semibold" style={{ color: "var(--danger)" }}>
                   {photoError}
                 </div>
-                <div className="mt-1.5 flex gap-3">
-                  <button onClick={pickPhoto} className="text-[12px] font-bold text-accent">
+                <div className="mt-1.5 flex flex-wrap gap-3">
+                  {/* Oferece primeiro as portas que ainda NÃO falharam nesta tentativa. */}
+                  {photoOrigem !== "camera" && (
+                    <button onClick={() => pickPhoto("camera")} className="text-[12px] font-bold text-accent">
+                      Tirar foto agora
+                    </button>
+                  )}
+                  {photoOrigem !== "arquivos" && (
+                    <button onClick={() => pickPhoto("arquivos")} className="text-[12px] font-bold text-accent">
+                      Tentar por Arquivos
+                    </button>
+                  )}
+                  <button onClick={() => pickPhoto(photoOrigem)} className="text-[12px] font-bold text-accent">
                     Escolher outra
                   </button>
                   {photoDiag && (

@@ -168,6 +168,13 @@ export function toDateInputValue(date: Date): string {
  * (`lastModified`). Devolve "yyyy-mm-dd" pronto pro campo de data, ou null se nada for plausível.
  * Nunca lança — falha de leitura vira null e o fluxo de upload segue igual.
  */
+export function photoDateFromBytes(bytes: ArrayBuffer | null, lastModified: number): string | null {
+  const exif = bytes ? readExifDate(bytes) : null;
+  if (exif) return toDateInputValue(exif);
+  const modified = lastModified ? new Date(lastModified) : null;
+  return isPlausible(modified) ? toDateInputValue(modified) : null;
+}
+
 export async function photoDateForInput(file: File): Promise<string | null> {
   let exif: Date | null = null;
   try {
