@@ -8,7 +8,7 @@ import {
   descreveErro,
   drawableSize,
   encodeJpeg,
-  lerCabecalho,
+  lerBytes,
   sniffFormat,
   type Assinatura,
 } from "@/lib/imageDecode";
@@ -133,20 +133,42 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
     return { ok: false, error: "Esse arquivo não é uma imagem.", diagnostics };
   }
 
-  // Assinatura ANTES de qualquer tentativa: nome e MIME vêm do provider do Android, não do
-  // conteúdo, e podem mentir - foi exatamente o caso do laudo de 2026-09-04 (um `.jpg` declarado
-  // `image/jpeg` que nenhum decodificador abriu). Os bytes é que dizem a verdade.
-  const head = await lerCabecalho(file);
-  const assinatura = sniffFormat(head.bytes);
+  // Ler os bytes é a PRIMEIRA coisa, por todos os caminhos disponíveis (ver `lerBytes`): no
+  // celular do Carlos o `File` do seletor chega com nome e tamanho certos e conteúdo inacessível,
+  // e qual API consegue lê-lo varia por navegador e por origem do arquivo.
+  const leitura = await lerBytes(file);
+  for (const t of leitura.tentativas) registrar(`leitura ${t}`);
+
+  if (!leitura.bytes) {
+    diagnostics.assinatura = "não foi possível ler os bytes";
+    diagnostics.erro = "nenhum método de leitura devolveu conteúdo";
+    return {
+      ok: false,
+      error:
+        "O arquivo chegou vazio: vieram o nome e o tamanho, mas nenhum byte. Toque em Escolher outra e selecione a foto pelo app de Arquivos (ou baixe pro aparelho, se ela estiver só no Google Fotos).",
+      diagnostics,
+    };
+  }
+  registrar(`leitura: ${leitura.metodo} venceu`);
+
+  // Assinatura pelos BYTES: nome e MIME vêm do provider do Android e podem mentir - o laudo de
+  // 2026-09-04 trouxe um `.jpg` declarado `image/jpeg` que nenhum decodificador abriu.
+  const assinatura = sniffFormat(leitura.bytes);
   diagnostics.assinatura = `${assinatura.formato} · bytes: ${assinatura.hex}`;
-  registrar(`assinatura: ${assinatura.formato}${head.erro ? ` (leitura falhou: ${head.erro})` : ""}`);
+  registrar(`assinatura: ${assinatura.formato}`);
+
+  // Daqui pra frente trabalha-se sobre um Blob construído a partir dos bytes já em memória, nunca
+  // sobre o `File` original: ele não tem nenhum vínculo com o `content://` do Android, então some
+  // junto a classe inteira de falha que motivou tudo isto.
+  const fonte = new Blob([leitura.bytes], { type: assinatura.formato === "JPEG" ? "image/jpeg" : file.type || "image/jpeg" });
+  const head = { bytes: leitura.bytes };
 
   let img;
   try {
-    img = await decodeImage(file, head, DEGRAUS[0].maxDim, registrar);
+    img = await decodeImage(fonte, head, DEGRAUS[0].maxDim, registrar);
   } catch (err) {
     registrar(`decode: todos os caminhos falharam (${descreveErro(err)})`);
-    return falhaDeDecodificacao(file, assinatura, head.erro, diagnostics, registrar);
+    return falhaDeDecodificacao(file, fonte, assinatura, diagnostics, registrar);
   }
 
   try {
@@ -173,7 +195,7 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
     if (!melhor) {
       registrar("encode: nenhum degrau funcionou");
       diagnostics.erro = ultimoErro || "nenhum degrau de compressão funcionou";
-      return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível reduzir essa foto.");
+      return enviarCruOuFalhar(file, fonte, diagnostics, registrar, "Não foi possível reduzir essa foto.");
     }
 
     const base64 = await blobToBase64(melhor.blob);
@@ -192,7 +214,7 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
   } catch (err) {
     registrar(`preparação: erro inesperado (${descreveErro(err)})`);
     diagnostics.erro = descreveErro(err);
-    return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível processar essa foto.");
+    return enviarCruOuFalhar(file, fonte, diagnostics, registrar, "Não foi possível processar essa foto.");
   } finally {
     closeDrawable(img);
   }
@@ -206,23 +228,12 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
  */
 async function falhaDeDecodificacao(
   file: File,
+  fonte: Blob,
   assinatura: Assinatura,
-  erroDeLeitura: string | undefined,
   diagnostics: PhotoDiagnostics,
   registrar: (l: string) => void,
 ): Promise<PreparePhotoResult> {
   diagnostics.erro = `nenhum decodificador leu o arquivo (assinatura: ${assinatura.formato})`;
-
-  // Nem os bytes vieram: o arquivo existe no seletor mas não dá pra ler. Típico de foto que só
-  // está na nuvem (Google Fotos sem cópia local) ou de permissão de armazenamento negada.
-  if (erroDeLeitura || assinatura.formato === "vazio") {
-    return {
-      ok: false,
-      error:
-        "O arquivo chegou vazio: o nome e o tamanho vieram, mas o conteúdo não. Toque em Escolher outra e selecione a foto de novo. Se ela estiver só no Google Fotos, baixe pro aparelho antes.",
-      diagnostics,
-    };
-  }
 
   if (assinatura.formato === "HEIF/HEIC" || assinatura.formato === "AVIF") {
     return {
@@ -250,7 +261,7 @@ async function falhaDeDecodificacao(
   }
 
   registrar(`formato não reconhecido pelos bytes (${assinatura.hex})`);
-  return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível abrir essa imagem.");
+  return enviarCruOuFalhar(file, fonte, diagnostics, registrar, "Não foi possível abrir essa imagem.");
 }
 
 /**
@@ -260,26 +271,29 @@ async function falhaDeDecodificacao(
  */
 async function enviarCruOuFalhar(
   file: File,
+  fonte: Blob,
   diagnostics: PhotoDiagnostics,
   registrar: (l: string) => void,
   mensagemDeFalha: string,
 ): Promise<PreparePhotoResult> {
-  const base64Estimado = Math.ceil(file.size / 3) * 4;
-  if (!TIPOS_RENDERIZAVEIS.includes(file.type) || base64Estimado > MAX_BASE64_CRU) {
-    registrar(`cru: descartado (tipo ${file.type || "?"}, ~${Math.round(base64Estimado / 1024)} KB de base64)`);
+  // `fonte` são os bytes já lidos, não o `File` do seletor: no celular do Carlos ele pode não ter
+  // conteúdo acessível nenhum (ver lerBytes), então enviá-lo mandaria um arquivo vazio pro Drive.
+  const base64Estimado = Math.ceil(fonte.size / 3) * 4;
+  if (!TIPOS_RENDERIZAVEIS.includes(fonte.type) || base64Estimado > MAX_BASE64_CRU) {
+    registrar(`cru: descartado (tipo ${fonte.type || "?"}, ~${Math.round(base64Estimado / 1024)} KB de base64)`);
     return { ok: false, error: mensagemDeFalha, diagnostics };
   }
   try {
-    const base64 = await blobToBase64(file);
+    const base64 = await blobToBase64(fonte);
     registrar(`cru: enviando o arquivo original (${Math.round(base64.length / 1024)} KB de base64)`);
     return {
       ok: true,
       photo: {
         base64,
-        mimeType: file.type,
+        mimeType: fonte.type,
         filename: file.name || "foto",
-        previewUrl: URL.createObjectURL(file),
-        larguraKb: Math.round(file.size / 1024),
+        previewUrl: URL.createObjectURL(fonte),
+        larguraKb: Math.round(fonte.size / 1024),
         diagnostics,
       },
     };

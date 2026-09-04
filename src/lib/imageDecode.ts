@@ -60,9 +60,6 @@ export function readJpegSize(bytes: ArrayBuffer): { width: number; height: numbe
   return null;
 }
 
-/** Só os primeiros 128 KB importam: o SOF vem bem antes dos dados de imagem. */
-const HEAD_BYTES = 128 * 1024;
-
 /** Cabeçalho lido uma vez só e reaproveitado (assinatura + dimensões + decodificação). `erro`
  *  preenchido quando nem ler os bytes foi possível - o que já é um diagnóstico em si. */
 export interface Cabecalho {
@@ -70,12 +67,100 @@ export interface Cabecalho {
   erro?: string;
 }
 
-export async function lerCabecalho(file: File): Promise<Cabecalho> {
-  try {
-    return { bytes: await file.slice(0, HEAD_BYTES).arrayBuffer() };
-  } catch (err) {
-    return { bytes: null, erro: descreveErro(err) };
+/** Os primeiros bytes parecem todos zero? Arquivo "lido" com sucesso mas cheio de zeros é o
+ *  sintoma de um `File` do Android cujo conteúdo não está mais acessível. */
+function pareceVazio(buf: ArrayBuffer): boolean {
+  const amostra = new Uint8Array(buf, 0, Math.min(1024, buf.byteLength));
+  return amostra.length === 0 || amostra.every((b) => b === 0);
+}
+
+function lerComFileReader(blob: Blob): Promise<ArrayBuffer> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as ArrayBuffer);
+    reader.onerror = () => reject(reader.error ?? new Error("FileReader falhou"));
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+async function lerComStream(blob: Blob): Promise<ArrayBuffer> {
+  if (typeof blob.stream !== "function") throw new Error("Blob.stream indisponível");
+  const reader = blob.stream().getReader();
+  const partes: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    partes.push(value);
+    total += value.length;
   }
+  const out = new Uint8Array(total);
+  let pos = 0;
+  for (const p of partes) {
+    out.set(p, pos);
+    pos += p.length;
+  }
+  return out.buffer;
+}
+
+async function lerComObjectUrl(blob: Blob): Promise<ArrayBuffer> {
+  const url = URL.createObjectURL(blob);
+  try {
+    const res = await fetch(url);
+    return await res.arrayBuffer();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export interface LeituraArquivo {
+  /** Bytes do arquivo inteiro, do primeiro método que devolveu conteúdo de verdade. */
+  bytes: ArrayBuffer | null;
+  /** Qual caminho funcionou - vai pro laudo, e é o que vai me dizer o que fazer da próxima vez. */
+  metodo: string;
+  tentativas: string[];
+}
+
+/**
+ * Lê o arquivo tentando TODOS os caminhos que a plataforma oferece, em ordem, até um devolver
+ * conteúdo de verdade.
+ *
+ * Existe porque no celular do Carlos (2026-09-04) o `File` do seletor chega com nome e tamanho
+ * certos e conteúdo inacessível: `slice().arrayBuffer()` devolvia vazio e todo decodificador
+ * recusava o arquivo. Qual API consegue ler um `File` desses varia por navegador, versão e
+ * origem do arquivo, e não há como eu descobrir isso de fora - então o app tenta todas e diz qual
+ * funcionou. Achando bytes por qualquer caminho, o resto do pipeline volta a funcionar: o Blob
+ * reconstruído a partir deles é uma imagem normal, sem nenhum vínculo com o `content://` do
+ * Android que causou o problema.
+ */
+export async function lerBytes(file: File): Promise<LeituraArquivo> {
+  const tentativas: string[] = [];
+  const metodos: Array<[string, () => Promise<ArrayBuffer>]> = [
+    ["Blob.arrayBuffer", () => file.arrayBuffer()],
+    ["FileReader", () => lerComFileReader(file)],
+    ["objectURL+fetch", () => lerComObjectUrl(file)],
+    ["Blob.stream", () => lerComStream(file)],
+    ["slice+arrayBuffer", () => file.slice(0, file.size).arrayBuffer()],
+  ];
+
+  for (const [nome, ler] of metodos) {
+    try {
+      const buf = await ler();
+      if (buf.byteLength === 0) {
+        tentativas.push(`${nome}: 0 bytes`);
+        continue;
+      }
+      if (pareceVazio(buf)) {
+        tentativas.push(`${nome}: ${buf.byteLength} bytes, mas só zeros`);
+        continue;
+      }
+      tentativas.push(`${nome}: ${buf.byteLength} bytes OK`);
+      return { bytes: buf, metodo: nome, tentativas };
+    } catch (err) {
+      tentativas.push(`${nome}: ${descreveErro(err)}`);
+    }
+  }
+  return { bytes: null, metodo: "nenhum", tentativas };
 }
 
 /** Dimensões do arquivo lidas do cabeçalho, quando o formato permite. Nunca lança. */
@@ -174,7 +259,7 @@ function scaleFor(width: number, height: number, maxDim: number): number {
  * `registrar` recebe uma linha por tentativa - é o que aparece no laudo de diagnóstico.
  */
 export async function decodeImage(
-  file: File,
+  file: Blob,
   head: Cabecalho,
   maxDim: number,
   registrar: (linha: string) => void,
