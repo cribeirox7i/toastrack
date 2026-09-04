@@ -5,22 +5,23 @@ import { SCHEMA } from "@/lib/itemSchema";
 /**
  * Upload de foto de item (etapa "fora de escopo" da migração original — ver MIGRACAO_SHEETS.md
  * seção 7, etapa 6: img_url/img_nome sempre existiram na planilha, nenhuma tela subia foto nova).
- * Sem outbox/offline de propósito (mesmo motivo documentado em src/lib/offline/sync.ts): precisa
- * de rede na hora pra saber a URL que o Drive devolveu, então cai fora do padrão otimista dos
- * outros campos — se estiver offline, falha na hora com uma mensagem clara em vez de fingir que
- * deu certo.
+ *
+ * Redesenhado 2026-09-03 (pedido do Carlos): a foto NUNCA sobe na hora de escolher — só quando o
+ * item é salvo, e mesmo aí em segundo plano (`queuePhotoUpload`), sem travar a tela nem esperar a
+ * rede pra voltar pra lista. Isso também é o que elimina a necessidade de desfazer no Cancelar:
+ * como nada sobe antes do Salvar, cancelar é só descartar o arquivo escolhido localmente — nunca
+ * chega a existir uma foto órfã no servidor pra reverter.
  */
 
 /**
  * Escadinha de compressão: cada degrau é uma tentativa de deixar a foto abaixo de ALVO_BASE64.
  *
- * Por que existe um teto (antes era 1600px/0.82 fixo, sem teto): medido contra a produção real em 2026-09-03,
- * a rota /foto leva de 10s a 80s pro MESMO trabalho — a variação vem do lado do Google (a mesma
- * chamada ao Apps Script oscila entre 3s e 60s), não do tamanho do arquivo. O tamanho é o fator
- * secundário, mas é o único que dá pra controlar daqui: uma foto de celular a 1600px/0.82 dá
- * 600 KB-1 MB de base64, e a rota encadeia três chamadas ao Apps Script, então num minuto ruim
- * isso vira os 2-3 minutos + erro que o Carlos viu. O teto (não a resolução) é o que resolve:
- * começa em 1600px, que é bom pro zoom do PhotoViewer, e só desce se não couber.
+ * Por que existe um teto (antes era 1600px/0.82 fixo, sem teto): medido contra a produção real em
+ * 2026-09-03, a rota /foto leva de 10s a 80s pro MESMO trabalho — a variação vem do lado do
+ * Google (a mesma chamada ao Apps Script oscila entre 3s e 60s), não do tamanho do arquivo. O
+ * tamanho é o fator secundário, mas é o único que dá pra controlar daqui: uma foto de celular a
+ * 1600px/0.82 dá 600 KB-1 MB de base64. O teto (não a resolução) é o que resolve: começa em
+ * 1600px, que é bom pro zoom do PhotoViewer, e só desce se não couber.
  */
 const DEGRAUS = [
   { maxDim: 1600, quality: 0.78 },
@@ -44,17 +45,30 @@ export interface UploadPhotoResult {
   error?: string;
 }
 
-function readAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
+/** Decodifica o arquivo pra um bitmap pronto pro <canvas>, sem passar por uma string base64
+ *  intermediária — `readAsDataURL` + `<img>` chegava a manter arquivo + string base64 + bitmap
+ *  decodificado na memória ao mesmo tempo, o que em celular com pouca RAM e uma foto de 10+ MB
+ *  bastava pra derrubar a aba silenciosamente (era o "Não foi possível processar essa imagem."
+ *  reportado pelo Carlos 2026-09-03: a PRIMEIRA tentativa de compressão já falhava, e como a
+ *  função antiga desistia no primeiro erro, nunca chegava a tentar um tamanho menor).
+ *  `createImageBitmap` decodifica direto do Blob; WebView muito antigo pode não ter, daí o
+ *  fallback via `<img>` + FileReader. */
+async function decodeImage(file: File): Promise<ImageBitmap | HTMLImageElement> {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file);
+    } catch {
+      // decodificação nativa recusou o arquivo (formato exótico) - tenta o caminho de <img>
+      // antes de desistir, alguns navegadores são mais tolerantes por aí.
+    }
+  }
+  const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
     reader.onerror = () => reject(reader.error ?? new Error("Falha ao ler o arquivo"));
     reader.readAsDataURL(file);
   });
-}
-
-function loadImage(dataUrl: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
     img.onerror = () => reject(new Error("Não foi possível ler a imagem"));
@@ -62,11 +76,20 @@ function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Um degrau da escadinha: redimensiona e recomprime em JPEG, devolvendo só o base64. */
-function encodeJpegBase64(img: HTMLImageElement, maxDim: number, quality: number): string {
-  const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-  const w = Math.round(img.width * scale) || 1;
-  const h = Math.round(img.height * scale) || 1;
+function tamanhoDe(img: ImageBitmap | HTMLImageElement): { width: number; height: number } {
+  return img instanceof HTMLImageElement
+    ? { width: img.naturalWidth, height: img.naturalHeight }
+    : { width: img.width, height: img.height };
+}
+
+/** Um degrau da escadinha: redimensiona e recomprime em JPEG, devolvendo só o base64. Lança se o
+ *  navegador recusar (canvas grande demais pra memória disponível, por exemplo) - cabe a quem
+ *  chama decidir se tenta um degrau menor. */
+function encodeJpegBase64(img: ImageBitmap | HTMLImageElement, maxDim: number, quality: number): string {
+  const { width, height } = tamanhoDe(img);
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  const w = Math.round(width * scale) || 1;
+  const h = Math.round(height * scale) || 1;
 
   const canvas = document.createElement("canvas");
   canvas.width = w;
@@ -80,31 +103,45 @@ function encodeJpegBase64(img: HTMLImageElement, maxDim: number, quality: number
   return comma === -1 ? jpegDataUrl : jpegDataUrl.slice(comma + 1);
 }
 
-/** Recomprime até ficar abaixo de ALVO_BASE64 (ou até acabarem os degraus) — roda no navegador,
- *  nunca manda o arquivo original de câmera (podem ser 5-10 MB) pro servidor. */
+/**
+ * Recomprime até ficar abaixo de ALVO_BASE64 — roda no navegador, nunca manda o arquivo original
+ * de câmera (podem ser 5-10 MB) pro servidor. Cada degrau é tentado de forma independente: se um
+ * tamanho falhar (memória, principalmente), tenta o próximo MENOR em vez de desistir de todos -
+ * antes um único degrau falhando derrubava a função inteira mesmo havendo tamanhos mais leves
+ * ainda não tentados.
+ */
 async function compressToJpegBase64(file: File): Promise<string> {
-  const dataUrl = await readAsDataUrl(file);
-  const img = await loadImage(dataUrl);
-
-  let base64 = "";
-  for (const degrau of DEGRAUS) {
-    base64 = encodeJpegBase64(img, degrau.maxDim, degrau.quality);
-    if (base64.length <= ALVO_BASE64) break;
+  const img = await decodeImage(file);
+  try {
+    let base64 = "";
+    let ultimoErro: unknown;
+    for (const degrau of DEGRAUS) {
+      try {
+        base64 = encodeJpegBase64(img, degrau.maxDim, degrau.quality);
+        if (base64.length <= ALVO_BASE64) return base64;
+      } catch (err) {
+        ultimoErro = err;
+      }
+    }
+    if (base64) return base64; // nenhum coube no teto, mas pelo menos um degrau funcionou
+    throw ultimoErro ?? new Error("Nenhum tamanho de compressão funcionou");
+  } finally {
+    if (img instanceof ImageBitmap) img.close(); // libera a memória do bitmap decodificado
   }
-  return base64;
 }
 
-/** Sobe a foto de um item já existente (não dá pra anexar foto num item ainda não salvo — o
- *  upload precisa de um id de linha real pra gravar img_url/img_nome). Atualiza o cache local na
- *  volta (`applyServerPatch`) pra a lista/detalhe mostrarem a foto nova sem esperar sync. */
+/** Sobe a foto de um item já existente e grava o link + nome do arquivo nas colunas de imagem —
+ *  ver Codigo.gs `itemFotoUpload`. Atualiza o cache local na volta (`applyServerPatch`) pra a
+ *  lista/detalhe mostrarem a foto nova mesmo se a tela que pediu o upload já tiver fechado. */
 export async function uploadItemPhoto(type: ItemType, id: string, file: File): Promise<UploadPhotoResult> {
-  if (!navigator.onLine) return { ok: false, error: "Sem conexão — tente novamente online." };
+  if (!navigator.onLine) return { ok: false, error: "Sem conexão — a foto não foi enviada." };
   if (!file.type.startsWith("image/")) return { ok: false, error: "Escolha um arquivo de imagem." };
 
   let base64Data: string;
   try {
     base64Data = await compressToJpegBase64(file);
-  } catch {
+  } catch (err) {
+    console.error("compressToJpegBase64 falhou pros 5 degraus", err);
     return { ok: false, error: "Não foi possível processar essa imagem." };
   }
 
@@ -139,32 +176,48 @@ export async function uploadItemPhoto(type: ItemType, id: string, file: File): P
   }
 }
 
+// ---------- Fila de upload em segundo plano ----------
+
+export interface PhotoUploadEventDetail {
+  type: ItemType;
+  id: string;
+  result: UploadPhotoResult;
+}
+
+/** Emite "done" com `PhotoUploadEventDetail` quando um upload em segundo plano termina (sucesso
+ *  ou erro) - é como uma tela que já fechou (voltou pra lista antes do upload acabar) ainda
+ *  consegue avisar o usuário. Ver GlobalPhotoToast em MainApp.tsx. */
+export const photoUploadEvents = new EventTarget();
+
+/** Uploads em andamento, por `${type}:${id}` - permite que reabrir o MESMO item enquanto a foto
+ *  dele ainda está subindo (upload dessa mesma tela, ou de uma edição anterior) mostre "Enviando"
+ *  em vez de nada, e que `queuePhotoUpload` nunca dispare duas fotos em paralelo pro mesmo item. */
+const emCurso = new Map<string, Promise<UploadPhotoResult>>();
+
+function chave(type: ItemType, id: string): string {
+  return `${type}:${id}`;
+}
+
+/** Promise do upload em segundo plano deste item, se houver um rodando agora. */
+export function getPendingPhotoUpload(type: ItemType, id: string): Promise<UploadPhotoResult> | undefined {
+  return emCurso.get(chave(type, id));
+}
+
 /**
- * Desfaz uma foto que acabou de subir: apaga o arquivo do Drive e devolve as colunas de imagem ao
- * estado anterior (`restaurar`) ou a vazio. É o que roda quando o usuário cancela a edição depois
- * de anexar a foto — antes disso a foto ficava gravada e o arquivo órfão no Drive mesmo com o
- * item nunca tendo sido salvo. Atualiza o cache local na volta, como o upload faz.
+ * Dispara o upload de `file` pro item `id` e NÃO espera terminar - quem chama segue em frente
+ * (ex.: `DetailScreen.save()` já pode fechar a tela e voltar pra lista). O resultado chega via
+ * `photoUploadEvents` e, em caso de sucesso, no cache local (`applyServerPatch`, dentro de
+ * `uploadItemPhoto`) - não precisa de nenhuma tela aberta pra terminar de refletir.
  */
-export async function rollbackItemPhoto(
-  type: ItemType,
-  id: string,
-  restaurar?: { url: string; nome: string },
-): Promise<boolean> {
-  const tab = TYPE_TAB[type] as ItemTab;
-  try {
-    const res = await fetch(`/api/items/${tab}/${id}/foto`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ restaurarUrl: restaurar?.url ?? "", restaurarNome: restaurar?.nome ?? "" }),
+export function queuePhotoUpload(type: ItemType, id: string, file: File): void {
+  const k = chave(type, id);
+  const tarefa = uploadItemPhoto(type, id, file);
+  emCurso.set(k, tarefa);
+  void tarefa
+    .then((result) => {
+      photoUploadEvents.dispatchEvent(new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id, result } }));
+    })
+    .finally(() => {
+      if (emCurso.get(k) === tarefa) emCurso.delete(k);
     });
-    if (!res.ok) return false;
-    await applyServerPatch(tab, id, {
-      [IMG_URL_COL[type]]: restaurar?.url ?? "",
-      [SCHEMA[type].imgNomeCol]: restaurar?.nome ?? "",
-      updated_at: new Date().toISOString(),
-    });
-    return true;
-  } catch {
-    return false;
-  }
 }

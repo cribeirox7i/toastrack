@@ -568,6 +568,67 @@ mais por nada disso.
 Drive (o rollback só cobre a edição cancelada). E se o app for fechado no meio da limpeza do
 Cancelar, o arquivo fica lá.
 
+> **Superado pela seção 8.2 abaixo, no mesmo dia**: o upload-em-segundo-plano-com-rollback
+> descrito no item 4/5 acima ainda travava a experiência de escolher a foto (o botão ficava
+> "Enviando…" tentando gravar as colunas na hora) e, pior, um bug real na compressão fazia
+> `onPhotoSelected` falhar direto com "Não foi possível processar essa imagem." em fotos de
+> celular grandes. Toda a máquina de rollback (`removeItemPhoto`, `DELETE /foto`,
+> `rollbackItemPhoto`, `test:photo-rollback-integration`) foi removida — não ficou código morto,
+> porque o redesenho da 8.2 elimina a premissa que a motivava (upload antes do Salvar).
+
+## 8.2 Foto só sobe no Salvar, em segundo plano de verdade (2026-09-03, mesmo dia)
+
+**Bug encontrado ao testar a 8.1 no celular real:** escolher a foto mostrava "Enviando…" por um
+tempo e terminava em "Não foi possível processar essa imagem." — ANTES de qualquer chamada de
+rede. Causa: `compressToJpegBase64` lia o arquivo inteiro como string base64 (`readAsDataURL`) e
+decodificava num `<img>`, mantendo arquivo + string base64 + bitmap decodificado na memória ao
+mesmo tempo — numa foto de câmera de 10+ MB, em celular com pouca RAM, isso bastava pra a aba
+matar a decodificação. Agravante: a escadinha de compressão da 8.1 desistia inteira no primeiro
+degrau que falhasse, mesmo havendo tamanhos menores (mais leves) ainda não tentados.
+
+**Pedido do Carlos, que virou o redesenho:**
+> A. escolho a foto na galeria; B. Aplicação mostra a foto no controle de imagem, sem subir,
+> localmente; C. Processa EXIF em background; D. Preencho os dados e salvo; E. Aplicação volta
+> pra listagem mostrando o item na lista, e sobe a foto em background.
+
+**O que mudou:**
+
+1. `photoUpload.ts`: `compressToJpegBase64` agora usa `createImageBitmap(file)` (decodifica direto
+   do `Blob`, sem string base64 intermediária), com fallback via `<img>`/`FileReader` só pra
+   WebView muito antigo. Cada degrau da escadinha é tentado de forma independente (try/catch por
+   degrau) — um tamanho falhando não derruba os menores ainda não tentados.
+2. **Escolher a foto não sobe mais nada.** `onPhotoSelected` só guarda o `File` e mostra um
+   preview local (`URL.createObjectURL`) — sem rede, sem `ensureRow`, sem criar linha nenhuma. O
+   EXIF continua sendo lido na hora (é leitura local, sempre foi rápida).
+3. **O upload só começa no Salvar**, e roda solto: `queuePhotoUpload(type, id, file)` em
+   `photoUpload.ts` é fire-and-forget — dispara o upload e devolve na hora, sem o chamador esperar
+   nada. Vive num Map a nível de módulo (`emCurso`), então sobrevive a `DetailScreen` desmontando.
+4. **`save()` chama `onClose()` na hora**, sem esperar a foto — volta pra lista imediatamente,
+   como pedido. A lista já reflete o item (o cache local é atualizado direto por
+   `applyServerPatch` dentro de `uploadItemPhoto`, sem precisar de nenhuma tela aberta).
+5. **Cancelar virou trivial**: como nada sobe antes do Salvar, cancelar é só descartar o `File`
+   local e revogar o preview — não existe mais chamada nenhuma ao servidor pra desfazer. Toda a
+   maquinaria de rollback da 8.1 (seção anterior) foi removida por ficar sem uso.
+6. **`GlobalPhotoToast.tsx`** (novo, montado em `MainApp.tsx`, nunca desmonta entre telas): como o
+   Salvar não espera mais o upload, o toast local de `DetailScreen` já não existe quando o
+   resultado chega. Um `EventTarget` módulo (`photoUploadEvents`) avisa sucesso/erro pra esse
+   toast global, onde quer que o usuário esteja quando o upload terminar.
+7. Reabrir o MESMO item enquanto o upload de uma edição anterior ainda está em curso
+   (`getPendingPhotoUpload`) mostra "Enviando…" e atualiza a foto quando o upload responder, em
+   vez de mostrar a foto velha até a próxima sincronização.
+
+**Fica de fora, aceito** (mesma lista de antes, ainda válida): trocar a foto de um item salvo
+deixa a anterior órfã no Drive. Novo, específico deste redesenho: se o item for EXCLUÍDO da lista
+enquanto o upload da foto dele ainda está em curso, o upload pode terminar tentando gravar numa
+linha que já não existe mais (`itemFotoUpload` falha com "Linha não encontrada") — o arquivo fica
+órfão no Drive. Não há outbox pra foto offline: se `save()` acontecer sem internet, o upload falha
+na hora com uma mensagem clara ("Sem conexão"), sem fila de tentar de novo depois — mesma postura
+já documentada pra fotos desde a etapa 6 (upload precisa de rede pra saber a URL do Drive).
+
+**Não verificado neste ambiente**: o bug de compressão só reproduz em celular real com memória
+limitada — o Node não tem `<canvas>`/`createImageBitmap`, então não dá pra escrever um teste
+automatizado pra ele aqui. Precisa de confirmação do Carlos no aparelho dele.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

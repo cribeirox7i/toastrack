@@ -15,6 +15,7 @@ import ProfileScreen from "@/components/app/ProfileScreen";
 import ListScreen from "@/components/app/ListScreen";
 import DetailScreen from "@/components/app/DetailScreen";
 import StatsScreen from "@/components/app/StatsScreen";
+import GlobalPhotoToast from "@/components/app/GlobalPhotoToast";
 
 type View = "home" | ItemType | "profile" | "stats" | "detail";
 
@@ -244,6 +245,12 @@ export default function MainApp() {
           ))}
         </nav>
       )}
+
+      {/* Foto sobe em segundo plano (ver photoUpload.ts) - este toast é o único jeito de o
+       *  usuário saber se ela deu certo ou não depois de já ter saído do Detalhe (Salvar volta
+       *  pra lista na hora, sem esperar o upload). Fica aqui, no shell que nunca desmonta entre
+       *  telas, ao contrário do toast local de cada tela. */}
+      <GlobalPhotoToast />
     </div>
   );
 }

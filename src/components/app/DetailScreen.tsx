@@ -6,7 +6,7 @@ import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
 import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
-import { rollbackItemPhoto, uploadItemPhoto, type UploadPhotoResult } from "@/lib/photoUpload";
+import { getPendingPhotoUpload, queuePhotoUpload } from "@/lib/photoUpload";
 import { photoDateForInput, toDateInputValue } from "@/lib/photoDate";
 import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
@@ -47,20 +47,11 @@ export default function DetailScreen({
   const dateField = useMemo(() => fields.find((f) => f.kind === "date"), [fields]);
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
-  // true enquanto o item é novo e ainda não teve um "Salvar" de verdade do usuário. A linha na
-  // planilha pode até já existir (criada sob demanda pra permitir anexar a foto antes de preencher
-  // o resto) - nesse estado, Cancelar apaga a linha em vez de tentar reverter (não tem pra onde
-  // reverter, nunca houve um save real).
-  const [isDraft, setIsDraft] = useState(itemId == null);
-  // Quando a linha é criada sob demanda (ensureRow), `currentId` muda e dispararia o efeito de
-  // carga abaixo, que releria a linha do cache e sobrescreveria o que o usuário já digitou. Este
-  // sinal faz o efeito pular essa recarga uma vez - a tela já tem os valores certos na mão.
-  const skipNextLoad = useRef(false);
   const [editing, setEditing] = useState(initialEditing);
   const [loading, setLoading] = useState(true);
   const [lookup, setLookup] = useState<Lookup>({ pais: [], bjcp: [] });
   const [values, setValues] = useState<Record<string, string>>({});
-  // Espelho de `values` pra `ensureRow` ler o estado mais recente sem depender do closure.
+  // Espelho de `values` pra `applyPhotoDate` ler o estado mais recente sem depender do closure.
   const valuesRef = useRef(values);
   useEffect(() => {
     valuesRef.current = values;
@@ -74,22 +65,18 @@ export default function DetailScreen({
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
   const [confirmDel, setConfirmDel] = useState(false);
+  // true quando HÁ um upload em segundo plano em curso pra ESTE item (nunca quando a foto está só
+  // escolhida e esperando o Salvar - até lá não existe upload nenhum, ver onPhotoSelected). Fica
+  // true também ao reabrir um item cujo upload de uma edição anterior ainda não terminou (ver
+  // efeito de carga, `getPendingPhotoUpload`).
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
-  // O upload roda em segundo plano (pedido do Carlos 2026-09-03: "enquanto o usuário preenche os
-  // demais campos, a foto está subindo"), então Salvar e Cancelar precisam esperar por ele antes
-  // de mexer na linha - senão salvamos sem a foto ou apagamos a linha no meio do upload.
-  const uploadEmCurso = useRef<Promise<UploadPhotoResult> | null>(null);
-  // Como as colunas de imagem estavam ANTES da primeira foto anexada nesta edição. Só existe
-  // quando alguma foto subiu aqui - é o que o Cancelar usa pra desfazer (apagar do Drive e
-  // devolver a foto anterior).
-  const fotoAnterior = useRef<{ url: string; nome: string } | null>(null);
-  const imgNomeRef = useRef("");
-  // URL local (blob:) do preview enquanto a foto ainda sobe - precisa ser revogada pra não vazar.
+  // Arquivo escolhido nesta edição, ainda não enviado - o upload de verdade só começa no Salvar
+  // (queuePhotoUpload). Cancelar, portanto, nunca precisa desfazer nada no servidor: só descarta
+  // isto (pedido do Carlos 2026-09-03: a foto não pode travar o cadastro nem subir antes de o
+  // usuário confirmar Salvar).
+  const pendingPhotoFile = useRef<File | null>(null);
+  // URL local (blob:) do preview da foto escolhida - precisa ser revogada pra não vazar memória.
   const previewRef = useRef<string | null>(null);
-  // `currentId` também num ref: um handler assíncrono (upload em segundo plano) que continua
-  // depois de `ensureRow` criar a linha ainda enxergaria `currentId` como null no closure dele -
-  // e salvar com null criaria uma SEGUNDA linha.
-  const currentIdRef = useRef(currentId);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
@@ -100,13 +87,12 @@ export default function DetailScreen({
 
   useEffect(() => {
     let alive = true;
+    // Trocar de item (ex.: "Duplicar" troca currentId sem desmontar a tela) descarta qualquer
+    // foto escolhida e ainda não salva - ela pertencia ao item anterior.
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    previewRef.current = null;
+    pendingPhotoFile.current = null;
     (async () => {
-      if (skipNextLoad.current) {
-        // A linha acabou de ser criada sob demanda (ensureRow) - os valores em tela já são os
-        // certos, não relê nada (evita corrida com o que o usuário digita).
-        skipNextLoad.current = false;
-        return;
-      }
       setLoading(true);
       try {
         const lk = await fetchLookups();
@@ -119,13 +105,26 @@ export default function DetailScreen({
           for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
           setValues(v);
           setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
-          imgNomeRef.current = toFormString(row?.[SCHEMA[type].imgNomeCol]);
           setCanEdit(row ? canEditRow(row, ownUserId) : false);
           dateIsAuto.current = false;
+
+          // Um upload em segundo plano de uma edição anterior ainda pode estar em curso pra este
+          // MESMO item (o usuário salvou, voltou pra lista e reabriu antes de terminar) - pega
+          // esse resultado em vez de mostrar a foto velha até a próxima sincronização.
+          const pendente = getPendingPhotoUpload(type, currentId);
+          if (pendente) {
+            setUploadingPhoto(true);
+            pendente.then((r) => {
+              if (!alive) return;
+              setUploadingPhoto(false);
+              if (r.ok && r.url) setImgUrl(r.url);
+            });
+          } else {
+            setUploadingPhoto(false);
+          }
         } else {
-          // Item novo: só monta o formulário vazio na hora, SEM criar nada. A linha só nasce
-          // quando o usuário anexa uma foto (ensureRow) ou dá Salvar - antes disso, abrir "novo
-          // item" nunca toca a rede nem o IndexedDB, então a tela abre na hora.
+          // Item novo: só monta o formulário vazio na hora, SEM criar nada na planilha - a linha
+          // só nasce quando o usuário dá Salvar.
           const v: Record<string, string> = {};
           for (const f of fields) v[f.col] = "";
           if (dateField) {
@@ -135,6 +134,7 @@ export default function DetailScreen({
           setValues(v);
           setImgUrl("");
           setCanEdit(true);
+          setUploadingPhoto(false);
         }
       } finally {
         if (alive) setLoading(false);
@@ -145,26 +145,6 @@ export default function DetailScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId, type]);
-
-  /**
-   * Garante que a linha existe na planilha e devolve o id real - criando-a agora se este ainda
-   * for um item novo sem id. É o que permite "a jornada de cadastro começa pela imagem" sem criar
-   * um rascunho logo que a tela abre (o que travava a abertura quando a criação falhava).
-   */
-  async function ensureRow(): Promise<string | null> {
-    if (currentIdRef.current != null) return currentIdRef.current;
-    const id = await saveItem(type, null, valuesRef.current, ownUserId);
-    if (id != null) {
-      skipNextLoad.current = true;
-      currentIdRef.current = id; // antes do setState: quem está esperando o upload lê daqui
-      setCurrentId(id);
-    }
-    return id;
-  }
-
-  useEffect(() => {
-    currentIdRef.current = currentId;
-  }, [currentId]);
 
   // Revoga o preview local quando a tela sai do ar (o objeto fica na memória do navegador até lá).
   useEffect(() => {
@@ -197,8 +177,8 @@ export default function DetailScreen({
 
   function set(col: string, v: string) {
     if (col === dateField?.col) dateIsAuto.current = false;
-    // Espelha na hora (e não só no efeito, que roda depois do render): `ensureRow` pode ler
-    // valuesRef no mesmo tick em que a data da foto é aplicada.
+    // Espelha na hora (e não só no efeito, que roda depois do render): `applyPhotoDate` pode ler
+    // valuesRef no mesmo tick em que o campo de data é alterado.
     valuesRef.current = { ...valuesRef.current, [col]: v };
     setValues((prev) => ({ ...prev, [col]: v }));
   }
@@ -209,82 +189,52 @@ export default function DetailScreen({
       return;
     }
     setSaving(true);
-    // A foto pode ainda estar subindo (ela roda em segundo plano). Salvar por cima criaria uma
-    // segunda linha - o upload é quem chama `ensureRow` - então espera ela terminar primeiro.
-    if (uploadEmCurso.current) {
-      showToast("Terminando de enviar a foto…");
-      await uploadEmCurso.current;
-    }
-    const idAtual = currentIdRef.current;
+    const idAtual = currentId;
     const id = await saveItem(type, idAtual, values, ownUserId);
     setSaving(false);
     if (id == null) {
       showToast("Erro ao salvar.");
       return;
     }
-    onChanged();
-    if (idAtual == null) {
-      skipNextLoad.current = true;
-      currentIdRef.current = id;
-      setCurrentId(id);
+    // A foto (se houver uma escolhida) sobe em segundo plano a partir daqui - o Salvar não espera
+    // por ela. `queuePhotoUpload` sobrevive à tela fechando: o resultado chega pelo toast global
+    // (ver GlobalPhotoToast em MainApp.tsx) e, se der certo, direto no cache local.
+    if (pendingPhotoFile.current) {
+      queuePhotoUpload(type, id, pendingPhotoFile.current);
+      pendingPhotoFile.current = null;
     }
-    fotoAnterior.current = null; // salvou: não há mais o que desfazer
-    setIsDraft(false);
-    setEditing(false);
-    showToast("Salvo");
+    if (previewRef.current) {
+      URL.revokeObjectURL(previewRef.current);
+      previewRef.current = null;
+    }
+    onChanged();
+    if (idAtual == null) setCurrentId(id);
+    // Pedido do Carlos 2026-09-03: Salvar volta pra lista na hora (mostrando o item já lá),
+    // em vez de ficar na tela de detalhe esperando qualquer coisa - a foto que continue subindo
+    // por conta própria.
+    onClose();
   }
 
   async function cancel() {
-    const pendente = uploadEmCurso.current;
-    const rascunho = isDraft;
+    // Nada foi enviado ao servidor ainda - o upload só começa em queuePhotoUpload, chamado por
+    // save() -, então cancelar é só descartar o que foi escolhido localmente. Sem rollback nenhum
+    // no servidor: nunca chegou a existir uma foto órfã lá pra desfazer.
+    if (previewRef.current) {
+      URL.revokeObjectURL(previewRef.current);
+      previewRef.current = null;
+    }
+    pendingPhotoFile.current = null;
 
-    /**
-     * Desfaz no servidor a única coisa que a edição já gravou sozinha: a foto. Roda solta (sem
-     * travar a tela) porque cancelar não pode ficar esperando uma foto terminar de subir só pra
-     * ela ser apagada em seguida - mas não pode COMEÇAR antes do upload terminar: a linha pode
-     * nem existir ainda, e apagá-la no meio do envio deixaria o arquivo órfão no Drive.
-     */
-    const desfazerNoServidor = async () => {
-      if (pendente) await pendente;
-      const id = currentIdRef.current;
-      if (id == null) return;
-      const anterior = fotoAnterior.current;
-      if (rascunho) {
-        // A linha inteira vai embora; a foto que subiu no meio do caminho precisa ir junto, senão
-        // fica um arquivo no Drive sem item nenhum apontando pra ele.
-        if (anterior) await rollbackItemPhoto(type, id);
-        await deleteItem(type, id);
-      } else if (anterior) {
-        await rollbackItemPhoto(type, id, anterior.url ? anterior : undefined);
-      }
-      fotoAnterior.current = null;
-      onChanged();
-    };
-
-    if (currentIdRef.current == null && pendente == null) {
+    if (currentId == null) {
       onClose();
       return;
     }
-    if (rascunho) {
-      // Rascunho criado só pra permitir foto antes de salvar (ver ensureRow) - o usuário desistiu
-      // sem confirmar nada, então apaga a linha em vez de "reverter" pra ela.
-      void desfazerNoServidor();
-      onClose();
-      return;
-    }
-
-    void desfazerNoServidor();
     // Revert unsaved edits by reloading the row from the DB.
-    const row = await fetchFullItem(type, currentIdRef.current!);
+    const row = await fetchFullItem(type, currentId);
     const v: Record<string, string> = {};
     for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
     setValues(v);
-    // A foto anexada agora já está gravada na linha (e no cache local), então a releitura acima
-    // ainda traz ELA - quem vale aqui é a foto de antes da edição. O cache se acerta sozinho
-    // quando o rollback lá em cima responder.
-    const anterior = fotoAnterior.current;
-    mostrarFoto(anterior ? anterior.url : driveImageUrl(row?.[IMG_URL_COL[type]]));
-    if (anterior) imgNomeRef.current = anterior.nome;
+    setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
     dateIsAuto.current = false; // os valores voltaram a ser os do banco, nada aqui é palpite do app
     setEditing(false);
   }
@@ -311,48 +261,25 @@ export default function DetailScreen({
     return photoDate;
   }
 
-  /** Troca o que está na tela, cuidando de revogar um preview local anterior. */
-  function mostrarFoto(url: string, ehPreviewLocal = false) {
-    if (previewRef.current && previewRef.current !== url) URL.revokeObjectURL(previewRef.current);
-    previewRef.current = ehPreviewLocal ? url : null;
-    setImgUrl(url);
-  }
-
+  /**
+   * Escolher a foto NUNCA sobe nada (pedido do Carlos 2026-09-03: "aplicação mostra a foto no
+   * controle de imagem, sem subir, localmente"). Só guarda o arquivo e mostra o preview local; o
+   * envio de verdade só começa quando o item é salvo (ver save/queuePhotoUpload).
+   */
   async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
     if (!file) return;
 
-    const anterior = { url: imgUrl, nome: imgNomeRef.current };
-    // A foto aparece na hora, do arquivo local: quem escolheu não fica olhando pro nada enquanto
-    // ela sobe. O envio de verdade acontece em segundo plano, abaixo.
-    mostrarFoto(URL.createObjectURL(file), true);
-    // A data sai do arquivo, não do servidor - não precisa esperar o upload terminar.
+    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+    const preview = URL.createObjectURL(file);
+    previewRef.current = preview;
+    pendingPhotoFile.current = file;
+    setImgUrl(preview);
+
+    // EXIF é leitura local, roda em segundo plano sem esperar rede nenhuma (ver photoDate.ts).
     const dataDaFoto = await applyPhotoDate(file);
-
-    setUploadingPhoto(true);
-    const tarefa = (async (): Promise<UploadPhotoResult> => {
-      const id = await ensureRow();
-      if (id == null) return { ok: false, error: "Não foi possível preparar o item. Tente de novo." };
-      return uploadItemPhoto(type, id, file);
-    })();
-    uploadEmCurso.current = tarefa;
-    showToast(dataDaFoto ? `Data da foto: ${formatDate(dataDaFoto)} · enviando…` : "Enviando a foto…");
-
-    const result = await tarefa;
-    if (uploadEmCurso.current === tarefa) uploadEmCurso.current = null;
-    setUploadingPhoto(false);
-    if (result.ok && result.url) {
-      // Só a PRIMEIRA troca desta edição guarda o estado anterior: é pra ele que o Cancelar volta.
-      if (!fotoAnterior.current) fotoAnterior.current = anterior;
-      imgNomeRef.current = file.name;
-      mostrarFoto(result.url);
-      onChanged();
-      showToast("Foto enviada");
-    } else {
-      mostrarFoto(anterior.url);
-      showToast(result.error ?? "Erro ao enviar a foto.");
-    }
+    showToast(dataDaFoto ? `Foto anexada · data ${formatDate(dataDaFoto)}` : "Foto anexada");
   }
 
   async function doDuplicate() {
@@ -401,7 +328,7 @@ export default function DetailScreen({
   }
 
   const title = editing
-    ? isDraft
+    ? currentId == null
       ? "Novo item"
       : "Editar"
     : values[nameField.col] || TYPE_LABEL_SINGULAR[type];
