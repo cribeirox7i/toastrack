@@ -16,7 +16,7 @@ import {
 } from "@/lib/photoUpload";
 import { photoDateFromBytes, toDateInputValue } from "@/lib/photoDate";
 import { lerBytes } from "@/lib/imageDecode";
-import { syncEvents, type RemapDetail } from "@/lib/offline/sync";
+import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
@@ -225,6 +225,13 @@ export default function DetailScreen({
     setValues((prev) => ({ ...prev, [col]: v }));
   }
 
+  /**
+   * Salvar é local-primeiro (ver `saveItem` em itemSchema.ts, redesenho de 2026-09-04): grava no
+   * IndexedDB e enfileira no outbox, sem esperar rede nenhuma. Esta função nunca fica presa - o
+   * try/finally garante que `saving` sempre volta a `false`, mesmo que algo dê errado, porque
+   * antes um erro no meio do caminho deixava o botão preso em "…" pra sempre, sem mensagem (foi o
+   * que o Carlos viu em 2026-09-04: HTTP 500 no meio, "quase um minuto e nada").
+   */
   async function save() {
     if (!(values[nameField.col] ?? "").trim()) {
       showToast("Informe o nome.");
@@ -236,23 +243,33 @@ export default function DetailScreen({
       showToast("Preparando a foto…");
       return;
     }
-    setSaving(true);
+
     const idAtual = currentId;
-    const id = await saveItem(type, idAtual, values, ownUserId);
-    setSaving(false);
-    if (id == null) {
-      showToast("Erro ao salvar.");
-      return;
-    }
-    // A foto (se houver uma pronta) sobe em segundo plano a partir daqui - o Salvar não espera por
-    // ela. `queuePhotoUpload` sobrevive à tela fechando: o resultado chega pelo toast global (ver
-    // GlobalPhotoToast em MainApp.tsx) e, dando certo, direto no cache local. Como a foto já vem
-    // comprimida da escolha, o que resta aqui é só a requisição - sem CPU, sem risco de falhar
-    // por memória com a tela já fechada.
     const pronta = preparedPhoto.current;
+    preparedPhoto.current = null;
+
+    setSaving(true);
+    let id: string;
+    try {
+      id = await saveItem(type, idAtual, values, ownUserId);
+    } catch (err) {
+      // Só chega aqui se o próprio IndexedDB falhar (aparelho sem espaço, navegador bloqueando
+      // storage) - a rede nunca é o caminho crítico. A foto volta pro estado pra não se perder.
+      preparedPhoto.current = pronta;
+      showToast("Não deu pra salvar neste aparelho agora. Tente de novo.");
+      console.error("saveItem falhou", err);
+      return;
+    } finally {
+      setSaving(false);
+    }
+
+    // A foto (se houver uma pronta) sobe em segundo plano a partir daqui - o Salvar não espera por
+    // ela. Item novo nasce com um id LOCAL (temporário) até o outbox sincronizar; a rota de foto
+    // precisa do id real da planilha, então `waitForRealId` espera o remap sem travar nada aqui -
+    // `queuePhotoUpload` só é chamado quando o id chega, e sobrevive à tela já ter fechado (o
+    // resultado chega pelo toast global, ver GlobalPhotoToast em MainApp.tsx).
     if (pronta) {
-      queuePhotoUpload(type, id, pronta);
-      preparedPhoto.current = null;
+      void waitForRealId(TYPE_TAB[type] as ItemTab, id).then((realId) => queuePhotoUpload(type, realId, pronta));
     }
     if (previewRef.current) {
       URL.revokeObjectURL(previewRef.current);
@@ -260,9 +277,9 @@ export default function DetailScreen({
     }
     onChanged();
     if (idAtual == null) setCurrentId(id);
-    // Pedido do Carlos 2026-09-03: Salvar volta pra lista na hora (mostrando o item já lá),
-    // em vez de ficar na tela de detalhe esperando qualquer coisa - a foto que continue subindo
-    // por conta própria.
+    // Pedido do Carlos 2026-09-03 (e reafirmado em 2026-09-04): Salvar volta pra lista na hora
+    // (mostrando o item já lá), em vez de ficar na tela de detalhe esperando qualquer coisa - a
+    // sincronização e a foto que continuem em segundo plano por conta própria.
     onClose();
   }
 

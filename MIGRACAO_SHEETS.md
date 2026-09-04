@@ -812,6 +812,70 @@ gerou uma causa errada (8.3.1). O que fechou o caso foram os testes que o Carlos
 que **eliminaram** hipóteses: outra origem de foto, navegador comum, aba anônima. Instrumentar
 diz o que está acontecendo; são os testes de eliminação que dizem o porquê. Vale pedir os dois.
 
+## 8.4 Salvar preso em "…" e foto achatada (2026-09-04, mesmo dia)
+
+Dois bugs relatados juntos, sem relação um com o outro, corrigidos na mesma rodada.
+
+### 8.4.1 Salvar ficava preso em "…" (HTTP 500 no meio do caminho)
+
+**Sintoma:** o Carlos clicou em Salvar, o botão virou "…" e ficou assim por quase um minuto, sem
+fechar a tela nem mostrar erro. Reafirmou o pedido original da seção 8.2: "o desejado era que a
+tela de inclusão fechasse ao clicar em salvar, e a subida fosse para um outbox."
+
+**Causa:** `saveItem`/`createNewItem` (`itemSchema.ts`) ainda tentava criar o item DIRETO no
+servidor primeiro, esperando a resposta antes de fechar a tela - só caía pro caminho otimista
+(local + outbox) se essa chamada falhasse. Dois problemas nisso:
+
+1. Esse caminho direto existia por um motivo que já não se aplicava: dar ao item um id ESTÁVEL na
+   hora, pra poder anexar foto - só que desde a 8.2 (2026-09-03) a foto só sobe no Salvar, nunca
+   antes, então um id local temporário já chega a tempo.
+2. `save()` (`DetailScreen.tsx`) não tinha `try/catch/finally` nenhum ao redor da chamada. Uma
+   falha nesse caminho de rede (o HTTP 500 relatado, ou qualquer exceção) deixava `saving` preso
+   em `true` pra sempre, sem mensagem - o "…" que o Carlos viu.
+
+**Correção:** `saveItem` agora é **sempre** local-primeiro - grava no IndexedDB e enfileira no
+outbox direto, sem tentar rede nenhuma primeiro (o que a criação de item já fazia num dos dois
+casos virou o único caminho). Isso elimina a classe inteira do bug: salvar volta a ser
+tipicamente menos de 1ms, então não há mais "esperar a rede" pra travar.
+
+Como o item novo agora sempre nasce com um id local (uuid) até sincronizar, o upload de foto
+(que precisa do id REAL da planilha) ganhou `waitForRealId` (`offline/sync.ts`): espera o evento
+de remap que o outbox já dispara quando a criação sincroniza, sem bloquear nada - quem chama isto
+já fechou a tela.
+
+`save()` ganhou `try/catch/finally` de verdade: `setSaving(false)` agora SEMPRE roda, e um erro
+real (só possível se o próprio IndexedDB falhar - sem espaço, storage bloqueado) mostra uma
+mensagem em vez de travar em silêncio.
+
+De brinde: a rota `POST /api/items/[tipo]` ganhou `try/catch`, devolvendo uma mensagem de erro
+legível (`errorResponse`, 502) em vez do 500 cru sem corpo que o Next devolve por padrão pra uma
+exceção não tratada - importa pro outbox, que lê essa mensagem no laudo de tentativas.
+
+### 8.4.2 Foto salva achatada (distorção de proporção)
+
+**Sintoma:** numa das tentativas a foto chegou a subir, mas apareceu esticada/achatada, sem
+respeitar a proporção original.
+
+**Causa:** `decodeImage` (`imageDecode.ts`) calcula `resizeWidth`/`resizeHeight` a partir de
+`readJpegSize`, que lê as dimensões do marcador SOF do JPEG - as dimensões do SENSOR, antes de
+qualquer rotação. Uma foto vertical de celular é normalmente gravada com o sensor deitado
+(SOF diz "paisagem") e a orientação certa fica só no metadado EXIF (`Orientation`, tag 0x0112).
+`createImageBitmap` aplica essa rotação por padrão - o bitmap final sai com largura e altura
+TROCADAS em relação ao SOF. Pedir um resize com `resizeWidth`/`resizeHeight` calculados sobre as
+dimensões erradas (viradas) faz o navegador esticar a imagem pra caber exatamente nesse
+retângulo, porque `createImageBitmap` **não preserva proporção quando os dois lados são dados
+explicitamente**.
+
+**Correção:** `readJpegOrientation` lê a tag EXIF Orientation do mesmo jeito que `photoDate.ts` já
+lê a data (percorrendo os segmentos APP1/TIFF/IFD0). `orientationSwapsAxes` diz quais das 8
+orientações trocam largura por altura (5, 6, 7, 8). `decodeImage` agora troca as dimensões do SOF
+antes de calcular a escala quando a orientação exige, então o resize pedido já bate com o formato
+do bitmap que `createImageBitmap` vai de fato devolver.
+
+**Verificação**: `test:image-decode` passou a 22 testes (17 -> 22, somando orientação: sem EXIF,
+Orientation=6/8 trocando eixos, 3/1 não trocando, big-endian, valor fora de 1-8 descartado). `tsc`,
+lint e build limpos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

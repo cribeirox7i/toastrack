@@ -9,7 +9,7 @@
  * upload parar de morrer por memória em celular.
  */
 import assert from "node:assert/strict";
-import { readJpegSize, sniffFormat } from "../src/lib/imageDecode.ts";
+import { readJpegSize, sniffFormat, readJpegOrientation, orientationSwapsAxes } from "../src/lib/imageDecode.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -167,6 +167,63 @@ check("assinatura: arquivo zerado ou sem bytes vira 'vazio'", () => {
 
 check("assinatura: bytes que não batem com nada", () => {
   assert.equal(sniffFormat(bytes([0x12, 0x34, 0x56, 0x78])).formato, "desconhecido");
+});
+
+/* ---------- orientação EXIF ---------- */
+
+/** TIFF mínimo com só a tag Orientation (0x0112, SHORT) no IFD0. */
+function tiffComOrientacao(valor, little = true) {
+  const ifd0Start = 8;
+  const buf = new ArrayBuffer(ifd0Start + 2 + 12 + 4);
+  const view = new DataView(buf);
+  view.setUint16(0, little ? 0x4949 : 0x4d4d, false);
+  view.setUint16(2, 0x002a, little);
+  view.setUint32(4, ifd0Start, little);
+  view.setUint16(ifd0Start, 1, little); // 1 entrada
+  const entry = ifd0Start + 2;
+  view.setUint16(entry, 0x0112, little); // tag Orientation
+  view.setUint16(entry + 2, 3, little); // type SHORT
+  view.setUint32(entry + 4, 1, little); // count
+  view.setUint16(entry + 8, valor, little); // valor cabe nos 4 bytes
+  view.setUint32(entry + 12, 0, little); // sem próximo IFD
+  return new Uint8Array(buf);
+}
+
+/** JPEG mínimo com SOI + APP1(Exif) + o TIFF acima. */
+function jpegComOrientacao(valor, little = true) {
+  const tiff = tiffComOrientacao(valor, little);
+  const exifHeader = Uint8Array.from([...[..."Exif\0\0"].map((c) => c.charCodeAt(0))]);
+  const app1Payload = new Uint8Array(exifHeader.length + tiff.length);
+  app1Payload.set(exifHeader, 0);
+  app1Payload.set(tiff, exifHeader.length);
+  const app1Size = app1Payload.length + 2;
+  const app1 = new Uint8Array(4 + app1Payload.length);
+  app1.set([0xff, 0xe1, (app1Size >> 8) & 0xff, app1Size & 0xff], 0);
+  app1.set(app1Payload, 4);
+  return new Uint8Array([0xff, 0xd8, ...app1, 0xff, 0xd9]).buffer;
+}
+
+check("orientação: sem EXIF -> 1 (normal)", () => {
+  assert.equal(readJpegOrientation(jpeg(sof(0xc0, 100, 100))), 1);
+});
+
+check("orientação: Orientation=6 (retrato, sensor deitado 90° horário)", () => {
+  assert.equal(readJpegOrientation(jpegComOrientacao(6)), 6);
+  assert.equal(orientationSwapsAxes(6), true);
+});
+
+check("orientação: Orientation=8 também troca os eixos; 3 (180°) não troca", () => {
+  assert.equal(orientationSwapsAxes(8), true);
+  assert.equal(orientationSwapsAxes(3), false);
+  assert.equal(orientationSwapsAxes(1), false);
+});
+
+check("orientação: big-endian (MM) lido igual a little-endian (II)", () => {
+  assert.equal(readJpegOrientation(jpegComOrientacao(6, false)), 6);
+});
+
+check("orientação: valor fora de 1-8 é descartado, cai pro padrão 1", () => {
+  assert.equal(readJpegOrientation(jpegComOrientacao(0)), 1);
 });
 
 console.log(`\n${passed} testes de leitura de cabeçalho de imagem passaram.`);

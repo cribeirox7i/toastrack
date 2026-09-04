@@ -46,6 +46,40 @@ function notifyRemap(detail: RemapDetail) {
   syncEvents.dispatchEvent(new CustomEvent<RemapDetail>("remap", { detail }));
 }
 
+/** Ids reais (atribuídos pelo servidor, ver `proximoIdSequencial` em Codigo.gs) são sempre
+ *  numéricos. Um id local temporário (`createItemOffline`) é um uuid, com hífen. */
+function isTempId(id: string): boolean {
+  return !/^\d+$/.test(id);
+}
+
+/**
+ * Resolve pro id REAL de um item, esperando o remap se ainda não sincronizou.
+ *
+ * Existe pro upload de foto: como `saveItem` agora é sempre local-primeiro (2026-09-04), um item
+ * recém-criado nasce com um id temporário, e a rota de foto (`/api/items/[tipo]/[id]/foto`)
+ * precisa do id real - ela escreve direto na linha da planilha via Apps Script, que não sabe nada
+ * sobre uuids locais. Isto não bloqueia a tela: quem chama isto já fechou o Salvar e está rodando
+ * em segundo plano (ver `queuePhotoUpload`); esperar aqui é justamente o ponto.
+ *
+ * Corrida aceitável: se o remap já tiver acontecido ANTES desta chamada começar a escutar, a
+ * promise nunca resolve. Na prática isso exigiria a sincronização completar entre o
+ * `createItemOffline` retornar e este código rodar - os dois no mesmo tick de `save()`, e a
+ * sincronização depende de pelo menos uma ida à rede - então não é um risco real.
+ */
+export function waitForRealId(tab: ItemTab, id: string): Promise<string> {
+  if (!isTempId(id)) return Promise.resolve(id);
+  return new Promise((resolve) => {
+    function onRemap(e: Event) {
+      const d = (e as CustomEvent<RemapDetail>).detail;
+      if (d.tab === tab && d.oldId === id) {
+        syncEvents.removeEventListener("remap", onRemap);
+        resolve(d.newId);
+      }
+    }
+    syncEvents.addEventListener("remap", onRemap);
+  });
+}
+
 export function isOnline(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine;
 }

@@ -42,6 +42,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ tip
   const parsed = createSchema.safeParse(await req.json());
   if (!parsed.success) return errorResponse(parsed.error.issues[0].message);
 
-  const item = await createItem(tipo, parsed.data, auth.session.user.id);
-  return NextResponse.json(item, { status: 201 });
+  // Quem chama isto agora é sempre o outbox (`saveItem` é local-primeiro desde 2026-09-04, ver
+  // itemSchema.ts) - uma falha do Apps Script vira uma tentativa que o outbox reagenda sozinho,
+  // nunca uma tela travada. O try/catch é só pra essa mensagem chegar legível no laudo do outbox
+  // em vez do 500 cru (HTML, sem JSON) que o Next devolve por padrão pra exceção não tratada.
+  try {
+    const item = await createItem(tipo, parsed.data, auth.session.user.id);
+    return NextResponse.json(item, { status: 201 });
+  } catch (err) {
+    return errorResponse(err instanceof Error ? err.message : "Erro ao criar item", 502);
+  }
 }

@@ -1,14 +1,12 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { noCacheUrl } from "@/lib/utils";
 import {
-  applyServerPatch,
   createItemOffline,
   getCachedItem,
   getCachedLookups,
   pullLookups,
   updateItemOffline,
   type ItemTab,
-  type RawItemRow,
 } from "@/lib/offline/sync";
 
 /** A field in the per-type detail/edit form. `role` drives special layout;
@@ -157,48 +155,36 @@ function coerce(field: Field, raw: string): string {
  * cliente manda, ver src/lib/sheets/items.ts); não é usado na atualização (o dono não muda por
  * edição).
  */
+/**
+ * Salvar é SEMPRE local-primeiro: grava no IndexedDB e enfileira no outbox (`createItemOffline`/
+ * `updateItemOffline`), nunca espera a rede. Devolve na hora, tipicamente em menos de um
+ * milissegundo - é o que permite `DetailScreen.save()` fechar a tela imediatamente.
+ *
+ * Redesenho de 2026-09-04 (pedido do Carlos: "o desejado era que a tela de inclusão fechasse ao
+ * clicar em salvar, e a subida fosse para um outbox" - o app estava fazendo o oposto: esperando a
+ * rede, com o botão preso em "…" quando o Apps Script demorava). Até aqui, criar um item tentava
+ * o servidor primeiro e só caía pro caminho otimista se isso falhasse; a versão em rede podia
+ * demorar de 3s a bem mais (o Apps Script oscila, ver seção 8.1 do MIGRACAO_SHEETS.md), e
+ * qualquer exceção nesse caminho deixava `saving` preso em `true` pra sempre, sem mensagem
+ * nenhuma - foi o que o Carlos viu.
+ *
+ * O motivo de existir aquele caminho direto - dar ao item um id ESTÁVEL na hora, pra já poder
+ * anexar foto - não vale mais desde a 8.2: a foto só sobe no Salvar, nunca antes, então o id
+ * local (temporário, uuid) que `createItemOffline` devolve na hora já está disponível a tempo. O
+ * upload de foto de um item recém-criado espera o id real via `waitForRealId` (ver
+ * offline/sync.ts) em vez de precisar dele de antemão.
+ */
 export async function saveItem(
   type: ItemType,
   id: string | null,
   values: Record<string, string>,
   ownerId: string,
-): Promise<string | null> {
+): Promise<string> {
   const payload: Record<string, string> = {};
   for (const f of SCHEMA[type].fields) payload[f.col] = coerce(f, values[f.col] ?? "");
 
   const tab = TYPE_TAB[type] as ItemTab;
-  if (id == null) return createNewItem(tab, payload, ownerId);
+  if (id == null) return createItemOffline(tab, payload, ownerId);
   await updateItemOffline(tab, id, payload);
   return id;
-}
-
-/**
- * Criação de item: tenta direto no servidor primeiro. O id agora é sempre sequencial, atribuído
- * pelo servidor (pedido do Carlos 2026-09-02: "a chave das tabelas precisa ser sequencial") — o
- * servidor ignora qualquer id que o cliente mande. Criar direto (em vez de sempre otimista)
- * evita depender do remapeamento de id no caso comum (com internet): o item já nasce com o id
- * final, sem id temporário nenhum — importante porque quem chama isto com id null é justamente o
- * rascunho criado ao abrir "novo item" (DetailScreen), que precisa de um id ESTÁVEL na hora pra
- * já poder anexar foto (ver "a jornada de cadastro começa pela imagem", mesma data). Só cai pro
- * caminho otimista/offline (`createItemOffline`, id temporário + fila, remapeado depois em
- * sync.ts) quando de fato não há conexão ou a chamada falha por rede.
- */
-async function createNewItem(tab: ItemTab, payload: Record<string, string>, ownerId: string): Promise<string> {
-  if (navigator.onLine) {
-    try {
-      const res = await fetch(`/api/items/${tab}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        const row = (await res.json()) as RawItemRow;
-        await applyServerPatch(tab, row.id, row as Record<string, string>);
-        return row.id;
-      }
-    } catch {
-      // sem rede de verdade apesar do navigator.onLine, ou erro transitório - cai pro offline.
-    }
-  }
-  return createItemOffline(tab, payload, ownerId);
 }

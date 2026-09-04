@@ -60,6 +60,80 @@ export function readJpegSize(bytes: ArrayBuffer): { width: number; height: numbe
   return null;
 }
 
+const TAG_ORIENTATION = 0x0112; // IFD0: rotação/espelhamento gravado pela câmera
+
+/**
+ * Tag EXIF Orientation (1-8), ou 1 (normal) se não houver ou não for um JPEG. As mesmas
+ * dimensões que `readJpegSize` lê são as do sensor, ANTES da rotação que a câmera grava como
+ * metadado - uma foto em retrato pode estar armazenada deitada, com Orientation=6.
+ *
+ * Existe porque `decodeImage` usa essas dimensões pra pedir um bitmap JÁ REDUZIDO na decodificação
+ * (`resizeWidth`/`resizeHeight`) - e `createImageBitmap` aplica a rotação do EXIF por padrão. Sem
+ * saber a orientação, o pedido de redução usava largura e altura trocadas em relação ao bitmap de
+ * verdade (já rotacionado): o navegador não preserva proporção quando os dois lados são
+ * informados, então o resultado saía achatado/esticado - foi o que o Carlos reportou em
+ * 2026-09-04 numa foto vertical.
+ */
+export function readJpegOrientation(bytes: ArrayBuffer): number {
+  const view = new DataView(bytes);
+  if (view.byteLength < 4 || view.getUint16(0, false) !== 0xffd8) return 1;
+
+  let pos = 2;
+  while (pos + 4 <= view.byteLength) {
+    if (view.getUint8(pos) !== 0xff) return 1;
+    const marker = view.getUint8(pos + 1);
+    if (marker === 0xff) {
+      pos += 1;
+      continue;
+    }
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+      pos += 2;
+      continue;
+    }
+    if (marker === 0xda || marker === 0xd9) return 1;
+    const size = view.getUint16(pos + 2, false);
+    if (size < 2) return 1;
+    if (marker === 0xe1 && pos + 4 + 6 <= view.byteLength) {
+      let header = "";
+      for (let i = 0; i < 6; i += 1) header += String.fromCharCode(view.getUint8(pos + 4 + i));
+      if (header === "Exif\0\0") {
+        const o = readOrientationFromTiff(view, pos + 10);
+        if (o) return o;
+      }
+    }
+    pos += 2 + size;
+  }
+  return 1;
+}
+
+function readOrientationFromTiff(view: DataView, tiff: number): number | null {
+  if (tiff + 8 > view.byteLength) return null;
+  const byteOrder = view.getUint16(tiff, false);
+  if (byteOrder !== 0x4949 && byteOrder !== 0x4d4d) return null;
+  const little = byteOrder === 0x4949;
+  if (view.getUint16(tiff + 2, little) !== 0x002a) return null;
+
+  const ifd0 = tiff + view.getUint32(tiff + 4, little);
+  if (ifd0 + 2 > view.byteLength) return null;
+  const count = view.getUint16(ifd0, little);
+  for (let i = 0; i < count; i += 1) {
+    const entry = ifd0 + 2 + i * 12;
+    if (entry + 12 > view.byteLength) break;
+    if (view.getUint16(entry, little) === TAG_ORIENTATION) {
+      const value = view.getUint16(entry + 8, little);
+      return value >= 1 && value <= 8 ? value : null;
+    }
+  }
+  return null;
+}
+
+/** true pras 4 orientações que a câmera grava com o sensor deitado em relação ao enquadramento
+ *  final (retrato fotografado com o sensor na horizontal) - o bitmap decodificado sai com largura
+ *  e altura TROCADAS em relação ao que `readJpegSize` leu. */
+export function orientationSwapsAxes(orientation: number): boolean {
+  return orientation === 5 || orientation === 6 || orientation === 7 || orientation === 8;
+}
+
 /** Cabeçalho lido uma vez só e reaproveitado (assinatura + dimensões + decodificação). `erro`
  *  preenchido quando nem ler os bytes foi possível - o que já é um diagnóstico em si. */
 export interface Cabecalho {
@@ -267,15 +341,25 @@ export async function decodeImage(
   if (typeof createImageBitmap === "function") {
     const size = peekImageSize(head);
     if (size) {
-      const scale = scaleFor(size.width, size.height, maxDim);
+      // `size` vem do SOF: as dimensões do sensor, antes da rotação que a câmera grava no EXIF.
+      // `createImageBitmap` aplica essa rotação por padrão, então o bitmap final pode sair com
+      // largura e altura TROCADAS em relação ao SOF - é o caso de toda foto vertical de celular
+      // (sensor deitado, Orientation=6). Sem essa troca aqui, o resize pedia largura e altura
+      // erradas e o navegador esticava a imagem pra caber (não preserva proporção quando os dois
+      // lados são informados) - a foto "achatada" reportada pelo Carlos em 2026-09-04.
+      const orientation = head.bytes ? readJpegOrientation(head.bytes) : 1;
+      const final = orientationSwapsAxes(orientation)
+        ? { width: size.height, height: size.width }
+        : size;
+      const scale = scaleFor(final.width, final.height, maxDim);
       if (scale < 1) {
         try {
           const bitmap = await createImageBitmap(file, {
-            resizeWidth: Math.max(1, Math.round(size.width * scale)),
-            resizeHeight: Math.max(1, Math.round(size.height * scale)),
+            resizeWidth: Math.max(1, Math.round(final.width * scale)),
+            resizeHeight: Math.max(1, Math.round(final.height * scale)),
             resizeQuality: "high",
           });
-          registrar(`decode: bitmap reduzido na decodificação (${size.width}x${size.height} -> ${bitmap.width}x${bitmap.height})`);
+          registrar(`decode: bitmap reduzido na decodificação (${final.width}x${final.height}${orientation !== 1 ? ` orient=${orientation}` : ""} -> ${bitmap.width}x${bitmap.height})`);
           return bitmap;
         } catch (err) {
           // Navegador sem suporte às opções de resize (elas são ignoradas em alguns, mas outros
