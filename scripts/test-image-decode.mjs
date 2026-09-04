@@ -1,10 +1,10 @@
 /**
- * Sanidade do leitor de dimensões de JPEG (src/lib/imageDecode.ts) — roda em Node puro, montando
+ * Sanidade do leitor de dimensões de JPEG (src/lib/imageDecode.ts) - roda em Node puro, montando
  * cabeçalhos JPEG byte a byte.
  *   node scripts/test-image-decode.mjs
  *
  * Só esta parte do módulo é testável fora do navegador: decodificação e recompressão dependem de
- * createImageBitmap/canvas, que o Node não tem. Mas é justamente a parte "difícil de acertar" —
+ * createImageBitmap/canvas, que o Node não tem. Mas é justamente a parte "difícil de acertar" -
  * é ela que permite reduzir a foto DURANTE a decodificação (ver decodeImage), que é o que faz o
  * upload parar de morrer por memória em celular.
  */

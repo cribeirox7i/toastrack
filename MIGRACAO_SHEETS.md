@@ -632,19 +632,19 @@ automatizado pra ele aqui. Precisa de confirmação do Carlos no aparelho dele.
 ## 8.3 A compressão foi pro momento da escolha (2026-09-04)
 
 **Sintoma:** anexar foto funcionava no desktop e falhava no celular com "Não foi possível
-processar essa imagem." — o mesmo erro da 8.2, que aquele redesenho deveria ter resolvido. O
+processar essa imagem." - o mesmo erro da 8.2, que aquele redesenho deveria ter resolvido. O
 Carlos já tinha limpado o histórico do navegador, desinstalado e reinstalado o app: não era cache
 velho (confirmado também por `curl` nos bundles de produção, que já traziam o código da 8.2).
 
 **Por que 8.1 e 8.2 não pegaram:** as duas mexeram em *como* comprimir (degraus independentes,
 `createImageBitmap` em vez de `readAsDataURL`) sem mexer em *quando*. A compressão continuava
-acontecendo dentro do envio, disparado pelo Salvar — longe da tela, sem nada visível, e num
+acontecendo dentro do envio, disparado pelo Salvar - longe da tela, sem nada visível, e num
 momento em que o usuário já não podia reagir.
 
 **As três causas estruturais, agora resolvidas:**
 
 1. **Decodificação em resolução plena.** `createImageBitmap(file)` sem opções decodifica o bitmap
-   inteiro — ~48 MB de RGBA numa foto de 12 MP — e só depois o canvas reduzia. Agora a redução
+   inteiro - ~48 MB de RGBA numa foto de 12 MP - e só depois o canvas reduzia. Agora a redução
    acontece *durante* a decodificação (`resizeWidth`/`resizeHeight`), então o full-res nunca
    existe. Isso exige saber as dimensões antes: `readJpegSize` (`src/lib/imageDecode.ts`) lê do
    cabeçalho JPEG (marcadores SOF) sem tocar nos pixels, no mesmo estilo do parser de EXIF que já
@@ -653,18 +653,18 @@ momento em que o usuário já não podia reagir.
 2. **`canvas.toDataURL` era o passo mais caro** e é síncrono: monta uma string base64 de vários MB
    de uma vez na thread principal. Trocado por `toBlob`/`OffscreenCanvas.convertToBlob`, que é
    assíncrono e devolve bytes; a conversão pra base64 acontece uma vez só, no fim.
-3. **Preview e envio usavam decodificadores diferentes** — o `<img>` do preview e o canvas do
-   envio — e podiam discordar. Era isso que produzia o par de sintomas aparentemente
+3. **Preview e envio usavam decodificadores diferentes** - o `<img>` do preview e o canvas do
+   envio - e podiam discordar. Era isso que produzia o par de sintomas aparentemente
    contraditório do primeiro relato ("a foto não aparece" *e* "o item salva mas a foto não sobe").
 
 **A mudança central é de momento, não de algoritmo:** `preparePhoto` roda **na hora de escolher a
 foto** e produz o JPEG final; o preview exibido é esse JPEG. Com isso o preview vira uma
-**garantia** — se a foto aparece na tela, ela vai subir, porque é o mesmo arquivo já pronto na
+**garantia** - se a foto aparece na tela, ela vai subir, porque é o mesmo arquivo já pronto na
 memória esperando só a rede. E a falha, quando acontece, aparece com a tela aberta e "Escolher
 outra" a um toque, em vez de depois do Salvar num toast com o usuário já de volta na lista.
 
 Nada disso viola o pedido da 8.2: preparar é 100% local (não sobe nada), e o envio continua
-começando só no Salvar, em segundo plano, sem a tela esperar. O Salvar até ficou mais leve — a
+começando só no Salvar, em segundo plano, sem a tela esperar. O Salvar até ficou mais leve - a
 essa altura resta só a requisição, sem CPU nenhuma. A única espera nova é trivial: se o Salvar for
 tocado enquanto a compressão ainda roda (~1s), a tela pede pra esperar em vez de salvar sem foto.
 
@@ -680,13 +680,13 @@ tocado enquanto a compressão ainda roda (~1s), a tela pede pra esperar em vez d
 - **Laudo de diagnóstico** (`formatDiagnostics`): o erro na tela ganhou um botão "Detalhes" com
   tipo/tamanho do arquivo, capacidades do navegador e a etapa exata que falhou. Sem Browser pane
   neste projeto (ver `feedback_toastrack_no_browser_pane`) e sem console num celular, um print
-  disso é o único caminho de diagnóstico — foi a falta dele que fez esta ser a terceira rodada.
+  disso é o único caminho de diagnóstico - foi a falta dele que fez esta ser a terceira rodada.
 
-**Verificação:** `npm run test:image-decode` (9/9, cabeçalhos JPEG montados byte a byte — inclusive
+**Verificação:** `npm run test:image-decode` (9/9, cabeçalhos JPEG montados byte a byte - inclusive
 SOF2 progressivo e o DHT `0xc4` que não pode ser confundido com SOF), `tsc` e `npm run build`
 limpos, testes puros anteriores verdes. Deploy confirmado em produção por `curl` no bundle.
 **Não verificável daqui**: decodificação e canvas não existem no Node, e o bug só reproduz em
-celular — a confirmação depende do aparelho do Carlos.
+celular - a confirmação depende do aparelho do Carlos.
 
 ## 9. O que se perde e o que se ganha
 

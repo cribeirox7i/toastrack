@@ -1,17 +1,17 @@
 /**
- * Decodificação e recompressão de imagem no navegador — a parte que quebrava em celular.
+ * Decodificação e recompressão de imagem no navegador - a parte que quebrava em celular.
  *
  * Histórico (ver MIGRACAO_SHEETS.md 8.1/8.2 e 8.3): três rodadas de correção do upload de foto
  * falharam no aparelho do Carlos com "Não foi possível processar essa imagem.", sempre passando
  * no desktop. As três causas estruturais, resolvidas aqui:
  *
- * 1. `createImageBitmap(file)` sem opções decodifica o bitmap em resolução PLENA — uma foto de
+ * 1. `createImageBitmap(file)` sem opções decodifica o bitmap em resolução PLENA - uma foto de
  *    12 MP são ~48 MB de RGBA na memória antes de qualquer redução. Aqui a redução acontece
  *    DURANTE a decodificação (`resizeWidth`/`resizeHeight`), então o full-res nunca existe.
  *    Pra isso é preciso saber o tamanho antes de decodificar: `readJpegSize` lê do cabeçalho,
  *    sem tocar nos pixels.
  * 2. `canvas.toDataURL()` é síncrono e monta uma string base64 de vários MB de uma vez na thread
- *    principal — o passo mais caro do pipeline antigo. Trocado por `toBlob`/`convertToBlob`, que
+ *    principal - o passo mais caro do pipeline antigo. Trocado por `toBlob`/`convertToBlob`, que
  *    é assíncrono e devolve bytes, não texto.
  * 3. Não havia como saber POR QUE falhou: o erro real morria num `console.error` que ninguém lê
  *    num celular. Agora cada etapa registra o que fez (`steps`), e o laudo sobe junto com a
@@ -25,7 +25,7 @@ function isSofMarker(marker: number): boolean {
 
 /**
  * Largura/altura declaradas no cabeçalho de um JPEG, sem decodificar a imagem. Devolve null pra
- * qualquer coisa que não seja um JPEG legível (PNG, WebP, HEIC, arquivo truncado) — quem chama
+ * qualquer coisa que não seja um JPEG legível (PNG, WebP, HEIC, arquivo truncado) - quem chama
  * cai no caminho de decodificar em resolução plena.
  */
 export function readJpegSize(bytes: ArrayBuffer): { width: number; height: number } | null {
@@ -94,12 +94,12 @@ function scaleFor(width: number, height: number, maxDim: number): number {
 /**
  * Decodifica o arquivo já reduzido, quando o navegador e o formato permitirem.
  *
- * `resizeWidth`/`resizeHeight` fazem a redução acontecer dentro do decodificador — é o que evita
+ * `resizeWidth`/`resizeHeight` fazem a redução acontecer dentro do decodificador - é o que evita
  * materializar o bitmap em resolução plena, e a diferença entre funcionar e a aba morrer num
  * celular com pouca RAM. Precisa das dimensões de antemão (`peekImageSize`); sem elas, decodifica
  * pleno mesmo, que é o comportamento antigo e serve pra PNG/WebP.
  *
- * `registrar` recebe uma linha por tentativa — é o que aparece no laudo de diagnóstico.
+ * `registrar` recebe uma linha por tentativa - é o que aparece no laudo de diagnóstico.
  */
 export async function decodeImage(
   file: File,
@@ -121,12 +121,12 @@ export async function decodeImage(
           return bitmap;
         } catch (err) {
           // Navegador sem suporte às opções de resize (elas são ignoradas em alguns, mas outros
-          // recusam) — tenta a decodificação simples antes de desistir.
+          // recusam) - tenta a decodificação simples antes de desistir.
           registrar(`decode: resize na decodificação recusado (${descreveErro(err)})`);
         }
       }
     } else {
-      registrar("decode: cabeçalho sem dimensões (não é JPEG?) — decodificando pleno");
+      registrar("decode: cabeçalho sem dimensões (não é JPEG?) - decodificando pleno");
     }
     try {
       const bitmap = await createImageBitmap(file);
@@ -209,7 +209,7 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   return comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
 }
 
-/** Mensagem curta e legível de um erro qualquer — vai pro laudo, então nada de stack. */
+/** Mensagem curta e legível de um erro qualquer - vai pro laudo, então nada de stack. */
 export function descreveErro(err: unknown): string {
   if (err instanceof DOMException || err instanceof Error) {
     return err.name && err.name !== "Error" ? `${err.name}: ${err.message}` : err.message;

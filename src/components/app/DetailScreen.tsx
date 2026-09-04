@@ -447,7 +447,7 @@ export default function DetailScreen({
 
             {photoStatus === "pronta" && (
               <div className="mb-2 text-[12px] font-semibold text-muted">
-                Foto pronta — sobe quando você salvar.
+                Foto pronta - sobe quando você salvar.
               </div>
             )}
 
@@ -644,7 +644,7 @@ function EditField({
   if (f.kind === "select") {
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">—</option>
+        <option value="">-</option>
         {f.options?.map((o) => (
           <option key={o} value={o}>
             {o}
@@ -656,7 +656,7 @@ function EditField({
   if (f.kind === "country") {
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">—</option>
+        <option value="">-</option>
         {lookup.pais.map((p) => (
           <option key={p.pais_id} value={p.pais_id}>
             {p.pais_nome}
@@ -668,7 +668,7 @@ function EditField({
   if (f.kind === "bjcp") {
     return (
       <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">—</option>
+        <option value="">-</option>
         {lookup.bjcp.map((b) => (
           <option key={b.bjcp21_id} value={b.bjcp21_id}>
             {b.bjcp21_cod}

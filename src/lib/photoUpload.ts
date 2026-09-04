@@ -20,10 +20,10 @@ import {
  * - Antes: escolher a foto guardava o `File` cru e mostrava um preview `blob:` dele; a compressão
  *   só acontecia lá na frente, dentro do upload disparado pelo Salvar. Preview e upload passavam
  *   por decodificadores DIFERENTES (o `<img>` do preview, o canvas do upload), então podiam
- *   discordar — e discordavam. Pior: a falha aparecia depois do Salvar, num toast, com o usuário
+ *   discordar - e discordavam. Pior: a falha aparecia depois do Salvar, num toast, com o usuário
  *   já de volta na lista e sem nada a fazer a respeito.
  * - Agora: `preparePhoto` roda na hora da escolha e produz o JPEG final. O preview é ESSE JPEG.
- *   Se a foto aparece na tela, ela vai subir — é o mesmo arquivo, já pronto, esperando só a rede.
+ *   Se a foto aparece na tela, ela vai subir - é o mesmo arquivo, já pronto, esperando só a rede.
  *   E quando não dá pra processar, o erro é imediato, com a tela aberta e o usuário podendo
  *   escolher outra foto.
  *
@@ -55,7 +55,7 @@ const ALVO_BASE64 = 400_000;
  *  Fica bem abaixo do limite de 6.000.000 da rota (`/api/items/[tipo]/[id]/foto`). */
 const MAX_BASE64_CRU = 3_000_000;
 
-/** Formatos que o `<img>` renderiza em qualquer navegador — os únicos que vale enviar sem
+/** Formatos que o `<img>` renderiza em qualquer navegador - os únicos que vale enviar sem
  *  recomprimir, já que uma foto que o app não consegue exibir depois não serve de nada. */
 const TIPOS_RENDERIZAVEIS = ["image/jpeg", "image/png", "image/webp"];
 
@@ -77,7 +77,7 @@ export interface PhotoDiagnostics {
 }
 
 export interface PreparedPhoto {
-  /** JPEG final, pronto pra subir — é também a origem do preview. */
+  /** JPEG final, pronto pra subir - é também a origem do preview. */
   base64: string;
   mimeType: string;
   filename: string;
@@ -107,7 +107,7 @@ function trocaExtensao(nome: string, ext: string): string {
 
 /**
  * Transforma o arquivo escolhido no JPEG que vai subir. Roda inteiramente no navegador, sem tocar
- * na rede — pode ser chamada no instante da escolha, que é justamente o ponto.
+ * na rede - pode ser chamada no instante da escolha, que é justamente o ponto.
  *
  * Nunca lança: devolve `{ ok: false }` com uma mensagem pro usuário e o laudo pra diagnóstico.
  */
@@ -149,7 +149,7 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
         melhor = { blob, degrau };
         if (base64Len <= ALVO_BASE64) break;
       } catch (err) {
-        // Um degrau falhando (memória, quase sempre) não derruba os menores ainda não tentados —
+        // Um degrau falhando (memória, quase sempre) não derruba os menores ainda não tentados -
         // era o que a versão anterior fazia, desistindo com tamanhos mais leves por tentar.
         ultimoErro = descreveErro(err);
         registrar(`encode ${degrau.maxDim}px q${degrau.quality}: falhou (${ultimoErro})`);
@@ -185,7 +185,7 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
 }
 
 /** Nenhum decodificador do navegador leu o arquivo. Quase sempre é HEIC/HEIF do iPhone, que o
- *  Chrome e o Firefox não decodificam — e nesse caso a orientação vale mais que a mensagem. */
+ *  Chrome e o Firefox não decodificam - e nesse caso a orientação vale mais que a mensagem. */
 async function falhaDeDecodificacao(
   file: File,
   diagnostics: PhotoDiagnostics,
@@ -207,7 +207,7 @@ async function falhaDeDecodificacao(
 
 /**
  * Último recurso: mandar o arquivo como está. Só vale a pena quando ele já é pequeno e de um
- * formato que o app consegue exibir depois — subir algo que nunca vai renderizar é pior que
+ * formato que o app consegue exibir depois - subir algo que nunca vai renderizar é pior que
  * recusar. Melhor uma foto maior no Drive do que um cadastro sem foto nenhuma.
  */
 async function enviarCruOuFalhar(
@@ -263,7 +263,7 @@ export async function uploadPreparedPhoto(
   photo: PreparedPhoto,
 ): Promise<UploadPhotoResult> {
   if (!navigator.onLine) {
-    return { ok: false, error: "Sem conexão — a foto não foi enviada.", diagnostics: photo.diagnostics };
+    return { ok: false, error: "Sem conexão - a foto não foi enviada.", diagnostics: photo.diagnostics };
   }
 
   const tab = TYPE_TAB[type] as ItemTab;
@@ -276,7 +276,7 @@ export async function uploadPreparedPhoto(
         mimeType: photo.mimeType,
         filename: photo.filename,
       }),
-      // `in` porque WebView antigo pode não ter AbortSignal.timeout — sem ele o envio segue sem
+      // `in` porque WebView antigo pode não ter AbortSignal.timeout - sem ele o envio segue sem
       // limite, em vez de a chamada explodir com TypeError.
       signal: "timeout" in AbortSignal ? AbortSignal.timeout(TIMEOUT_MS) : undefined,
     });
@@ -311,11 +311,11 @@ export interface PhotoUploadEventDetail {
   result: UploadPhotoResult;
 }
 
-/** Emite "done" quando um envio em segundo plano termina — é como uma tela que já fechou (voltou
+/** Emite "done" quando um envio em segundo plano termina - é como uma tela que já fechou (voltou
  *  pra lista antes do envio acabar) ainda avisa o usuário. Ver `GlobalPhotoToast`. */
 export const photoUploadEvents = new EventTarget();
 
-/** Envios em andamento, por `${type}:${id}` — permite reabrir o MESMO item e ver "Enviando…" em
+/** Envios em andamento, por `${type}:${id}` - permite reabrir o MESMO item e ver "Enviando…" em
  *  vez da foto velha, e impede dois envios paralelos pro mesmo item. */
 const emCurso = new Map<string, Promise<UploadPhotoResult>>();
 
@@ -328,7 +328,7 @@ export function getPendingPhotoUpload(type: ItemType, id: string): Promise<Uploa
 }
 
 /**
- * Dispara o envio e NÃO espera terminar — quem chama segue em frente (`DetailScreen.save()` fecha
+ * Dispara o envio e NÃO espera terminar - quem chama segue em frente (`DetailScreen.save()` fecha
  * a tela na hora). O resultado chega pelo `photoUploadEvents` e, dando certo, direto no cache
  * local, sem precisar de nenhuma tela aberta.
  */
@@ -347,7 +347,7 @@ export function queuePhotoUpload(type: ItemType, id: string, photo: PreparedPhot
     });
 }
 
-/** Laudo em texto, pro botão "Detalhes" do erro — é isto que o Carlos me manda por print quando
+/** Laudo em texto, pro botão "Detalhes" do erro - é isto que o Carlos me manda por print quando
  *  algo falhar num aparelho que eu não tenho como inspecionar. */
 export function formatDiagnostics(d: PhotoDiagnostics): string {
   return [
