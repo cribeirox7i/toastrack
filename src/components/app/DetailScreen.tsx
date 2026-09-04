@@ -276,6 +276,10 @@ export default function DetailScreen({
   }
 
   function pickPhoto() {
+    // Limpa ANTES de abrir o seletor, nunca depois de receber o arquivo. É o que permite escolher
+    // a mesma foto duas vezes seguidas (sem isto o `change` não dispara na segunda) sem cair no
+    // bug descrito em onPhotoSelected.
+    if (fileInputRef.current) fileInputRef.current.value = "";
     fileInputRef.current?.click();
   }
 
@@ -309,9 +313,22 @@ export default function DetailScreen({
    */
   async function onPhotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // permite escolher o mesmo arquivo de novo depois
     if (!file) return;
 
+    // NÃO limpe `e.target.value` aqui. Esta linha existia desde o commit que criou o upload de
+    // foto e sobreviveu a três rodadas de correção (8.1, 8.2, 8.3) sem nunca ser suspeita - era
+    // ela, e não a compressão, que quebrava o upload no celular:
+    //
+    // No Android o `File` que o seletor devolve é respaldado por um URI `content://`, e limpar o
+    // `value` do input libera esse respaldo. O objeto `File` continua existindo com nome e
+    // tamanho certos, mas o conteúdo fica inacessível - toda leitura devolve vazio. Daí a
+    // sequência que o laudo mostrou: cabeçalho sem dimensões, `createImageBitmap` respondendo
+    // "The source image could not be decoded", `<img>` recusando o mesmo arquivo. E daí também o
+    // preview `blob:` que nunca aparecia, no fluxo anterior a esta rodada.
+    //
+    // No desktop o `File` aponta pra um arquivo real no disco e sobrevive à limpeza, que é
+    // exatamente por que o bug só existia no celular. Reescolher a mesma foto continua
+    // funcionando: quem limpa o input agora é `pickPhoto`, antes de abrir o seletor.
     descartarFotoLocal();
     setPhotoStatus("preparando");
 

@@ -9,7 +9,7 @@
  * upload parar de morrer por memória em celular.
  */
 import assert from "node:assert/strict";
-import { readJpegSize } from "../src/lib/imageDecode.ts";
+import { readJpegSize, sniffFormat } from "../src/lib/imageDecode.ts";
 
 let passed = 0;
 function check(name, fn) {
@@ -97,4 +97,76 @@ check("dimensão zero é recusada", () => {
   assert.equal(readJpegSize(jpeg(sof(0xc0, 0, 480))), null);
 });
 
-console.log(`\n${passed} testes de leitura de dimensão de JPEG passaram.`);
+/* ---------- assinatura pelos bytes ---------- */
+
+/** Bytes soltos -> ArrayBuffer, completando com zeros até `total` (o sniff olha até 16 bytes). */
+function bytes(lista, total = 32) {
+  const a = new Uint8Array(total);
+  a.set(lista);
+  return a.buffer;
+}
+
+/** Caixa ISO-BMFF: size(4) "ftyp" marca(4). */
+function ftyp(marca) {
+  return bytes([
+    0x00, 0x00, 0x00, 0x20,
+    ...[..."ftyp"].map((c) => c.charCodeAt(0)),
+    ...[...marca].map((c) => c.charCodeAt(0)),
+  ]);
+}
+
+check("assinatura: JPEG de verdade", () => {
+  assert.equal(sniffFormat(bytes([0xff, 0xd8, 0xff, 0xe0])).formato, "JPEG");
+  assert.equal(sniffFormat(bytes([0xff, 0xd8, 0xff, 0xe0])).decodificavel, true);
+});
+
+check("assinatura: HEIC não decodificável (o caso do .jpg que não era JPEG)", () => {
+  const r = sniffFormat(ftyp("heic"));
+  assert.equal(r.formato, "HEIF/HEIC");
+  assert.equal(r.decodificavel, false);
+  assert.match(r.hex, /^00 00 00 20 66 74 79 70/); // hex vai pro laudo
+});
+
+check("assinatura: mif1 (HEIF genérico) e AVIF", () => {
+  assert.equal(sniffFormat(ftyp("mif1")).formato, "HEIF/HEIC");
+  assert.equal(sniffFormat(ftyp("avif")).formato, "AVIF");
+});
+
+check("assinatura: ISO-BMFF de marca desconhecida ainda é identificado", () => {
+  assert.equal(sniffFormat(ftyp("qt  ")).formato, "ISO-BMFF (qt  )");
+});
+
+check("assinatura: PNG, WebP e GIF", () => {
+  assert.equal(sniffFormat(bytes([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])).formato, "PNG");
+  assert.equal(
+    sniffFormat(
+      bytes([
+        ...[..."RIFF"].map((c) => c.charCodeAt(0)),
+        0x00, 0x00, 0x00, 0x00,
+        ...[..."WEBP"].map((c) => c.charCodeAt(0)),
+      ]),
+    ).formato,
+    "WebP",
+  );
+  assert.equal(sniffFormat(bytes([...[..."GIF89a"].map((c) => c.charCodeAt(0))])).formato, "GIF");
+});
+
+check("assinatura: TIFF/RAW (nenhum navegador abre)", () => {
+  const r = sniffFormat(bytes([0x49, 0x49, 0x2a, 0x00]));
+  assert.equal(r.formato, "TIFF/RAW");
+  assert.equal(r.decodificavel, false);
+});
+
+check("assinatura: arquivo zerado ou sem bytes vira 'vazio'", () => {
+  // É o que aparece quando o provider do Android entrega um arquivo que não dá pra ler de fato
+  // (foto só na nuvem, permissão negada) - diagnóstico diferente de "formato não suportado".
+  assert.equal(sniffFormat(bytes([])).formato, "vazio");
+  assert.equal(sniffFormat(null).formato, "vazio");
+  assert.equal(sniffFormat(new ArrayBuffer(0)).formato, "vazio");
+});
+
+check("assinatura: bytes que não batem com nada", () => {
+  assert.equal(sniffFormat(bytes([0x12, 0x34, 0x56, 0x78])).formato, "desconhecido");
+});
+
+console.log(`\n${passed} testes de leitura de cabeçalho de imagem passaram.`);

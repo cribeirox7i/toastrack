@@ -63,14 +63,86 @@ export function readJpegSize(bytes: ArrayBuffer): { width: number; height: numbe
 /** Só os primeiros 128 KB importam: o SOF vem bem antes dos dados de imagem. */
 const HEAD_BYTES = 128 * 1024;
 
-/** Dimensões do arquivo lidas do cabeçalho, quando o formato permite. Nunca lança. */
-export async function peekImageSize(file: File): Promise<{ width: number; height: number } | null> {
+/** Cabeçalho lido uma vez só e reaproveitado (assinatura + dimensões + decodificação). `erro`
+ *  preenchido quando nem ler os bytes foi possível - o que já é um diagnóstico em si. */
+export interface Cabecalho {
+  bytes: ArrayBuffer | null;
+  erro?: string;
+}
+
+export async function lerCabecalho(file: File): Promise<Cabecalho> {
   try {
-    const head = await file.slice(0, HEAD_BYTES).arrayBuffer();
-    return readJpegSize(head);
-  } catch {
-    return null;
+    return { bytes: await file.slice(0, HEAD_BYTES).arrayBuffer() };
+  } catch (err) {
+    return { bytes: null, erro: descreveErro(err) };
   }
+}
+
+/** Dimensões do arquivo lidas do cabeçalho, quando o formato permite. Nunca lança. */
+export function peekImageSize(head: Cabecalho): { width: number; height: number } | null {
+  return head.bytes ? readJpegSize(head.bytes) : null;
+}
+
+/**
+ * O que o arquivo REALMENTE é, pelos primeiros bytes.
+ *
+ * Existe porque nome e MIME mentem: o laudo de 2026-09-04 trouxe um arquivo chamado `.jpg`, com
+ * `type: image/jpeg`, que nenhum decodificador do navegador abriu. Extensão e MIME vêm do provider
+ * do Android (a Galeria, o Google Fotos), não do conteúdo - então a única fonte confiável são os
+ * bytes.
+ */
+export interface Assinatura {
+  /** "JPEG", "HEIF/HEIC", "AVIF", "PNG", "WebP", "GIF", "TIFF/RAW", "vazio", "desconhecido". */
+  formato: string;
+  /** Formatos que um navegador decodifica sozinho. HEIF e TIFF/RAW não entram. */
+  decodificavel: boolean;
+  /** Primeiros bytes em hex - o que vai pro laudo quando nada mais explica. */
+  hex: string;
+}
+
+function ascii(view: DataView, inicio: number, tamanho: number): string {
+  let s = "";
+  for (let i = 0; i < tamanho && inicio + i < view.byteLength; i += 1) {
+    s += String.fromCharCode(view.getUint8(inicio + i));
+  }
+  return s;
+}
+
+/** Marcas ISO-BMFF (a mesma caixa `ftyp` serve HEIF, HEIC e AVIF). */
+const MARCAS_HEIF = ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1"];
+const MARCAS_AVIF = ["avif", "avis"];
+
+export function sniffFormat(bytes: ArrayBuffer | null): Assinatura {
+  if (!bytes || bytes.byteLength === 0) {
+    return { formato: "vazio", decodificavel: false, hex: "(sem bytes)" };
+  }
+  const view = new DataView(bytes);
+  const hex = Array.from(new Uint8Array(bytes.slice(0, 16)))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join(" ");
+
+  const todosZero = new Uint8Array(bytes.slice(0, Math.min(64, bytes.byteLength))).every((b) => b === 0);
+  if (todosZero) return { formato: "vazio", decodificavel: false, hex };
+
+  const b = (i: number) => (i < view.byteLength ? view.getUint8(i) : -1);
+
+  if (b(0) === 0xff && b(1) === 0xd8 && b(2) === 0xff) return { formato: "JPEG", decodificavel: true, hex };
+  if (b(0) === 0x89 && ascii(view, 1, 3) === "PNG") return { formato: "PNG", decodificavel: true, hex };
+  if (ascii(view, 0, 4) === "RIFF" && ascii(view, 8, 4) === "WEBP") {
+    return { formato: "WebP", decodificavel: true, hex };
+  }
+  if (ascii(view, 0, 4) === "GIF8") return { formato: "GIF", decodificavel: true, hex };
+  if (ascii(view, 4, 4) === "ftyp") {
+    const marca = ascii(view, 8, 4).toLowerCase();
+    if (MARCAS_AVIF.includes(marca)) return { formato: "AVIF", decodificavel: false, hex };
+    if (MARCAS_HEIF.includes(marca)) return { formato: "HEIF/HEIC", decodificavel: false, hex };
+    return { formato: `ISO-BMFF (${marca || "?"})`, decodificavel: false, hex };
+  }
+  // TIFF, e com ele os RAW de câmera (DNG, CR2, NEF) - nenhum navegador decodifica.
+  if ((ascii(view, 0, 2) === "II" && b(2) === 0x2a) || (ascii(view, 0, 2) === "MM" && b(3) === 0x2a)) {
+    return { formato: "TIFF/RAW", decodificavel: false, hex };
+  }
+  return { formato: "desconhecido", decodificavel: false, hex };
 }
 
 /** O que dá pra desenhar num canvas. `close()` libera a memória quando for um ImageBitmap. */
@@ -103,11 +175,12 @@ function scaleFor(width: number, height: number, maxDim: number): number {
  */
 export async function decodeImage(
   file: File,
+  head: Cabecalho,
   maxDim: number,
   registrar: (linha: string) => void,
 ): Promise<Drawable> {
   if (typeof createImageBitmap === "function") {
-    const size = await peekImageSize(file);
+    const size = peekImageSize(head);
     if (size) {
       const scale = scaleFor(size.width, size.height, maxDim);
       if (scale < 1) {

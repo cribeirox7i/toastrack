@@ -8,6 +8,9 @@ import {
   descreveErro,
   drawableSize,
   encodeJpeg,
+  lerCabecalho,
+  sniffFormat,
+  type Assinatura,
 } from "@/lib/imageDecode";
 
 /**
@@ -72,6 +75,9 @@ export interface PhotoDiagnostics {
   tipo: string;
   tamanhoKb: number;
   navegador: string;
+  /** O que os BYTES dizem que o arquivo é, mais os primeiros deles em hex. Vale mais que o nome
+   *  e o MIME, que vêm do provider do Android e já se provaram mentirosos. */
+  assinatura?: string;
   etapas: string[];
   erro?: string;
 }
@@ -127,12 +133,20 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
     return { ok: false, error: "Esse arquivo não é uma imagem.", diagnostics };
   }
 
+  // Assinatura ANTES de qualquer tentativa: nome e MIME vêm do provider do Android, não do
+  // conteúdo, e podem mentir - foi exatamente o caso do laudo de 2026-09-04 (um `.jpg` declarado
+  // `image/jpeg` que nenhum decodificador abriu). Os bytes é que dizem a verdade.
+  const head = await lerCabecalho(file);
+  const assinatura = sniffFormat(head.bytes);
+  diagnostics.assinatura = `${assinatura.formato} · bytes: ${assinatura.hex}`;
+  registrar(`assinatura: ${assinatura.formato}${head.erro ? ` (leitura falhou: ${head.erro})` : ""}`);
+
   let img;
   try {
-    img = await decodeImage(file, DEGRAUS[0].maxDim, registrar);
+    img = await decodeImage(file, head, DEGRAUS[0].maxDim, registrar);
   } catch (err) {
     registrar(`decode: todos os caminhos falharam (${descreveErro(err)})`);
-    return falhaDeDecodificacao(file, diagnostics, registrar);
+    return falhaDeDecodificacao(file, assinatura, head.erro, diagnostics, registrar);
   }
 
   try {
@@ -184,24 +198,58 @@ export async function preparePhoto(file: File): Promise<PreparePhotoResult> {
   }
 }
 
-/** Nenhum decodificador do navegador leu o arquivo. Quase sempre é HEIC/HEIF do iPhone, que o
- *  Chrome e o Firefox não decodificam - e nesse caso a orientação vale mais que a mensagem. */
+/**
+ * Nenhum decodificador do navegador leu o arquivo. A mensagem sai da ASSINATURA, não da extensão:
+ * o caso que motivou isto era um arquivo `.jpg`, anunciado como `image/jpeg`, cujo conteúdo não
+ * era JPEG nenhum. Dizer "não foi possível abrir" quando dá pra dizer "isto é HEIF, converta
+ * assim" é a diferença entre o Carlos resolver sozinho e abrir mais uma rodada comigo.
+ */
 async function falhaDeDecodificacao(
   file: File,
+  assinatura: Assinatura,
+  erroDeLeitura: string | undefined,
   diagnostics: PhotoDiagnostics,
   registrar: (l: string) => void,
 ): Promise<PreparePhotoResult> {
-  const nome = file.name.toLowerCase();
-  const pareceHeic = /\.(heic|heif)$/.test(nome) || file.type === "image/heic" || file.type === "image/heif";
-  diagnostics.erro = "nenhum decodificador leu o arquivo";
-  if (pareceHeic) {
+  diagnostics.erro = `nenhum decodificador leu o arquivo (assinatura: ${assinatura.formato})`;
+
+  // Nem os bytes vieram: o arquivo existe no seletor mas não dá pra ler. Típico de foto que só
+  // está na nuvem (Google Fotos sem cópia local) ou de permissão de armazenamento negada.
+  if (erroDeLeitura || assinatura.formato === "vazio") {
     return {
       ok: false,
       error:
-        "Essa foto está em HEIC, formato que o navegador não abre. No iPhone: Ajustes › Câmera › Formatos › Mais Compatível. Ou compartilhe a foto pelo app de Fotos, que converte pra JPEG.",
+        "O arquivo chegou vazio: o nome e o tamanho vieram, mas o conteúdo não. Toque em Escolher outra e selecione a foto de novo. Se ela estiver só no Google Fotos, baixe pro aparelho antes.",
       diagnostics,
     };
   }
+
+  if (assinatura.formato === "HEIF/HEIC" || assinatura.formato === "AVIF") {
+    return {
+      ok: false,
+      error: `Essa foto está em ${assinatura.formato} (mesmo com nome .jpg), formato que o navegador não abre. Jeito mais rápido: abra a foto na Galeria, toque em Editar e salve uma cópia - ela sai em JPEG. Pra não repetir, desligue o formato de alta eficiência nas configurações da câmera.`,
+      diagnostics,
+    };
+  }
+
+  if (assinatura.formato === "TIFF/RAW") {
+    return {
+      ok: false,
+      error: "Essa foto está em RAW/TIFF, que o navegador não abre. Salve uma cópia em JPEG pela Galeria e anexe ela.",
+      diagnostics,
+    };
+  }
+
+  if (assinatura.formato === "JPEG") {
+    // Assinatura certa e mesmo assim ninguém decodificou: arquivo truncado ou corrompido.
+    return {
+      ok: false,
+      error: "Esse JPEG parece estar corrompido ou incompleto - o navegador não conseguiu abrir. Tente outra foto.",
+      diagnostics,
+    };
+  }
+
+  registrar(`formato não reconhecido pelos bytes (${assinatura.hex})`);
   return enviarCruOuFalhar(file, diagnostics, registrar, "Não foi possível abrir essa imagem.");
 }
 
@@ -353,6 +401,7 @@ export function formatDiagnostics(d: PhotoDiagnostics): string {
   return [
     `arquivo: ${d.arquivo}`,
     `tipo: ${d.tipo} · ${d.tamanhoKb} KB`,
+    d.assinatura ? `assinatura: ${d.assinatura}` : "",
     `navegador: ${d.navegador}`,
     ...d.etapas.map((e) => `· ${e}`),
     d.erro ? `erro: ${d.erro}` : "",

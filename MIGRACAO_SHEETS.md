@@ -688,6 +688,64 @@ limpos, testes puros anteriores verdes. Deploy confirmado em produção por `cur
 **Não verificável daqui**: decodificação e canvas não existem no Node, e o bug só reproduz em
 celular - a confirmação depende do aparelho do Carlos.
 
+### 8.3.1 A causa raiz, achada pelo laudo (2026-09-04, mesmo dia)
+
+O laudo pagou-se na primeira tentativa. Anexando um print de tela no celular, ele mostrou:
+
+```
+arquivo: 1000613887.jpg
+tipo: image/jpeg · 2581 KB
+navegador: createImageBitmap=sim · OffscreenCanvas=sim · toBlob=sim
+· decode: cabeçalho sem dimensões (não é JPEG?) - decodificando pleno
+· decode: createImageBitmap recusou o arquivo (InvalidStateError: The source image could not be decoded.)
+· decode: todos os caminhos falharam (o navegador não decodificou este formato)
+```
+
+A primeira leitura foi "o arquivo não é um JPEG de verdade, apesar do nome e do MIME". Errada: o
+Carlos testou em seguida com **fotos tiradas na hora pela câmera** e deu o mesmo. Arquivo de
+origem e formato diferentes falhando igual só deixa uma explicação de pé: **os bytes não estavam
+chegando**, e nenhum decodificador tem o que fazer com um arquivo vazio.
+
+**A causa era uma linha em `onPhotoSelected`, presente desde o commit que criou o upload de foto
+(`9cbfd66`) e nunca tocada pelas rodadas 8.1, 8.2 e 8.3:**
+
+```js
+const file = e.target.files?.[0];
+e.target.value = "";  // "permite escolher o mesmo arquivo de novo depois"
+```
+
+No Android o `File` devolvido pelo seletor é respaldado por um URI `content://`. Limpar o `value`
+do input libera esse respaldo: o objeto `File` continua existindo, com nome e tamanho corretos,
+mas todo acesso ao conteúdo devolve vazio. No desktop o `File` aponta pra um arquivo real no
+disco e sobrevive à limpeza - **é exatamente por isso que o bug só existia no celular**.
+
+Isso explica, de uma vez, tudo que vinha sendo tratado como sintomas separados: qualquer formato
+falhando, qualquer origem falhando, e o preview `blob:` que "não mostrava a foto assim que
+selecionada" no relato de 2026-09-04 pela manhã (um object URL de um `File` sem conteúdo não
+carrega).
+
+**Correção**: quem limpa o input agora é `pickPhoto`, **antes** de abrir o seletor - reescolher a
+mesma foto continua funcionando (que era o motivo original da linha), sem nunca invalidar o
+arquivo recebido.
+
+**Lição, mais importante que a correção**: 8.1 e 8.2 falharam porque foram atrás da hipótese mais
+plausível (compressão pesada demais pra um celular) em vez de medir. As duas produziram código
+melhor e nenhuma tocou na causa. O que resolveu foi a instrumentação da 8.3 - o laudo na tela -,
+e ela custou menos que qualquer uma das duas tentativas anteriores. **Diante de um bug que só
+acontece num ambiente que não dá pra inspecionar, o primeiro passo é sempre fazer o ambiente
+falar, nunca adivinhar o que ele diria.**
+
+**Fica no código**: o pipeline da 8.3 (compressão na escolha, preview como garantia, laudo) não é
+desfeito - ele continua valendo por si, e foi o que revelou a causa. O sniff de assinatura por
+bytes (`sniffFormat`) também fica: HEIC de iPhone e RAW são recusas legítimas que agora têm
+mensagem própria, ainda que não fossem o caso aqui.
+
+**Verificação**: `test:image-decode` passou a 17 testes (somando a assinatura por bytes: JPEG,
+HEIF/HEIC, AVIF, PNG, WebP, GIF, TIFF/RAW, arquivo zerado e bytes desconhecidos), `tsc`, lint e
+build limpos. A confirmação final continua sendo do aparelho do Carlos - e, se ainda falhar, o
+laudo agora distingue "arquivo vazio" de "formato não suportado", que era a ambiguidade que
+sobrava.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
