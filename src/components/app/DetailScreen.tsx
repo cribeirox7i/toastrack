@@ -684,13 +684,6 @@ export default function DetailScreen({
                     {f.kind === "bjcp" && (
                       <BjcpStyleHint
                         estilo={lookup.bjcp.find((b) => String(b.bjcp21_id) === values[f.col])}
-                        onFill={({ abv, ibu }) => {
-                          const abvF = fields.find((x) => x.col.endsWith("_abv"));
-                          const ibuF = fields.find((x) => x.col.endsWith("_ibu"));
-                          if (abv != null && abvF) set(abvF.col, abv);
-                          if (ibu != null && ibuF) set(ibuF.col, ibu);
-                          showToast("ABV/IBU preenchidos pela faixa do estilo");
-                        }}
                       />
                     )}
                   </div>
@@ -808,42 +801,23 @@ export default function DetailScreen({
 }
 
 /**
- * Faixa de ABV/IBU do estilo BJCP escolhido, com um botão pra jogar os valores médios nos campos
- * (pedido do Carlos 2026-09-07: "preenchimento de campos com base no estilo da cerveja"). Os
- * dados vêm da aba `list_bjcp_21`, que já tem as faixas do guia inteiras - não precisa de IA pra
- * isso. Só aparece quando um estilo está selecionado E ele tem as faixas preenchidas.
+ * Faixa de ABV/IBU TÍPICA do estilo BJCP escolhido - só referência pra conferir o que você digita,
+ * NÃO preenche nada (o Carlos rejeitou "valores médios" em 2026-09-07: quer o dado real da cerveja
+ * específica, que vem do rótulo via "Ler rótulo"). Os números vêm da aba `list_bjcp_21`.
  */
-function BjcpStyleHint({
-  estilo,
-  onFill,
-}: {
-  estilo?: BjcpEstilo;
-  onFill: (v: { abv?: string; ibu?: string }) => void;
-}) {
+function BjcpStyleHint({ estilo }: { estilo?: BjcpEstilo }) {
   if (!estilo) return null;
   const temAbv = Number.isFinite(estilo.abvIni) && Number.isFinite(estilo.abvFim);
   const temIbu = Number.isFinite(estilo.ibuIni) && Number.isFinite(estilo.ibuFim);
   if (!temAbv && !temIbu) return null;
 
   const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-  const abvMedio = temAbv ? String(Number(((estilo.abvIni + estilo.abvFim) / 2).toFixed(1))) : undefined;
-  const ibuMedio = temIbu ? String(Math.round((estilo.ibuIni + estilo.ibuFim) / 2)) : undefined;
-
   return (
-    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-muted">
-      <span>
-        Faixa BJCP:{" "}
-        {temAbv && `ABV ${num(estilo.abvIni)}–${num(estilo.abvFim)}%`}
-        {temAbv && temIbu && " · "}
-        {temIbu && `IBU ${estilo.ibuIni}–${estilo.ibuFim}`}
-      </span>
-      <button
-        type="button"
-        onClick={() => onFill({ abv: abvMedio, ibu: ibuMedio })}
-        className="font-bold text-accent"
-      >
-        preencher
-      </button>
+    <div className="mt-1.5 text-[12px] text-muted">
+      Típico do estilo:{" "}
+      {temAbv && `ABV ${num(estilo.abvIni)}–${num(estilo.abvFim)}%`}
+      {temAbv && temIbu && " · "}
+      {temIbu && `IBU ${estilo.ibuIni}–${estilo.ibuFim}`}
     </div>
   );
 }
