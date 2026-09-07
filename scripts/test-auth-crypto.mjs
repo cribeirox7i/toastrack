@@ -31,10 +31,21 @@ check("verifyPassword recusa hash ausente ou malformado sem lançar exceção", 
   assert.equal(verifyPassword("qualquer", "sem-dois-pontos"), false);
 });
 
-check("generateProvisionalPassword tem o tamanho pedido e nunca usa caractere ambíguo", () => {
+check("generateProvisionalPassword: tamanho, sem ambíguo, e política mínima em toda geração", () => {
   const senha = generateProvisionalPassword(12);
   assert.equal(senha.length, 12);
   assert.doesNotMatch(senha, /[0O1lI]/);
+  // Nunca menos que 8, mesmo pedindo menos.
+  assert.equal(generateProvisionalPassword(4).length, 8);
+  // As 4 classes, checadas em muitas amostras (a garantia é por construção, não por sorte).
+  for (let i = 0; i < 500; i += 1) {
+    const s = generateProvisionalPassword(8);
+    assert.match(s, /[A-Z]/, `sem maiúscula: ${s}`);
+    assert.match(s, /[a-z]/, `sem minúscula: ${s}`);
+    assert.match(s, /[0-9]/, `sem número: ${s}`);
+    assert.match(s, /[^A-Za-z0-9]/, `sem símbolo: ${s}`);
+    assert.doesNotMatch(s, /[0O1lI]/, `caractere ambíguo: ${s}`);
+  }
 });
 
 check("generateToken devolve hex de 64 caracteres (32 bytes)", () => {

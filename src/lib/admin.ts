@@ -34,6 +34,17 @@ export async function setUserStatus(userId: string, status: "S" | "N"): Promise<
   return res.ok;
 }
 
+/** Gera uma senha provisória nova pro usuário e força a troca no próximo login (só admin). A
+ *  senha volta UMA vez, aqui - não fica salva em lugar nenhum em texto. Ver
+ *  `generateProvisionalPassword` (authCrypto.ts): 12 caracteres, com maiúscula, minúscula, número
+ *  e símbolo garantidos. */
+export async function resetUserPassword(userId: string): Promise<string | null> {
+  const res = await fetch(`/api/admin/users/${userId}/reset-senha`, { method: "POST" });
+  if (!res.ok) return null;
+  const { provisionalPassword } = (await res.json()) as { provisionalPassword: string };
+  return provisionalPassword;
+}
+
 /** Log de acesso recente (só admin) — mais novo primeiro. */
 export async function fetchAccessLog(limit = 50): Promise<LogEntry[]> {
   const res = await fetch(noCacheUrl("/api/admin/log"), { cache: "no-store" });

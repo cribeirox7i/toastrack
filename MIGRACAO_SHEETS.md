@@ -967,6 +967,33 @@ já usam - tirou um erro de lint preexistente de quebra.
 
 **Verificação:** `tsc`, lint (agora sem os 2 erros preexistentes do HomeScreen) e build limpos.
 
+## 8.8 Reset de senha pelo admin, com senha gerada (2026-09-07)
+
+**Pedido do Carlos:** na Gestão de usuários (Perfil), ao lado de "Desativar", faltava "Resetar
+senha" com geração automática - complexidade mínima de 8 caracteres, com maiúscula, minúscula,
+número e símbolo.
+
+**O backend já existia** (`/api/admin/users/[id]/reset-senha` + `adminResetPassword`, seção 4.1),
+mas com duas lacunas:
+
+1. `generateProvisionalPassword` (`authCrypto.ts`) sorteava de um charset só de letras e números,
+   sem símbolo e sem garantir uma de cada classe - podia gerar uma senha que falharia a própria
+   validação do produto (`senhaSchema.ts`) se alguém tentasse reaproveitá-la. Reescrita: 4 pools
+   (maiúsc/minúsc/dígito/símbolo, todos sem caractere ambíguo tipo 0/O/1/l/I), uma de cada
+   garantida por construção, resto preenchido do conjunto todo, e Fisher-Yates com
+   `crypto.randomInt` pra as 4 garantidas não ficarem sempre nas 4 primeiras posições. Mínimo de
+   8 mesmo se pedirem menos; padrão 12. Símbolos escolhidos pra não quebrar em e-mail/terminal
+   nem confundir ao ditar (`!@#$%&*?+-`).
+2. Nenhum botão na UI. Adicionado em `ProfileScreen.tsx`: "Resetar senha" abre uma confirmação
+   ("vai receber senha provisória e precisará trocá-la no próximo login") e, feito, mostra a
+   senha UMA vez num diálogo com "Copiar" - ela não fica salva em texto em lugar nenhum.
+   `resetUserPassword` novo em `admin.ts`.
+
+A rota já forçava `deve_trocar_senha = true` e já registrava em `log`. Nada disso mudou.
+
+**Verificação:** `test:auth-crypto` reforçado - 500 amostras conferindo as 4 classes e a ausência
+de ambíguos em toda geração, mais o piso de 8 caracteres. `tsc`, lint e build limpos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

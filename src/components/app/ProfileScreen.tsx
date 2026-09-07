@@ -12,6 +12,7 @@ import { buildLabel } from "@/lib/version";
 import {
   fetchAllUsers,
   setUserStatus,
+  resetUserPassword,
   fetchAccessLog,
   type AdminUser,
   type LogEntry,
@@ -75,6 +76,10 @@ export default function ProfileScreen() {
   const isAdmin = appUser?.user_role === "admin";
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  // Fluxo de reset de senha: confirma, gera, mostra a senha UMA vez (não fica salva em texto).
+  const [resetAlvo, setResetAlvo] = useState<AdminUser | null>(null);
+  const [resetResultado, setResetResultado] = useState<{ nome: string; senha: string } | null>(null);
+  const [resetando, setResetando] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -94,6 +99,26 @@ export default function ProfileScreen() {
       setUsers(await fetchAllUsers());
       showToast(next === "S" ? "Usuário ativado" : "Usuário desativado");
     } else showToast("Erro");
+  }
+
+  async function confirmarReset() {
+    if (!resetAlvo) return;
+    setResetando(true);
+    const senha = await resetUserPassword(resetAlvo.user_id);
+    setResetando(false);
+    const nome = resetAlvo.user_nome;
+    setResetAlvo(null);
+    if (senha) setResetResultado({ nome, senha });
+    else showToast("Erro ao resetar senha");
+  }
+
+  async function copiarSenha(senha: string) {
+    try {
+      await navigator.clipboard.writeText(senha);
+      showToast("Senha copiada");
+    } catch {
+      showToast("Copie manualmente");
+    }
   }
 
   async function saveName() {
@@ -300,6 +325,12 @@ export default function ProfileScreen() {
                   {u.user_status === "S" ? "ativo" : "inativo"}
                 </span>
                 <button
+                  onClick={() => setResetAlvo(u)}
+                  className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
+                >
+                  Resetar senha
+                </button>
+                <button
                   onClick={() => toggleStatus(u)}
                   className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
                 >
@@ -308,6 +339,63 @@ export default function ProfileScreen() {
               </div>
             ))}
             {users.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Reset de senha: confirmação */}
+      {resetAlvo && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 px-6">
+          <div className="w-full max-w-xs rounded-2xl border border-border bg-surface p-5 text-center">
+            <div className="text-[15px] font-bold">Resetar a senha?</div>
+            <div className="mt-1 text-[13px] text-muted">
+              {resetAlvo.user_nome} vai receber uma senha provisória e precisará trocá-la no
+              próximo login.
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => setResetAlvo(null)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-[13px] font-bold"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => void confirmarReset()}
+                disabled={resetando}
+                className="flex-1 rounded-xl bg-accent py-2.5 text-[13px] font-bold text-on-accent disabled:opacity-60"
+              >
+                {resetando ? "Gerando…" : "Resetar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reset de senha: senha gerada, mostrada UMA vez */}
+      {resetResultado && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 px-6">
+          <div className="w-full max-w-xs rounded-2xl border border-border bg-surface p-5 text-center">
+            <div className="text-[15px] font-bold">Senha provisória</div>
+            <div className="mt-1 text-[12.5px] text-muted">
+              de {resetResultado.nome} — anote agora, ela não é exibida de novo.
+            </div>
+            <div className="mt-3 select-all rounded-xl border border-border bg-bg px-3 py-3 font-mono text-[16px] font-bold tracking-wide">
+              {resetResultado.senha}
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => void copiarSenha(resetResultado.senha)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-[13px] font-bold"
+              >
+                Copiar
+              </button>
+              <button
+                onClick={() => setResetResultado(null)}
+                className="flex-1 rounded-xl bg-accent py-2.5 text-[13px] font-bold text-on-accent"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
