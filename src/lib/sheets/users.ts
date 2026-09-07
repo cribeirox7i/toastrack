@@ -1,5 +1,4 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { callAppsScript } from "./client";
 import { hashPassword, generateProvisionalPassword, verifyPassword } from "@/lib/authCrypto";
 import { DEFAULT_HUE, DEFAULT_MODE, hueToPaletteEnum } from "@/lib/theme";
@@ -49,6 +48,25 @@ export interface CreateUserResult {
 }
 
 /**
+ * Próximo `user_id` sequencial (pedido do Carlos 2026-09-07: usuários numerados como os itens,
+ * em vez de uuid). Feito aqui e não pela ação `proximoIdSequencial` do Apps Script porque aquela
+ * lê a coluna literal `id` pra semear o contador - a aba `user` usa `user_id`, então semearia do
+ * zero e colidiria com os usuários 1/2/3 que já existem. É o mesmo caminho de fallback que a
+ * criação de item já usa (ver `proximoId` em items.ts): varre a aba, pega o maior + 1. Sem lock -
+ * criação de usuário é rara e só admin faz, a chance de duas ao mesmo tempo é desprezível.
+ * uuid antigos (usuários criados antes desta mudança) viram NaN em `Number()` e são ignorados no
+ * cálculo do maior, sem atrapalhar.
+ */
+function proximoUserId(users: UserRow[]): string {
+  let maior = 0;
+  for (const u of users) {
+    const n = Number(u.user_id);
+    if (Number.isFinite(n) && n > maior) maior = n;
+  }
+  return String(maior + 1);
+}
+
+/**
  * Cria um usuário novo (só admin — a checagem de "quem está chamando é admin" é da rota, não
  * daqui). Gera senha provisória e marca `deve_trocar_senha`, pro dono da conta trocar no primeiro
  * login (mesmo fluxo do WebCRM). Falha se já existir alguém com esse e-mail.
@@ -58,12 +76,15 @@ export async function createUser(input: {
   email: string;
   role?: "admin" | "user";
 }): Promise<CreateUserResult> {
-  const existente = await fetchUserByEmail(input.email);
-  if (existente) throw new Error("Já existe um usuário com este e-mail.");
+  const users = await fetchAllUsers();
+  const alvo = input.email.trim().toLowerCase();
+  if (users.some((u) => (u.user_mail ?? "").trim().toLowerCase() === alvo)) {
+    throw new Error("Já existe um usuário com este e-mail.");
+  }
 
   const provisionalPassword = generateProvisionalPassword();
   const user: UserRow = {
-    user_id: randomUUID(),
+    user_id: proximoUserId(users),
     user_nome: input.nome.trim(),
     user_mail: input.email.trim(),
     user_status: "S",

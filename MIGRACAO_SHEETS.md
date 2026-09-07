@@ -1041,6 +1041,28 @@ das fotos de item.
 **Verificação:** `tsc`, lint e build limpos (rota `/api/profile/foto` registrada); testes puros
 verdes. O fluxo Drive real depende da pasta configurada - confirmação fica pro Carlos.
 
+## 8.11 `user_id` sequencial pra usuários novos (2026-09-07)
+
+**Pedido do Carlos:** usuário novo devia ganhar um id numérico sequencial (como beer/wine/dest/
+drink), não um uuid - entre outras coisas, é o nome da subpasta do Drive por usuário
+(`{raiz}/{user_id}/`), e "1", "2", "3" é mais legível que um uuid.
+
+`createUser` (`users.ts`) parou de gerar `randomUUID()` e passou a calcular `maior user_id
+numérico + 1` a partir da lista de usuários que ele já lê pra checar e-mail duplicado (agora uma
+leitura só, não duas). Não usa a ação `proximoIdSequencial` do Apps Script porque ela semeia o
+contador lendo a coluna literal `id` - a aba `user` usa `user_id`, então semearia do zero e
+colidiria com os usuários 1/2/3 existentes. É o mesmo caminho que a criação de item já usa como
+fallback. Sem lock: criação de usuário é rara e só admin faz. uuids antigos (se houver) viram NaN
+e são ignorados no cálculo do maior.
+
+Os 3 usuários da migração continuam 1/2/3; o próximo criado será 4. Nada mais muda - `user_id` é
+comparado como string em todo lugar (permissão, sessão, log, pasta do Drive), "4" funciona igual
+a um uuid.
+
+**Verificação:** `tsc`, lint e build limpos; `test:auth-crypto`/`test:permissions` verdes.
+`test:users-integration` (que cria/apaga um usuário descartável de verdade) usa o `user_id`
+devolvido, não assume formato - roda pro Carlos sem mudança.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
