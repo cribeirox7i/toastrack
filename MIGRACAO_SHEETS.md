@@ -1063,6 +1063,27 @@ a um uuid.
 `test:users-integration` (que cria/apaga um usuário descartável de verdade) usa o `user_id`
 devolvido, não assume formato - roda pro Carlos sem mudança.
 
+## 8.12 Puxar-pra-baixo pra atualizar (2026-09-07)
+
+**Pedido do Carlos:** atualização no esquema "puxar pra baixo" do Instagram. O PWA no Android não
+tem o gesto nativo (era o motivo do botão de refresh na barra existir, seção do `RefreshButton`).
+
+- `src/components/PullToRefresh.tsx`: hook `usePullToRefresh(scrollRef, onRefresh)` +
+  `<PullIndicator>` + wrapper `<PullToRefresh>`. O gesto só conta quando o container já está no
+  topo (`scrollTop <= 0`); arrasta com resistência (0.55); passou de 72px (já com resistência),
+  solta e dispara. `touchmove` com `{ passive: false }` pra dar `preventDefault` e segurar o
+  overscroll/PTR nativo do Chrome; `overscroll-y-contain` nos containers de reforço. Desktop não
+  tem `touch*`, então o gesto é inerte lá - o botão continua pra isso.
+- `src/lib/refreshAll.ts`: `refreshAllWithMessage()` - a reconciliação completa (`refreshAllNow`,
+  compara por índice/hash, pega inclusão/edição/exclusão) + mensagem pronta. Compartilhado pelo
+  gesto e pelo `RefreshButton` (que encolheu pra só chamar isso).
+- Ligado em: `ListScreen` (hook direto no `bodyRef` que ela já tem, indicador dentro do body),
+  e `MainApp` envolve Home e Stats no `<PullToRefresh>`. Perfil não tem (já tem o botão
+  "Atualizar tudo agora" e é tela de config, não de feed).
+
+**Não verificável daqui:** gesto de toque, só no aparelho do Carlos. `tsc`, lint e build limpos;
+testes puros verdes.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

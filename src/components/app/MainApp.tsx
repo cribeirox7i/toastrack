@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useCatalog } from "@/components/CatalogProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
 import RefreshButton from "@/components/RefreshButton";
+import { PullToRefresh } from "@/components/PullToRefresh";
 import { Avatar } from "@/components/ui";
+import { refreshAllWithMessage } from "@/lib/refreshAll";
 import { paletteEnumToHue } from "@/lib/theme";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 import { fetchFollowedProfiles, type SecondaryProfile } from "@/lib/profiles";
@@ -65,6 +67,16 @@ export default function MainApp() {
 
   useEffect(() => {
     fetchFollowedProfiles().then(setSecondaryProfiles);
+  }, []);
+
+  // Puxar-pra-baixo em Home/Stats (ver PullToRefresh.tsx). Mesma reconciliação completa do botão
+  // "Atualizar dados" da barra. O `notifyChange()` de `refreshAllNow` já atualiza os hooks de
+  // catálogo; o toast é só o retorno visível.
+  const [refreshMsg, setRefreshMsg] = useState("");
+  const onPullRefresh = useCallback(async () => {
+    const msg = await refreshAllWithMessage();
+    setRefreshMsg(msg);
+    window.setTimeout(() => setRefreshMsg(""), 5000);
   }, []);
 
   const main = isMainView(view);
@@ -183,9 +195,9 @@ export default function MainApp() {
       {/* Content */}
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {view === "home" && (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <PullToRefresh onRefresh={onPullRefresh} className="min-h-0 flex-1">
             <HomeScreen searchQuery={query} onOpenStats={openStats} onOpenItem={openItem} />
-          </div>
+          </PullToRefresh>
         )}
         {isMainView(view) && view !== "home" && (
           <ListScreen
@@ -214,9 +226,9 @@ export default function MainApp() {
           />
         )}
         {view === "stats" && (
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <PullToRefresh onRefresh={onPullRefresh} className="min-h-0 flex-1">
             <StatsScreen type={statsType} />
-          </div>
+          </PullToRefresh>
         )}
         {view === "profile" && (
           <div className="min-h-0 flex-1 overflow-y-auto">
@@ -248,6 +260,12 @@ export default function MainApp() {
        *  pra lista na hora, sem esperar o upload). Fica aqui, no shell que nunca desmonta entre
        *  telas, ao contrário do toast local de cada tela. */}
       <GlobalPhotoToast />
+
+      {refreshMsg && (
+        <div className="fixed bottom-20 left-1/2 z-40 max-w-[90vw] -translate-x-1/2 rounded-full bg-text px-4 py-2 text-center text-[13px] font-semibold text-bg shadow-lg">
+          {refreshMsg}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import RefreshButton from "@/components/RefreshButton";
+import { PullIndicator, usePullToRefresh } from "@/components/PullToRefresh";
 import { Avatar, Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
+import { refreshAllWithMessage } from "@/lib/refreshAll";
 import { useCatalog } from "@/components/CatalogProvider";
 import {
   deleteItem,
@@ -211,6 +213,12 @@ export default function ListScreen({
       setSortDir("asc");
     }
   }
+
+  // Puxar-pra-baixo (ver PullToRefresh.tsx): mesma reconciliação completa do botão da barra.
+  const onPullRefresh = useCallback(async () => {
+    showToast(await refreshAllWithMessage());
+  }, []);
+  const { pull, refreshing } = usePullToRefresh(bodyRef, onPullRefresh);
 
   async function doDelete(item: Item) {
     setConfirmItem(null);
@@ -443,36 +451,43 @@ export default function ListScreen({
       </div>
 
       {/* Body */}
-      <div ref={bodyRef} onScroll={handleBodyScroll} className="min-h-0 flex-1 overflow-y-auto">
-        {!loading && filtered.length === 0 ? (
-          <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
-        ) : viewMode === "deck" ? (
-          <DeckView
-            items={visibleItems}
-            onOpen={onOpenItem}
-            onEdit={onEditItem}
-            onDuplicate={doDuplicate}
-            onDelete={setConfirmItem}
-          />
-        ) : viewMode === "table" ? (
-          <TableView
-            items={visibleItems}
-            showActionsCol={sorted.some((i) => i.canEdit)}
-            sortField={sortField}
-            sortDir={sortDir}
-            onSort={toggleSort}
-            onOpen={onOpenItem}
-            onDuplicate={doDuplicate}
-            onDelete={setConfirmItem}
-          />
-        ) : (
-          <GalleryView items={visibleItems} onOpen={onOpenItem} />
-        )}
-        {!loading && visibleCount < sorted.length && (
-          <div ref={sentinelRef} className="py-6 text-center text-[12.5px] text-muted">
-            Carregando mais…
-          </div>
-        )}
+      <div
+        ref={bodyRef}
+        onScroll={handleBodyScroll}
+        className="relative min-h-0 flex-1 overflow-y-auto overscroll-y-contain"
+      >
+        <PullIndicator pull={pull} refreshing={refreshing} />
+        <div style={pull > 0 ? { transform: `translateY(${pull}px)` } : undefined}>
+          {!loading && filtered.length === 0 ? (
+            <div className="py-16 text-center text-[14px] text-muted">Nenhum item encontrado</div>
+          ) : viewMode === "deck" ? (
+            <DeckView
+              items={visibleItems}
+              onOpen={onOpenItem}
+              onEdit={onEditItem}
+              onDuplicate={doDuplicate}
+              onDelete={setConfirmItem}
+            />
+          ) : viewMode === "table" ? (
+            <TableView
+              items={visibleItems}
+              showActionsCol={sorted.some((i) => i.canEdit)}
+              sortField={sortField}
+              sortDir={sortDir}
+              onSort={toggleSort}
+              onOpen={onOpenItem}
+              onDuplicate={doDuplicate}
+              onDelete={setConfirmItem}
+            />
+          ) : (
+            <GalleryView items={visibleItems} onOpen={onOpenItem} />
+          )}
+          {!loading && visibleCount < sorted.length && (
+            <div ref={sentinelRef} className="py-6 text-center text-[12.5px] text-muted">
+              Carregando mais…
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Início/Fim da lista - só depois de rolar uma distância razoável */}
