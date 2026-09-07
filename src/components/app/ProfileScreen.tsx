@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
+import Icon from "@/components/Icon";
+import { Avatar } from "@/components/ui";
 import { PALETTES, hueToPaletteEnum, type HueName } from "@/lib/theme";
-import { initialsFor } from "@/lib/utils";
 import { validatePassword } from "@/lib/auth";
-import { saveUserPrefs, changePassword } from "@/lib/prefs";
+import { saveUserPrefs, changePassword, uploadProfilePhoto } from "@/lib/prefs";
 import { refreshAllNow } from "@/lib/offline/sync";
 import { buildLabel } from "@/lib/version";
 import {
@@ -52,6 +53,24 @@ export default function ProfileScreen() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwError, setPwError] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
+
+  const fotoInputRef = useRef<HTMLInputElement | null>(null);
+  const [fotoBusy, setFotoBusy] = useState(false);
+
+  async function onFotoSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setFotoBusy(true);
+    const r = await uploadProfilePhoto(file);
+    setFotoBusy(false);
+    if (r.ok) {
+      await refreshAppUser();
+      showToast("Foto atualizada");
+    } else {
+      showToast(r.error ?? "Erro ao enviar a foto");
+    }
+  }
 
   const [toast, setToast] = useState("");
   function showToast(m: string) {
@@ -177,9 +196,28 @@ export default function ProfileScreen() {
     <div className="mx-auto flex w-full max-w-md flex-col gap-4 px-5 py-6">
       {/* Identity */}
       <div className="flex flex-col items-center gap-2">
-        <div className="flex size-[72px] items-center justify-center rounded-full bg-accent-soft text-[26px] font-extrabold text-accent">
-          {initialsFor(name || email)}
-        </div>
+        <input
+          ref={fotoInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => void onFotoSelected(e)}
+        />
+        <button
+          onClick={() => fotoInputRef.current?.click()}
+          disabled={fotoBusy}
+          aria-label="Trocar foto de perfil"
+          className="relative"
+        >
+          <Avatar
+            url={appUser?.user_url_img}
+            name={name || email}
+            className="size-[72px] text-[26px]"
+          />
+          <span className="absolute -bottom-0.5 -right-0.5 flex size-6 items-center justify-center rounded-full border-2 border-surface bg-accent text-on-accent">
+            <Icon name={fotoBusy ? "refresh" : "edit"} size={11} className={fotoBusy ? "animate-spin" : ""} />
+          </span>
+        </button>
         <div className="text-[13px] text-muted">{email}</div>
         {appUser?.user_role === "admin" && (
           <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[11px] font-bold text-accent">

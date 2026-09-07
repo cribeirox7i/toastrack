@@ -6,7 +6,7 @@ import { useCatalog } from "@/components/CatalogProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
 import RefreshButton from "@/components/RefreshButton";
-import { initialsFor } from "@/lib/utils";
+import { Avatar } from "@/components/ui";
 import { paletteEnumToHue } from "@/lib/theme";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 import { fetchFollowedProfiles, type SecondaryProfile } from "@/lib/profiles";
@@ -111,12 +111,8 @@ export default function MainApp() {
   }
 
   const avatarBtn = (
-    <button
-      onClick={openProfile}
-      aria-label="Perfil"
-      className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[13px] font-bold text-accent"
-    >
-      {initialsFor(name)}
+    <button onClick={openProfile} aria-label="Perfil">
+      <Avatar url={appUser?.user_url_img} name={name} className="size-9 text-[13px]" />
     </button>
   );
 
@@ -196,6 +192,7 @@ export default function MainApp() {
             listType={view}
             ownUserId={ownUserId}
             ownName={name}
+            ownAvatarUrl={appUser?.user_url_img}
             secondaryProfiles={secondaryProfiles}
             viewedProfileId={viewedProfileId}
             onSelectProfile={setViewedProfileId}

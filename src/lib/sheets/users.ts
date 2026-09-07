@@ -150,3 +150,33 @@ export async function updateOwnProfile(
 ): Promise<void> {
   await callAppsScript("updateByField", { tab: "user", campo: "user_id", valor: userId, patch });
 }
+
+/**
+ * Sobe a foto de perfil pro Drive ({raiz USER}/{user_id}/) e grava a URL em `user_url_img`.
+ * Reusa a ação genérica `driveUploadFile` do Apps Script (já exposta) - o único requisito de
+ * infra é `DRIVE_ROOT_FOLDERS.USER` preenchido em `Config.gs` (se faltar, o Apps Script devolve
+ * "Pasta do Drive não configurada", que a rota repassa como erro legível).
+ *
+ * `tentativas: 1` pelo mesmo motivo do upload de foto de item (ver `uploadItemPhoto`):
+ * `driveUploadFile` não é idempotente, repetir cria cópia. Trocar a foto não apaga a anterior do
+ * Drive - fica órfã, mesma postura aceita pras fotos de item.
+ */
+export async function uploadProfilePhoto(
+  userId: string,
+  foto: { base64Data: string; mimeType: string }
+): Promise<{ url: string }> {
+  const ext = foto.mimeType === "image/png" ? "png" : foto.mimeType === "image/webp" ? "webp" : "jpg";
+  const enviado = await callAppsScript<{ url: string; name: string }>(
+    "driveUploadFile",
+    {
+      categoria: "USER",
+      userId,
+      base64Data: foto.base64Data,
+      mimeType: foto.mimeType,
+      filename: `perfil.${ext}`,
+    },
+    { tentativas: 1, timeoutMs: 120_000 },
+  );
+  await updateOwnProfile(userId, { user_url_img: enviado.url });
+  return { url: enviado.url };
+}

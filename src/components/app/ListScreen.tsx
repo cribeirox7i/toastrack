@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import RefreshButton from "@/components/RefreshButton";
-import { Stars, Thumb, formatDate } from "@/components/ui";
+import { Avatar, Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
 import { useCatalog } from "@/components/CatalogProvider";
 import {
@@ -72,6 +72,7 @@ export default function ListScreen({
   listType,
   ownUserId,
   ownName,
+  ownAvatarUrl,
   secondaryProfiles,
   viewedProfileId,
   onSelectProfile,
@@ -84,6 +85,7 @@ export default function ListScreen({
   listType: ItemType;
   ownUserId: string;
   ownName: string;
+  ownAvatarUrl?: string;
   secondaryProfiles: SecondaryProfile[];
   viewedProfileId: string | null;
   onSelectProfile: (id: string | null) => void;
@@ -335,12 +337,8 @@ export default function ListScreen({
           )}
         </div>
         <RefreshButton className="sm:hidden" />
-        <button
-          onClick={onOpenProfile}
-          aria-label="Perfil"
-          className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[13px] font-bold text-accent sm:hidden"
-        >
-          {initialsFor(ownName)}
+        <button onClick={onOpenProfile} aria-label="Perfil" className="sm:hidden">
+          <Avatar url={ownAvatarUrl} name={ownName} className="size-9 text-[13px]" />
         </button>
       </header>
 

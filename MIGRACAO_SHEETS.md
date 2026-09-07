@@ -1010,11 +1010,36 @@ Pedidos do Carlos:
    não segue mais `oklch(58% 0.13 <hue>)`. Restam 6 paletas: Verde, Amarelo, Azul, Roxo, Rosa,
    Laranja. Quem tinha "Vermelho" salvo cai no padrão (laranja) no próximo carregamento.
 
-**Pendente (8.10):** upload de foto de perfil - hoje não existe (só as iniciais). Precisa de uma
-pasta no Drive nova (`DRIVE_ROOT_FOLDERS.USER` em `Config.gs`, uma linha, + reimplantar) porque a
-ação `driveUploadFile` do Apps Script indexa a pasta por categoria e só tem as 4 de bebida.
-
 **Verificação:** `tsc`, lint e build limpos.
+
+## 8.10 Upload de foto de perfil (2026-09-07)
+
+Antes o avatar era sempre as iniciais; `user_url_img` existia na planilha mas nada escrevia ou
+lia. Agora:
+
+- **`Avatar`** (`ui.tsx`): componente único - foto quando há `url`, iniciais no círculo de accent
+  quando não. Usado no cabeçalho do Perfil, no avatar da barra superior (`MainApp`) e no do
+  cabeçalho mobile do `ListScreen`.
+- **`uploadProfilePhoto`** (`prefs.ts`, cliente): reusa `preparePhoto` (mesma compressão do upload
+  de foto de item) e manda pra `/api/profile/foto`. Sem outbox - precisa de rede na hora pra saber
+  a URL do Drive, falha com mensagem clara se offline.
+- **`/api/profile/foto`** + **`uploadProfilePhoto`** (`users.ts`, servidor): usa a ação genérica
+  `driveUploadFile` já exposta no Apps Script (`{raiz USER}/{user_id}/perfil.jpg`) e grava a URL
+  em `user_url_img`. `tentativas: 1` (não é idempotente). Registra em `log`.
+- **`ProfileScreen`**: o avatar do cabeçalho virou botão com badge de lápis; toca, escolhe,
+  comprime, sobe, `refreshAppUser()`.
+
+**Requisito de infra (o Carlos precisa fazer uma vez):** `DRIVE_ROOT_FOLDERS.USER` em `Config.gs`
+com o id de uma pasta do Drive (pode ser nova, qualquer uma) + reimplantar. Sem isso o Apps
+Script devolve "Pasta do Drive não configurada para categoria: USER" e a tela mostra esse texto no
+toast - a funcionalidade aparece, só não funciona até a pasta existir. Nenhuma mudança em
+`Codigo.gs` (a ação `driveUploadFile` já indexa a pasta pelo nome da categoria).
+
+**Fica de fora, aceito:** trocar a foto não apaga a anterior do Drive (fica órfã) - mesma postura
+das fotos de item.
+
+**Verificação:** `tsc`, lint e build limpos (rota `/api/profile/foto` registrada); testes puros
+verdes. O fluxo Drive real depende da pasta configurada - confirmação fica pro Carlos.
 
 ## 9. O que se perde e o que se ganha
 

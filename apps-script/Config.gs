@@ -29,5 +29,8 @@ const DRIVE_ROOT_FOLDERS = {
   BEER: '',
   WINE: '',
   DEST: '',
-  DRINK: ''
+  DRINK: '',
+  // Foto de perfil dos usuários (2026-09-07). Mesmo esquema: {raiz USER}/{user_id}/perfil.jpg.
+  // Pode ser uma pasta nova qualquer no Drive - preencha com o id (trecho depois de /folders/).
+  USER: ''
 };

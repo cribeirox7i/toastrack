@@ -3,6 +3,36 @@
 /** Small shared UI primitives used across screens. */
 
 import { useState } from "react";
+import { initialsFor } from "@/lib/utils";
+
+/** Avatar de usuário: foto (`url`) quando existir, senão as iniciais no círculo de accent. O
+ *  tamanho e o tamanho da fonte das iniciais vêm por `className` (ex.: "size-9 text-[13px]").
+ *  Mesmo padrão de reset-no-render do `Thumb` pra uma foto trocada voltar a ser tentada. */
+export function Avatar({ url, name, className = "" }: { url?: string; name: string; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  const [prevUrl, setPrevUrl] = useState(url);
+  if (url !== prevUrl) {
+    setPrevUrl(url);
+    setFailed(false);
+  }
+  if (url && !failed) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        onError={() => setFailed(true)}
+        className={`shrink-0 rounded-full object-cover ${className}`}
+      />
+    );
+  }
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-bold text-accent ${className}`}
+    >
+      {initialsFor(name)}
+    </span>
+  );
+}
 
 /** Read-only 5-star row supporting halves (0–5, 0.5 steps) via a clipped overlay. */
 export function Stars({ value, className = "text-[13px]" }: { value: number; className?: string }) {
