@@ -45,15 +45,29 @@
   --on-accent: oklch(16% 0 0); /* near-black "+" on accent in dark mode */
 }
 
-/* Palettes — only the hue rotates. Order = product owner's confirmed list:
-   Verde, Vermelho, Amarelo, Azul, Roxo, Rosa, Laranja. */
+/* Palettes — só a matiz gira. Ordem = lista confirmada pelo dono do produto:
+   Verde, Amarelo, Azul, Roxo, Rosa, Laranja (2026-09-07: "vermelho" saiu, parecia goiaba). */
 :root[data-hue="green"]  { --hue: 150; }
-:root[data-hue="red"]    { --hue: 22; }
-:root[data-hue="yellow"] { --hue: 95; }
+:root[data-hue="yellow"] { --hue: 102; }
 :root[data-hue="blue"]   { --hue: 245; }
 :root[data-hue="purple"] { --hue: 300; }
 :root[data-hue="pink"]   { --hue: 350; }
 :root[data-hue="orange"] { --hue: 55; }
+
+/* Amarelo é a exceção da curva compartilhada: em 58%/0.13 (light) e 60%/0.14 (dark) o hue 102 sai
+   mostarda/caqui, não amarelo (relato do Carlos 2026-09-07). Precisa de accent bem mais claro e
+   texto ESCURO por cima, nos dois modos. O seletor `[data-mode="dark"][data-hue="yellow"]` (mais
+   específico) tem que existir separado pra vencer o bloco base do modo escuro. */
+:root[data-hue="yellow"] {
+  --accent: oklch(82% 0.16 102);
+  --accent-soft: oklch(95% 0.06 102);
+  --on-accent: oklch(28% 0.05 102);
+}
+:root[data-mode="dark"][data-hue="yellow"] {
+  --accent: oklch(84% 0.17 102);
+  --accent-soft: oklch(34% 0.08 102);
+  --on-accent: oklch(20% 0.04 102);
+}
 
 /* Expose tokens to Tailwind v4 as color/font utilities:
    bg-surface, text-text, text-muted, border-border, bg-accent, bg-accent-soft,

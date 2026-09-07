@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
-import { PALETTES, HUES, hueToPaletteEnum, type HueName } from "@/lib/theme";
+import { PALETTES, hueToPaletteEnum, type HueName } from "@/lib/theme";
 import { initialsFor } from "@/lib/utils";
 import { validatePassword } from "@/lib/auth";
 import { saveUserPrefs, changePassword } from "@/lib/prefs";
@@ -237,7 +237,7 @@ export default function ProfileScreen() {
                 aria-pressed={selected}
                 className="size-9 rounded-full"
                 style={{
-                  background: `oklch(58% 0.13 ${HUES[p.name]})`,
+                  background: p.swatch,
                   boxShadow: selected
                     ? "0 0 0 3px var(--surface), 0 0 0 5px var(--text)"
                     : "0 0 0 2px var(--border)",
@@ -308,34 +308,40 @@ export default function ProfileScreen() {
       {isAdmin && (
         <div className={cardCls}>
           <div className={cardLabel}>Gestão de usuários</div>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col divide-y divide-border">
             {users.map((u) => (
-              <div key={u.user_id} className="flex items-center gap-2 py-1.5">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-semibold">{u.user_nome}</div>
-                  <div className="truncate text-[11.5px] text-muted">{u.user_mail}</div>
+              <div key={u.user_id} className="flex flex-col gap-2 py-2.5 first:pt-0">
+                {/* Linha 1: nome, e-mail e status (pedido do Carlos 2026-09-07) */}
+                <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold">{u.user_nome}</div>
+                    <div className="truncate text-[11.5px] text-muted">{u.user_mail}</div>
+                  </div>
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold"
+                    style={{
+                      background: u.user_status === "S" ? "var(--accent-soft)" : "var(--track)",
+                      color: u.user_status === "S" ? "var(--accent)" : "var(--text-muted)",
+                    }}
+                  >
+                    {u.user_status === "S" ? "ativo" : "inativo"}
+                  </span>
                 </div>
-                <span
-                  className="rounded-full px-2 py-0.5 text-[10.5px] font-bold"
-                  style={{
-                    background: u.user_status === "S" ? "var(--accent-soft)" : "var(--track)",
-                    color: u.user_status === "S" ? "var(--accent)" : "var(--text-muted)",
-                  }}
-                >
-                  {u.user_status === "S" ? "ativo" : "inativo"}
-                </span>
-                <button
-                  onClick={() => setResetAlvo(u)}
-                  className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
-                >
-                  Resetar senha
-                </button>
-                <button
-                  onClick={() => toggleStatus(u)}
-                  className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
-                >
-                  {u.user_status === "S" ? "Desativar" : "Ativar"}
-                </button>
+                {/* Linha 2: comandos */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setResetAlvo(u)}
+                    className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
+                  >
+                    Resetar senha
+                  </button>
+                  <button
+                    onClick={() => toggleStatus(u)}
+                    className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
+                  >
+                    {u.user_status === "S" ? "Desativar" : "Ativar"}
+                  </button>
+                </div>
               </div>
             ))}
             {users.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}

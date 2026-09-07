@@ -8,9 +8,8 @@
 export const HUES = {
   green: 150,
   blue: 245,
-  red: 22,
   orange: 55,
-  yellow: 95,
+  yellow: 102,
   purple: 300,
   pink: 350,
 } as const;
@@ -18,20 +17,28 @@ export const HUES = {
 export type HueName = keyof typeof HUES;
 export type Mode = "light" | "dark";
 
-/** Palettes in the product owner's confirmed order. `enumValue` = Supabase user_paleta. */
+/**
+ * Palettes na ordem confirmada pelo dono do produto. `enumValue` = valor de `user_paleta` na
+ * planilha. `swatch` é a cor EXATA da bolinha no seletor (Perfil > Paleta) - normalmente a mesma
+ * curva compartilhada `oklch(58% 0.13 <hue>)`, mas o amarelo tem curva própria (ver globals.css:
+ * na curva compartilhada ele fica mostarda/caqui, não amarelo).
+ *
+ * 2026-09-07 (Carlos): "vermelho" saiu (parecia goiaba) e o amarelo virou a 2ª opção, com hue e
+ * lightness ajustados pra ler como amarelo de verdade.
+ */
 export const PALETTES: {
   name: HueName;
   labelPt: string;
   enumValue: "Verde" | "Vermelho" | "Amarelo" | "Azul" | "Roxo" | "Rosa" | "Laranja";
   hue: number;
+  swatch: string;
 }[] = [
-  { name: "green", labelPt: "Verde", enumValue: "Verde", hue: 150 },
-  { name: "red", labelPt: "Vermelho", enumValue: "Vermelho", hue: 22 },
-  { name: "yellow", labelPt: "Amarelo", enumValue: "Amarelo", hue: 95 },
-  { name: "blue", labelPt: "Azul", enumValue: "Azul", hue: 245 },
-  { name: "purple", labelPt: "Roxo", enumValue: "Roxo", hue: 300 },
-  { name: "pink", labelPt: "Rosa", enumValue: "Rosa", hue: 350 },
-  { name: "orange", labelPt: "Laranja", enumValue: "Laranja", hue: 55 },
+  { name: "green", labelPt: "Verde", enumValue: "Verde", hue: 150, swatch: "oklch(58% 0.13 150)" },
+  { name: "yellow", labelPt: "Amarelo", enumValue: "Amarelo", hue: 102, swatch: "oklch(82% 0.16 102)" },
+  { name: "blue", labelPt: "Azul", enumValue: "Azul", hue: 245, swatch: "oklch(58% 0.13 245)" },
+  { name: "purple", labelPt: "Roxo", enumValue: "Roxo", hue: 300, swatch: "oklch(58% 0.13 300)" },
+  { name: "pink", labelPt: "Rosa", enumValue: "Rosa", hue: 350, swatch: "oklch(58% 0.13 350)" },
+  { name: "orange", labelPt: "Laranja", enumValue: "Laranja", hue: 55, swatch: "oklch(58% 0.13 55)" },
 ];
 
 export const HUE_NAMES = PALETTES.map((p) => p.name);

@@ -994,6 +994,28 @@ A rota já forçava `deve_trocar_senha = true` e já registrava em `log`. Nada d
 **Verificação:** `test:auth-crypto` reforçado - 500 amostras conferindo as 4 classes e a ausência
 de ambíguos em toda geração, mais o piso de 8 caracteres. `tsc`, lint e build limpos.
 
+## 8.9 Gestão de usuários em 2 linhas + paleta sem vermelho (2026-09-07)
+
+Pedidos do Carlos:
+
+1. **Gestão de usuários**: nome/e-mail/status numa linha, os botões (Resetar senha, Desativar) na
+   linha de baixo - antes tudo espremido numa linha só, com os botões cortando na tela do
+   celular. `ProfileScreen.tsx`, agora com `divide-y` entre os usuários.
+2. **Paleta**: "vermelho" (parecia goiaba) saiu; "amarelo" virou a 2ª opção. O amarelo antigo (hue
+   95 na curva compartilhada de 58%/0.13) saía mostarda/caqui, não amarelo - ganhou curva própria
+   em `globals.css` (`--accent`/`--accent-soft`/`--on-accent` com lightness bem mais alto e texto
+   escuro por cima, nos dois modos; o seletor `[data-mode="dark"][data-hue="yellow"]` precisa ser
+   separado pra vencer o bloco base do modo escuro por especificidade). Hue 95 → 102. `PALETTES`
+   (theme.ts) ganhou um campo `swatch` com a cor exata da bolinha do seletor, já que o amarelo
+   não segue mais `oklch(58% 0.13 <hue>)`. Restam 6 paletas: Verde, Amarelo, Azul, Roxo, Rosa,
+   Laranja. Quem tinha "Vermelho" salvo cai no padrão (laranja) no próximo carregamento.
+
+**Pendente (8.10):** upload de foto de perfil - hoje não existe (só as iniciais). Precisa de uma
+pasta no Drive nova (`DRIVE_ROOT_FOLDERS.USER` em `Config.gs`, uma linha, + reimplantar) porque a
+ação `driveUploadFile` do Apps Script indexa a pasta por categoria e só tem as 4 de bebida.
+
+**Verificação:** `tsc`, lint e build limpos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
