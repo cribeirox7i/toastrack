@@ -146,9 +146,21 @@ export function buildFieldRows(fields: Field[]): Field[][] {
   return rows;
 }
 
+export type BjcpEstilo = {
+  bjcp21_id: number;
+  bjcp21_cod: string;
+  bjcp21_subestilo: string;
+  /** Faixas do guia BJCP (números; NaN quando a aba não tem o valor). Ver "preencher pelo estilo"
+   *  em DetailScreen (pedido do Carlos 2026-09-07). */
+  abvIni: number;
+  abvFim: number;
+  ibuIni: number;
+  ibuFim: number;
+};
+
 export type Lookup = {
   pais: { pais_id: number; pais_nome: string }[];
-  bjcp: { bjcp21_id: number; bjcp21_cod: string; bjcp21_subestilo: string }[];
+  bjcp: BjcpEstilo[];
 };
 
 /** Cache-first (IndexedDB, etapa 6): países/BJCP quase não mudam, então servir do que já está
@@ -164,19 +176,33 @@ export async function fetchLookups(): Promise<Lookup> {
       bjcp21_id: Number(b.bjcp21_id),
       bjcp21_cod: b.bjcp21_cod,
       bjcp21_subestilo: b.bjcp21_subestilo ?? "",
+      abvIni: Number(b.bjcp21_abv_inicial),
+      abvFim: Number(b.bjcp21_abv_final),
+      ibuIni: Number(b.bjcp21_ibu_inicial),
+      ibuFim: Number(b.bjcp21_ibu_final),
     })),
   };
 }
 
+type BjcpRaw = {
+  bjcp21_id: string;
+  bjcp21_cod: string;
+  bjcp21_subestilo?: string;
+  bjcp21_abv_inicial?: string;
+  bjcp21_abv_final?: string;
+  bjcp21_ibu_inicial?: string;
+  bjcp21_ibu_final?: string;
+};
+
 async function fetchLookupsNetwork(): Promise<{
   paises: { pais_id: string; pais_nome: string }[];
-  bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
+  bjcp: BjcpRaw[];
 }> {
   const res = await fetch(noCacheUrl("/api/lookups"), { cache: "no-store" });
   if (!res.ok) return { paises: [], bjcp: [] };
   return (await res.json()) as {
     paises: { pais_id: string; pais_nome: string }[];
-    bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
+    bjcp: BjcpRaw[];
   };
 }
 

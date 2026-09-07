@@ -1084,6 +1084,45 @@ tem o gesto nativo (era o motivo do botão de refresh na barra existir, seção 
 **Não verificável daqui:** gesto de toque, só no aparelho do Carlos. `tsc`, lint e build limpos;
 testes puros verdes.
 
+## 8.13 IA no cadastro de cerveja (2026-09-07)
+
+Dois pedidos do Carlos, que na prática são coisas bem diferentes:
+
+### 8.13.1 Preencher ABV/IBU pelo estilo BJCP — SEM IA, os dados já estão na planilha
+
+A aba `list_bjcp_21` já vem com o guia BJCP inteiro: `bjcp21_abv_inicial/final`,
+`bjcp21_ibu_inicial/final`, além de srm/og/fg e textos descritivos. Não precisa de IA nenhuma pra
+isso - é dado de referência autoritativo.
+
+`/api/lookups` sempre devolveu as linhas cruas (todas as colunas); só o tipo do lado do cliente
+não carregava esses campos. Agora `Lookup.bjcp` (itemSchema.ts) traz `abvIni/abvFim/ibuIni/ibuFim`
+como número. Na tela de edição de cerveja, escolhido um estilo BJCP, aparece uma linha "Faixa
+BJCP: ABV 4–5,4% · IBU 18–35" com um botão **preencher** que joga os valores médios nos campos
+ABV e IBU (`BjcpStyleHint` em DetailScreen.tsx). Só preenche o que estiver vazio.
+
+### 8.13.2 Cadastro pela foto do rótulo — Gemini, mesma API do TravelTrack
+
+Portado do `gemini.ts` do TravelTrack (que lê voucher de viagem), com prompt/schema pra cerveja:
+
+- `src/lib/gemini.ts` (servidor): `analisarRotulo(base64, mimeType)` → `{nome, cervejaria, pais,
+  estilo, estilo_bjcp, abv, ibu}`. Modelo `gemini-3.5-flash-lite` (500 req/dia no free tier,
+  provado com a chave do Carlos no TravelTrack). `GeminiIndisponivelError` em qualquer falha.
+- `POST /api/items/analisar-rotulo`: `requireSession` + rate limit (6/min por usuário - a cota do
+  Gemini é da conta inteira, não por pessoa). Body `{base64Data, mimeType}`. Falha → 503 "preencha
+  à mão", nunca fatal. Registra em `log`.
+- `src/lib/labelScan.ts` (cliente): `scanLabelBase64` - reusa a foto JÁ comprimida do cadastro
+  (`preparePhoto`), não recomprime.
+- `DetailScreen`: botão **"Ler rótulo"** ao lado de "Foto pronta", só pra cerveja, só quando há
+  foto preparada. Pré-preenche só campos VAZIOS; resolve país por nome e BJCP por código (ou pelo
+  texto do subestilo) usando os lookups que a tela já tem.
+
+**Requisito de infra (Carlos):** `GEMINI_API_KEY` nas env vars do Vercel (pode ser a mesma chave
+do TravelTrack - free tier é 500 req/dia por chave, os dois apps somados ficam bem abaixo - ou uma
+nova do Google AI Studio). Sem a chave, o botão aparece e responde "preencha à mão" (503).
+
+**Não verificável daqui:** a leitura real do rótulo depende da chave. `tsc`, lint e build limpos
+(rota registrada); testes puros verdes.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

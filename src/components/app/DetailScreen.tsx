@@ -16,6 +16,7 @@ import {
 } from "@/lib/photoUpload";
 import { photoDateFromBytes, toDateInputValue } from "@/lib/photoDate";
 import { lerBytes } from "@/lib/imageDecode";
+import { scanLabelBase64 } from "@/lib/labelScan";
 import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import { setLocalPreview } from "@/lib/localPhotoPreview";
 import PhotoViewer from "@/components/PhotoViewer";
@@ -27,6 +28,7 @@ import {
   fetchFullItem,
   saveItem,
   toFormString,
+  type BjcpEstilo,
   type Field,
   type Lookup,
 } from "@/lib/itemSchema";
@@ -89,6 +91,7 @@ export default function DetailScreen({
   // dava pra fazer nada - agora aparece aqui, com a tela aberta e outra foto a um toque.
   const [photoStatus, setPhotoStatus] = useState<"idle" | "preparando" | "pronta" | "erro">("idle");
   const [photoError, setPhotoError] = useState("");
+  const [scanning, setScanning] = useState(false);
   const [photoDiag, setPhotoDiag] = useState<PhotoDiagnostics | null>(null);
   const [diagOpen, setDiagOpen] = useState(false);
   // De qual porta veio a foto atual - o bloco de erro usa pra oferecer as outras.
@@ -415,6 +418,57 @@ export default function DetailScreen({
     );
   }
 
+  /**
+   * "Ler rótulo" (pedido do Carlos 2026-09-07): manda a foto JÁ preparada (não recomprime) pro
+   * Gemini via `/api/items/analisar-rotulo` e pré-preenche os campos. Só preenche o que estiver
+   * VAZIO - não sobrescreve o que o usuário já digitou. País e estilo BJCP são resolvidos aqui,
+   * onde os lookups estão à mão: país por nome, BJCP por código ou pelo texto do subestilo.
+   */
+  async function doScanLabel() {
+    const foto = preparedPhoto.current;
+    if (!foto || scanning) return;
+    setScanning(true);
+    const r = await scanLabelBase64(foto.base64, foto.mimeType);
+    setScanning(false);
+    if (!r.ok) {
+      showToast(r.error);
+      return;
+    }
+    const c = r.campos;
+    const setSeVazio = (col: string | undefined, valor: string) => {
+      if (col && valor && !(valuesRef.current[col] ?? "").trim()) set(col, valor);
+    };
+    const colDe = (sufixo: string) => fields.find((f) => f.col.endsWith(sufixo))?.col;
+
+    setSeVazio(nameField.col, c.nome);
+    setSeVazio(producerField.col, c.cervejaria);
+    setSeVazio(colDe("_estilo_livre"), c.estilo);
+    setSeVazio(colDe("_abv"), c.abv);
+    setSeVazio(colDe("_ibu"), c.ibu);
+
+    if (c.pais && !(valuesRef.current.pais_id ?? "").trim()) {
+      const alvo = c.pais.trim().toLowerCase();
+      const pais = lookup.pais.find((p) => p.pais_nome.toLowerCase() === alvo);
+      if (pais) set("pais_id", String(pais.pais_id));
+    }
+    if (!(valuesRef.current.bjcp21_id ?? "").trim()) {
+      const porCod = c.estilo_bjcp
+        ? lookup.bjcp.find((b) => b.bjcp21_cod.toLowerCase() === c.estilo_bjcp.trim().toLowerCase())
+        : undefined;
+      const porTexto =
+        !porCod && c.estilo
+          ? lookup.bjcp.find((b) =>
+              b.bjcp21_subestilo.toLowerCase().includes(c.estilo.trim().toLowerCase()),
+            )
+          : undefined;
+      const bjcp = porCod ?? porTexto;
+      if (bjcp) set("bjcp21_id", String(bjcp.bjcp21_id));
+    }
+
+    const achou = [c.nome, c.cervejaria, c.estilo, c.abv, c.ibu].filter(Boolean).length;
+    showToast(achou ? "Rótulo lido - confira os campos" : "Não consegui ler nada do rótulo");
+  }
+
   async function doDuplicate() {
     if (currentId == null) return;
     const newId = await duplicateItem(type, currentId, ownUserId);
@@ -538,8 +592,18 @@ export default function DetailScreen({
             </button>
 
             {photoStatus === "pronta" && (
-              <div className="mb-2 text-[12px] font-semibold text-muted">
-                Foto pronta - sobe quando você salvar.
+              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-semibold text-muted">
+                <span>Foto pronta - sobe quando você salvar.</span>
+                {type === "beer" && (
+                  <button
+                    type="button"
+                    onClick={() => void doScanLabel()}
+                    disabled={scanning}
+                    className="font-bold text-accent disabled:opacity-60"
+                  >
+                    {scanning ? "Lendo rótulo…" : "Ler rótulo"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -617,6 +681,18 @@ export default function DetailScreen({
                   <div key={f.col} className={row.length === 2 ? "min-w-0 flex-1" : undefined}>
                     <label className={labelCls}>{f.label}</label>
                     <EditField f={f} value={values[f.col] ?? ""} onChange={(v) => set(f.col, v)} lookup={lookup} />
+                    {f.kind === "bjcp" && (
+                      <BjcpStyleHint
+                        estilo={lookup.bjcp.find((b) => String(b.bjcp21_id) === values[f.col])}
+                        onFill={({ abv, ibu }) => {
+                          const abvF = fields.find((x) => x.col.endsWith("_abv"));
+                          const ibuF = fields.find((x) => x.col.endsWith("_ibu"));
+                          if (abv != null && abvF) set(abvF.col, abv);
+                          if (ibu != null && ibuF) set(ibuF.col, ibu);
+                          showToast("ABV/IBU preenchidos pela faixa do estilo");
+                        }}
+                      />
+                    )}
                   </div>
                 ))}
               </div>
@@ -727,6 +803,47 @@ export default function DetailScreen({
           onClose={() => setPhotoViewerOpen(false)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Faixa de ABV/IBU do estilo BJCP escolhido, com um botão pra jogar os valores médios nos campos
+ * (pedido do Carlos 2026-09-07: "preenchimento de campos com base no estilo da cerveja"). Os
+ * dados vêm da aba `list_bjcp_21`, que já tem as faixas do guia inteiras - não precisa de IA pra
+ * isso. Só aparece quando um estilo está selecionado E ele tem as faixas preenchidas.
+ */
+function BjcpStyleHint({
+  estilo,
+  onFill,
+}: {
+  estilo?: BjcpEstilo;
+  onFill: (v: { abv?: string; ibu?: string }) => void;
+}) {
+  if (!estilo) return null;
+  const temAbv = Number.isFinite(estilo.abvIni) && Number.isFinite(estilo.abvFim);
+  const temIbu = Number.isFinite(estilo.ibuIni) && Number.isFinite(estilo.ibuFim);
+  if (!temAbv && !temIbu) return null;
+
+  const num = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const abvMedio = temAbv ? String(Number(((estilo.abvIni + estilo.abvFim) / 2).toFixed(1))) : undefined;
+  const ibuMedio = temIbu ? String(Math.round((estilo.ibuIni + estilo.ibuFim) / 2)) : undefined;
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12px] text-muted">
+      <span>
+        Faixa BJCP:{" "}
+        {temAbv && `ABV ${num(estilo.abvIni)}–${num(estilo.abvFim)}%`}
+        {temAbv && temIbu && " · "}
+        {temIbu && `IBU ${estilo.ibuIni}–${estilo.ibuFim}`}
+      </span>
+      <button
+        type="button"
+        onClick={() => onFill({ abv: abvMedio, ibu: ibuMedio })}
+        className="font-bold text-accent"
+      >
+        preencher
+      </button>
     </div>
   );
 }

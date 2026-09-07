@@ -272,10 +272,18 @@ export async function getCachedItems(tab: ItemTab): Promise<RawItemRow[]> {
 
 export interface LookupsResponse {
   paises: { pais_id: string; pais_nome: string }[];
-  // bjcp21_subestilo: descrição do subestilo (pedido do Carlos 2026-09-04, exibição da cerveja
-  // mostra código + descrição) - opcional porque a aba pode não ter essa coluna preenchida em
-  // toda linha.
-  bjcp: { bjcp21_id: string; bjcp21_cod: string; bjcp21_subestilo?: string }[];
+  // bjcp21_subestilo: descrição do subestilo. bjcp21_{abv,ibu}_{inicial,final}: as faixas do guia
+  // BJCP (já preenchidas na aba `list_bjcp_21`) - usadas pra oferecer preencher ABV/IBU pelo
+  // estilo (pedido do Carlos 2026-09-07). Todos opcionais - linha antiga pode não ter a coluna.
+  bjcp: {
+    bjcp21_id: string;
+    bjcp21_cod: string;
+    bjcp21_subestilo?: string;
+    bjcp21_abv_inicial?: string;
+    bjcp21_abv_final?: string;
+    bjcp21_ibu_inicial?: string;
+    bjcp21_ibu_final?: string;
+  }[];
 }
 
 const LOOKUPS_KEY = "lookups";
