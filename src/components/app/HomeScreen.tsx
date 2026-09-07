@@ -8,14 +8,29 @@ import { TYPE_LABELS, type Item, type ItemType, type Catalog } from "@/lib/catal
 
 const OVERVIEW_ORDER: ItemType[] = ["beer", "wine", "drink", "spirit"];
 
-function pickRandom<T>(arr: T[]): T | null {
-  return arr.length ? arr[Math.floor(Math.random() * arr.length)] : null;
+/** Índice estável no dia: muda uma vez por dia, mas é o mesmo em toda renderização daquele dia.
+ *  É o que "Destaque do DIA" quer dizer - e o que evita o giro maluco que o Carlos viu
+ *  (2026-09-07): `buildFeatured` roda a cada mudança de `catalog`, e durante a carga inicial o
+ *  `catalog` troca de referência várias vezes seguidas (cache, depois cada delta da sincronização,
+ *  depois os nomes de país resolvendo). Com `Math.random()` cada uma dessas trocas sorteava um
+ *  item diferente pro mesmo slot - o card "girava" sozinho até a sincronização estabilizar. */
+function pickOfDay(arr: Item[]): Item | null {
+  if (!arr.length) return null;
+  const now = new Date();
+  const diaDoAno = Math.floor(
+    (Date.UTC(now.getFullYear(), now.getMonth(), now.getDate()) - Date.UTC(now.getFullYear(), 0, 0)) / 86_400_000,
+  );
+  // Ordena por id antes de indexar: durante a carga a lista pode chegar em ordens diferentes
+  // (cache, depois deltas da sincronização), e sem isto o item do dia poderia "pular" de um pra
+  // outro conforme a ordem muda, mesmo com o índice do dia fixo.
+  const estavel = [...arr].sort((a, b) => (Number(a.id) || 0) - (Number(b.id) || 0));
+  return estavel[diaDoAno % estavel.length];
 }
 
 /** Featured: one beer, one wine, one drink-or-spirit (spec D.2). Skips empties. */
 function buildFeatured(catalog: Catalog): Item[] {
   const third = [...catalog.drink, ...catalog.spirit];
-  return [pickRandom(catalog.beer), pickRandom(catalog.wine), pickRandom(third)].filter(
+  return [pickOfDay(catalog.beer), pickOfDay(catalog.wine), pickOfDay(third)].filter(
     (x): x is Item => x != null,
   );
 }
@@ -44,17 +59,18 @@ export default function HomeScreen({
 
   const slides = useMemo(() => buildFeatured(catalog), [catalog]);
   const [idx, setIdx] = useState(0);
+  // idx fora de alcance (a lista encolheu) volta pro 0 durante o render - padrão do React pra
+  // "corrigir estado quando uma prop deriva muda", igual ListScreen/DetailScreen/Thumb já fazem;
+  // num efeito isto virava um render em cascata (e um erro de lint).
+  const safeIdx = idx >= slides.length ? 0 : idx;
+  if (safeIdx !== idx) setIdx(safeIdx);
 
-  // Auto-advance the carousel every 4s.
+  // Avança o carrossel a cada 1 min (pedido do Carlos 2026-09-07 - 4s era rápido demais pra ler).
   useEffect(() => {
     if (slides.length <= 1) return;
-    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 4000);
+    const t = setInterval(() => setIdx((i) => (i + 1) % slides.length), 60_000);
     return () => clearInterval(t);
   }, [slides.length]);
-
-  useEffect(() => {
-    if (idx >= slides.length) setIdx(0);
-  }, [slides.length, idx]);
 
   const results = useMemo(
     () => (searching ? searchCatalog(catalog, searchQuery) : []),
@@ -108,7 +124,7 @@ export default function HomeScreen({
           <div className="overflow-hidden rounded-2xl border border-border bg-surface">
             {slides.map(
               (slide, i) =>
-                i === idx && (
+                i === safeIdx && (
                   <div key={`${slide.type}-${slide.id}`} className="flex gap-4 p-4">
                     <Thumb label={slide.name} src={slide.imgUrl} className="h-32 w-28 shrink-0 rounded-xl" />
                     <div className="flex min-w-0 flex-col justify-center">
@@ -135,7 +151,7 @@ export default function HomeScreen({
                   onClick={() => setIdx(i)}
                   aria-label={`Slide ${i + 1}`}
                   className="size-2 rounded-full transition"
-                  style={{ background: i === idx ? "var(--accent)" : "var(--border)" }}
+                  style={{ background: i === safeIdx ? "var(--accent)" : "var(--border)" }}
                 />
               ))}
             </div>

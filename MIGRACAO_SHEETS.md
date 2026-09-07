@@ -943,6 +943,30 @@ Sete pedidos pequenos do Carlos, sem relação entre si:
 Nenhum é sobre telas (são bibliotecas puras) - a conferência visual das 7 mudanças fica pro
 Carlos, Browser pane seguindo banida neste projeto.
 
+## 8.7 Carrossel da Home girando sozinho na abertura (2026-09-07)
+
+**Sintoma:** ao abrir o app, o "Destaque do dia" trocava de item várias vezes muito rápido, em
+sequência, e só depois estabilizava. O Carlos também pediu o giro automático mais devagar: 1
+minuto em vez dos 4s.
+
+**Causa do giro maluco:** `buildFeatured` (`HomeScreen.tsx`) escolhia os itens em destaque com
+`Math.random()`, e roda a cada mudança de `catalog`. Durante a carga inicial o `catalog` troca de
+referência várias vezes seguidas (cache local, depois cada delta da sincronização, depois os nomes
+de país resolvendo) - cada troca sorteava itens diferentes pros mesmos slots, e o card parecia
+"girar" até a sincronização parar.
+
+**Correção:** `pickOfDay` no lugar de `pickRandom` - índice determinístico pelo dia do ano
+(`diaDoAno % lista.length`), com a lista ordenada por id antes de indexar pra não pular se a ordem
+de chegada mudar. É o que "Destaque do **dia**" já deveria significar: estável ao longo do dia,
+muda uma vez por dia. Sem `Math.random()`, as trocas de `catalog` durante a carga não mexem mais
+no que está em destaque.
+
+**Junto:** giro automático de 4s → 60s (pedido do Carlos). E o efeito que corrigia `idx` fora de
+alcance virou ajuste durante o render (`safeIdx`), o padrão que `ListScreen`/`DetailScreen`/`Thumb`
+já usam - tirou um erro de lint preexistente de quebra.
+
+**Verificação:** `tsc`, lint (agora sem os 2 erros preexistentes do HomeScreen) e build limpos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
