@@ -1120,7 +1120,7 @@ Portado do `gemini.ts` do TravelTrack (que lê voucher de viagem), com prompt/sc
 do TravelTrack - free tier é 500 req/dia por chave, os dois apps somados ficam bem abaixo - ou uma
 nova do Google AI Studio). Sem a chave, o botão aparece e responde "preencha à mão" (503).
 
-**Não verificável daqui:** a leitura real do rótulo depende da chave. `tsc`, lint e build limpos
+**Verificado (2026-09-08):** o Carlos pôs a `GEMINI_API_KEY` no Vercel. Testei `analisarRotulo` local com 3 rótulos reais baixados do Open Food Facts: Patagonia IPA saiu completo (nome/cervejaria/país Argentina/estilo/ABV 5.5/IBU 40); Nortada IPA e Coruja IPA saíram com nome/cervejaria/país/IBU certos e ABV vazio (thumbnail pequeno, sem a letra miúda) - que é o comportamento certo: não achou, vai pro manual. Um 503 "high demand" transitório recuperou no retry - por isso `analisarRotulo` agora tenta 2x em 503. `tsc`, lint e build limpos
 (rota registrada); testes puros verdes.
 
 ## 9. O que se perde e o que se ganha

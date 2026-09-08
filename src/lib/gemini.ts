@@ -82,43 +82,58 @@ function normalizar(bruto: unknown): RotuloExtraido {
 
 export class GeminiIndisponivelError extends Error {}
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 /**
  * Manda a foto do rótulo (base64) pro Gemini e devolve os campos lidos. Lança
  * `GeminiIndisponivelError` em qualquer falha (sem chave, rede, cota, resposta estranha) - o
  * chamador trata como "não deu pra ler automaticamente", nunca fatal: o cadastro manual segue.
+ *
+ * Uma retentativa em 503 ("high demand" - pico temporário do lado do Google, visto no teste de
+ * 2026-09-08 e recuperou sozinho no retry). Não repete em 4xx (chave/cota são problema de config,
+ * não transitório).
  */
 export async function analisarRotulo(base64Data: string, mimeType: string): Promise<RotuloExtraido> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiIndisponivelError("GEMINI_API_KEY não configurada");
 
-  let res: Response;
-  try {
-    res = await fetch(`${ENDPOINT}?key=${apiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { inline_data: { mime_type: mimeType, data: base64Data } },
-              { text: PROMPT },
-            ],
-          },
+  const corpo = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64Data } },
+          { text: PROMPT },
         ],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-        },
-      }),
-      signal: "timeout" in AbortSignal ? AbortSignal.timeout(30_000) : undefined,
-    });
-  } catch {
-    throw new GeminiIndisponivelError("Falha de rede ao chamar o Gemini");
+      },
+    ],
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+    },
+  });
+
+  let res: Response | undefined;
+  for (let tentativa = 1; tentativa <= 2; tentativa += 1) {
+    try {
+      res = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: corpo,
+        signal: "timeout" in AbortSignal ? AbortSignal.timeout(30_000) : undefined,
+      });
+    } catch {
+      throw new GeminiIndisponivelError("Falha de rede ao chamar o Gemini");
+    }
+    if (res.status === 503 && tentativa === 1) {
+      await sleep(1500);
+      continue;
+    }
+    break;
   }
 
-  if (!res.ok) {
-    const corpo = await res.text().catch(() => "");
-    throw new GeminiIndisponivelError(`Gemini respondeu ${res.status}: ${corpo.slice(0, 200)}`);
+  if (!res || !res.ok) {
+    const texto = res ? await res.text().catch(() => "") : "";
+    throw new GeminiIndisponivelError(`Gemini respondeu ${res?.status ?? "?"}: ${texto.slice(0, 200)}`);
   }
 
   const json = await res.json();
