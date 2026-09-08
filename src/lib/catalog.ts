@@ -6,6 +6,7 @@ import {
   type ItemTab,
 } from "@/lib/offline/sync";
 import { getLocalPreview } from "@/lib/localPhotoPreview";
+import { parseNumBR } from "@/lib/numberBR";
 
 export type ItemType = "beer" | "wine" | "drink" | "spirit";
 
@@ -97,7 +98,7 @@ export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) =
     name: row[cfg.nameCol] ?? "",
     manufacturer: row[cfg.manufacturerCol] ?? "",
     country: paisNome(row.pais_id ?? ""),
-    rating: Number(row[cfg.ratingCol]) || 0,
+    rating: parseNumBR(row[cfg.ratingCol]) || 0,
     date: row[cfg.dateCol] ?? "",
     category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
     // A coluna real (planilha) sempre vence quando existe; o preview local é só um substituto

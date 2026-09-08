@@ -1123,6 +1123,32 @@ nova do Google AI Studio). Sem a chave, o botão aparece e responde "preencha à
 **Verificado (2026-09-08):** o Carlos pôs a `GEMINI_API_KEY` no Vercel. Testei `analisarRotulo` local com 3 rótulos reais baixados do Open Food Facts: Patagonia IPA saiu completo (nome/cervejaria/país Argentina/estilo/ABV 5.5/IBU 40); Nortada IPA e Coruja IPA saíram com nome/cervejaria/país/IBU certos e ABV vazio (thumbnail pequeno, sem a letra miúda) - que é o comportamento certo: não achou, vai pro manual. Um 503 "high demand" transitório recuperou no retry - por isso `analisarRotulo` agora tenta 2x em 503. `tsc`, lint e build limpos
 (rota registrada); testes puros verdes.
 
+## 8.14 Número decimal em notação BR na planilha (2026-09-08)
+
+**Pedido do Carlos:** nota e ABV são decimais e estavam sendo gravados com ponto ("5.2") - a
+planilha é editada à mão em pt-BR, quer vírgula.
+
+Ao checar, os dados **já estavam mistos**: linhas antigas (`beer_nota="3.5"`) com ponto, linhas
+mais novas (`beer_nota="3,5"`) com vírgula - e `mapRow` fazia `Number("3,5")` → NaN → **essas
+cervejas apareciam com 0 estrelas**. Bug latente, corrigido de quebra.
+
+`src/lib/numberBR.ts` (novo): conversão só nas bordas, o código continua com ponto/`Number`
+internamente.
+- `parseNumBR` (lê pra cálculo/ordenação): aceita vírgula E ponto → nada precisa ser migrado.
+  Usado em `catalog.ts mapRow` (rating) e nas leituras de nota do `DetailScreen`.
+- `toStoredBR` (grava): ponto → vírgula. Em `coerce` (itemSchema.ts), pros campos `role:"rating"`
+  e `kind:"number"` (ABV/IBU/safra - inteiro não muda).
+- `toFormBR` (carrega no formulário): vírgula → ponto, porque `<input type="number">` só aceita
+  ponto. Novo `toFormValue(field, v)` em itemSchema, usado nos 2 pontos de load do DetailScreen.
+- `toDisplayBR` / `fmtDecimalBR`: exibição em pt-BR (vírgula) - `displayValue` do detalhe, badge de
+  nota do Deck/Galeria, `RatingInput`, média do Stats.
+
+Migração é gradual e sem script: dado antigo com ponto lê certo (`parseNumBR`), e vira vírgula na
+próxima vez que o item for salvo.
+
+**Verificação:** `test:number-br` (6 casos, incl. ida-e-volta formulário↔planilha e o dado misto),
+`tsc`, lint e build limpos; demais testes puros verdes.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

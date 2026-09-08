@@ -19,6 +19,7 @@ import { lerBytes } from "@/lib/imageDecode";
 import { scanLabelBase64 } from "@/lib/labelScan";
 import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import { setLocalPreview } from "@/lib/localPhotoPreview";
+import { parseNumBR, toDisplayBR } from "@/lib/numberBR";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
@@ -27,7 +28,7 @@ import {
   fetchLookups,
   fetchFullItem,
   saveItem,
-  toFormString,
+  toFormValue,
   type BjcpEstilo,
   type Field,
   type Lookup,
@@ -153,7 +154,7 @@ export default function DetailScreen({
           const row = await fetchFullItem(type, currentId);
           if (!alive) return;
           const v: Record<string, string> = {};
-          for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
+          for (const f of fields) v[f.col] = toFormValue(f, row?.[f.col]);
           setValues(v);
           setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
           setCanEdit(row ? canEditRow(row, ownUserId) : false);
@@ -319,7 +320,7 @@ export default function DetailScreen({
     // Revert unsaved edits by reloading the row from the DB.
     const row = await fetchFullItem(type, currentId);
     const v: Record<string, string> = {};
-    for (const f of fields) v[f.col] = toFormString(row?.[f.col]);
+    for (const f of fields) v[f.col] = toFormValue(f, row?.[f.col]);
     setValues(v);
     setImgUrl(driveImageUrl(row?.[IMG_URL_COL[type]]));
     dateIsAuto.current = false; // os valores voltaram a ser os do banco, nada aqui é palpite do app
@@ -662,7 +663,7 @@ export default function DetailScreen({
 
             <label className={labelCls}>{ratingField.label}</label>
             <RatingInput
-              value={Number(values[ratingField.col]) || 0}
+              value={parseNumBR(values[ratingField.col]) || 0}
               onChange={(v) => set(ratingField.col, String(v))}
             />
 
@@ -725,7 +726,7 @@ export default function DetailScreen({
               {[values[producerField.col], paisName(values.pais_id ?? "")].filter(Boolean).join(" · ")}
             </div>
             <div className="mt-2">
-              <Stars value={Number(values[ratingField.col]) || 0} className="text-[18px]" />
+              <Stars value={parseNumBR(values[ratingField.col]) || 0} className="text-[18px]" />
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">
@@ -833,6 +834,8 @@ function displayValue(
   if (f.kind === "country") return paisName(raw);
   if (f.kind === "bjcp") return bjcpLabel(raw);
   if (f.kind === "date") return formatDate(raw);
+  // `values` guarda número com ponto (toFormValue); a exibição em pt-BR usa vírgula.
+  if (f.kind === "number") return toDisplayBR(raw) + (f.suffix ?? "");
   return raw + (f.suffix ?? "");
 }
 

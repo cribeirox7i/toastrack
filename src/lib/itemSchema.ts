@@ -1,5 +1,6 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { noCacheUrl } from "@/lib/utils";
+import { toFormBR, toStoredBR } from "@/lib/numberBR";
 import {
   createItemOffline,
   getCachedItem,
@@ -223,15 +224,32 @@ export async function fetchFullItem(
   return (await res.json()) as Record<string, string>;
 }
 
-/** Convert a raw DB value to a form string. */
+/** Campo que guarda número decimal - nota (role "rating") e os `kind: "number"` (ABV, IBU, safra).
+ *  IBU/safra são inteiros, mas passar pela conversão BR não muda nada neles (sem ponto, sem
+ *  vírgula). */
+function ehNumerico(field: Field): boolean {
+  return field.role === "rating" || field.kind === "number";
+}
+
+/** Valor da planilha -> string do formulário. Campo numérico troca vírgula por ponto: o
+ *  `<input type="number">` só aceita ponto (ver numberBR.ts). */
+export function toFormValue(field: Field, v: unknown): string {
+  const s = v == null ? "" : String(v);
+  return ehNumerico(field) ? toFormBR(s) : s;
+}
+
+/** Convert a raw DB value to a form string (sem contexto de campo - usar `toFormValue` quando
+ *  souber o campo). */
 export function toFormString(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
 /** Coerce a form string pro formato de texto que a planilha espera (tudo vira string ali —
- *  campo vazio vira "" mesmo, não null: o Apps Script não tem um "sem valor" separado de "vazio"). */
+ *  campo vazio vira "" mesmo, não null: o Apps Script não tem um "sem valor" separado de "vazio").
+ *  Campo numérico é gravado em notação BR (vírgula decimal) - pedido do Carlos 2026-09-08. */
 function coerce(field: Field, raw: string): string {
-  return (raw ?? "").trim();
+  const s = (raw ?? "").trim();
+  return ehNumerico(field) ? toStoredBR(s) : s;
 }
 
 /**

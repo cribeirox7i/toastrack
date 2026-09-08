@@ -1,4 +1,5 @@
 "use client";
+import { fmtDecimalBR } from "@/lib/numberBR";
 
 /** Tap-to-set half-star rating widget (0–5 in 0.5 steps). Each star has two
  *  half-width hit areas; the left sets x.5, the right sets x.0. */
@@ -43,7 +44,7 @@ export default function RatingInput({
           );
         })}
       </div>
-      <span className="text-[14px] font-bold text-muted">{value ? value.toFixed(1) : "—"}</span>
+      <span className="text-[14px] font-bold text-muted">{value ? fmtDecimalBR(value) : "—"}</span>
     </div>
   );
 }

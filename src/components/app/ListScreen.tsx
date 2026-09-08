@@ -7,6 +7,7 @@ import { PullIndicator, usePullToRefresh } from "@/components/PullToRefresh";
 import { Avatar, Stars, Thumb, formatDate } from "@/components/ui";
 import { initialsFor } from "@/lib/utils";
 import { refreshAllWithMessage } from "@/lib/refreshAll";
+import { fmtDecimalBR } from "@/lib/numberBR";
 import { useCatalog } from "@/components/CatalogProvider";
 import {
   deleteItem,
@@ -641,7 +642,7 @@ function DeckView({
               <span>{formatDate(item.date)}</span>
               <span className="flex items-center gap-1 rounded-full bg-track px-2 py-0.5 text-[11px] font-bold text-text">
                 <span className="text-accent">★</span>
-                {item.rating.toFixed(1)}
+                {fmtDecimalBR(item.rating)}
               </span>
             </div>
           </div>
@@ -749,7 +750,7 @@ function GalleryView({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => vo
             <Thumb label={item.name} src={item.imgUrl} className="aspect-[3/4] w-full" />
             <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-bg/85 px-2 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-sm">
               <span className="text-accent">★</span>
-              {item.rating.toFixed(1)}
+              {fmtDecimalBR(item.rating)}
             </span>
           </div>
           <div className="p-2.5">

@@ -5,6 +5,7 @@ import { useCatalog } from "@/components/CatalogProvider";
 import { Stars } from "@/components/ui";
 import { noCacheUrl } from "@/lib/utils";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
+import { fmtDecimalBR } from "@/lib/numberBR";
 
 type Group = { name: string; count: number };
 
@@ -108,7 +109,7 @@ export default function StatsScreen({ type }: { type: ItemType }) {
         <div className="mt-3 flex flex-col items-center gap-1">
           <Stars value={avg} className="text-[20px]" />
           <div className="text-[12px] text-muted">
-            Média · {avg ? avg.toFixed(1) : "—"}
+            Média · {avg ? fmtDecimalBR(avg) : "—"}
           </div>
         </div>
       </div>
