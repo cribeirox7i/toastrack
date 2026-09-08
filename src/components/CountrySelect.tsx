@@ -65,7 +65,9 @@ export default function CountrySelect({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={fechar} />
-          <div className="absolute left-0 top-[calc(100%+4px)] z-20 max-h-72 w-full min-w-[220px] overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
+          {/* min-w pra a lista respirar mesmo numa coluna estreita; max-w trava no viewport pra
+              nunca empurrar a tela pro lado (relato do Carlos 2026-09-08). */}
+          <div className="absolute left-0 top-[calc(100%+4px)] z-20 max-h-72 w-full min-w-[200px] max-w-[calc(100vw-2.5rem)] overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
             <input
               autoFocus
               value={q}

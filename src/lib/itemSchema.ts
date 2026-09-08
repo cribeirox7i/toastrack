@@ -99,9 +99,12 @@ export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined 
 
 /**
  * Agrupa os campos "field" da tela de edição em linhas de 1 ou 2, pra layout de duas colunas
- * (pedido do Carlos 2026-09-04): Data e País lado a lado, e IBU e ABV lado a lado (quando ambos
+ * (pedido do Carlos 2026-09-04): País e Data lado a lado, e IBU e ABV lado a lado (quando ambos
  * existem - só a cerveja tem IBU; wine/dest/drink têm só ABV, que fica sozinho). O resto segue
  * cada um na sua própria linha, ocupando a largura toda.
+ *
+ * País vem à ESQUERDA (2026-09-08): o dropdown de país abre pra baixo/direita e, na coluna
+ * direita, estourava a borda da tela no celular. Na coluna esquerda ele cabe.
  *
  * Genérico por design (não hardcoded por tipo): casa por `kind` (date+country) e por sufixo de
  * coluna (`_ibu`/`_abv`), então continua funcionando se os schemas de tipo mudarem sem precisar
@@ -123,7 +126,7 @@ export function buildFieldRows(fields: Field[]): Field[][] {
       const dataF = f.kind === "date" ? f : achar((x) => x.kind === "date");
       const paisF = f.kind === "country" ? f : achar((x) => x.kind === "country");
       if (dataF && paisF) {
-        rows.push([dataF, paisF]);
+        rows.push([paisF, dataF]);
         usado.add(dataF.col);
         usado.add(paisF.col);
         continue;

@@ -1199,6 +1199,10 @@ Cinco pedidos do Carlos:
 **Verificação:** `test:beer-lookup` (9 casos), `tsc`, lint e build limpos; testes puros verdes;
 URLs do flagcdn conferidas (200, incl. `gb-eng`/`gb-sct`/`gb-wls`).
 
+**Ajuste 2026-09-08:** o par virou **País (esquerda) / Data (direita)** - o dropdown de país,
+na coluna direita, estourava a borda da tela no celular e empurrava o layout. `CountrySelect`
+também ganhou `max-w-[calc(100vw-2.5rem)]` como trava.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
