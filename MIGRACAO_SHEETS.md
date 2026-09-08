@@ -1203,6 +1203,24 @@ URLs do flagcdn conferidas (200, incl. `gb-eng`/`gb-sct`/`gb-wls`).
 na coluna direita, estourava a borda da tela no celular e empurrava o layout. `CountrySelect`
 também ganhou `max-w-[calc(100vw-2.5rem)]` como trava.
 
+## 8.17 Duplicar só cria no Salvar + ícone do app (2026-09-08)
+
+1. **Duplicar não grava mais nada na planilha na hora.** Antes `duplicateItem` (catalog.ts)
+   chamava `createItemOffline` no clique - a cópia já ia pro outbox. Agora "Duplicar" abre a tela
+   de detalhe como item NOVO (`detailId` null) pré-preenchido com os valores da linha de origem
+   (`duplicateFromId`, novo prop do `DetailScreen`); o item só é criado no Salvar, como um
+   cadastro normal. `MainApp` ganhou o handler `duplicateItem(type, sourceId)` e o `<DetailScreen>`
+   tem `key` incluindo o `duplicateFromId` pra remontar limpo. Foto NÃO é copiada (é um novo
+   registro). `catalog.ts duplicateItem` removido (código morto).
+2. **Ícone do app.** No mesmo estilo flat dois-tons do favicon do TravelTrack: copo de chope com
+   colarinho, âmbar sobre fundo escuro. `public/icon.svg` + `src/app/favicon.ico` regenerado +
+   os 3 PNGs do PWA (192/512/512-maskable, a versão maskable com o copo dentro da zona segura).
+   Manifest e `metadata.icons` passam o SVG primeiro (navegador moderno prefere), PNGs de
+   fallback.
+
+**Verificação:** `tsc`, lint e build limpos; testes puros verdes; PNGs gerados com `sharp`,
+conferidos visualmente.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

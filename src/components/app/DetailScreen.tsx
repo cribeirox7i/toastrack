@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Icon from "@/components/Icon";
 import { Stars, Thumb, formatDate } from "@/components/ui";
 import RatingInput from "@/components/app/RatingInput";
-import { deleteItem, driveImageUrl, duplicateItem, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
+import { deleteItem, driveImageUrl, IMG_URL_COL, TYPE_LABEL_SINGULAR, TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { canEditRow } from "@/lib/itemPermissions";
 import {
   formatDiagnostics,
@@ -50,17 +50,23 @@ const labelCls = "mb-1 mt-3 block text-[12.5px] font-semibold text-muted";
 export default function DetailScreen({
   type,
   itemId,
+  duplicateFromId,
   initialEditing,
   ownUserId,
   onClose,
   onChanged,
+  onDuplicate,
 }: {
   type: ItemType;
   itemId: string | null;
+  /** Quando `itemId` é null e isto vem preenchido: item NOVO, mas o formulário nasce com os
+   *  valores desta linha (pedido do Carlos 2026-09-08 - duplicar só cria no Salvar). */
+  duplicateFromId?: string | null;
   initialEditing: boolean;
   ownUserId: string;
   onClose: () => void;
   onChanged: () => void;
+  onDuplicate: (type: ItemType, sourceId: string) => void;
 }) {
   const { catalog } = useCatalog();
   const fields = SCHEMA[type].fields;
@@ -190,6 +196,18 @@ export default function DetailScreen({
           } else {
             setUploadingPhoto(false);
           }
+        } else if (duplicateFromId) {
+          // Duplicar: item NOVO, mas os campos nascem com os valores da linha de origem. Nada é
+          // criado na planilha até o Salvar. Foto NÃO é copiada (é um novo registro; anexe outra).
+          const row = await fetchFullItem(type, duplicateFromId);
+          if (!alive) return;
+          const v: Record<string, string> = {};
+          for (const f of fields) v[f.col] = toFormValue(f, row?.[f.col]);
+          setValues(v);
+          setImgUrl("");
+          setCanEdit(true);
+          setUploadingPhoto(false);
+          dateIsAuto.current = false;
         } else {
           // Item novo: só monta o formulário vazio na hora, SEM criar nada na planilha - a linha
           // só nasce quando o usuário dá Salvar.
@@ -212,7 +230,7 @@ export default function DetailScreen({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentId, type]);
+  }, [currentId, type, duplicateFromId]);
 
   // Revoga o preview local quando a tela sai do ar (o objeto fica na memória do navegador até lá).
   useEffect(() => {
@@ -505,17 +523,11 @@ export default function DetailScreen({
     showToast(achou ? "Rótulo lido - confira os campos" : "Não consegui ler nada do rótulo");
   }
 
-  async function doDuplicate() {
+  function doDuplicate() {
     if (currentId == null) return;
-    const newId = await duplicateItem(type, currentId, ownUserId);
-    if (newId) {
-      onChanged();
-      // Troca pra cópia nova, já em edição, sem sair da tela (pedido do Carlos 2026-09-02).
-      setCurrentId(newId);
-      setEditing(true);
-    } else {
-      showToast("Erro ao duplicar");
-    }
+    // Reabre a tela como item NOVO pré-preenchido - só cria de fato no Salvar (pedido do Carlos
+    // 2026-09-08; antes criava a cópia na planilha na hora).
+    onDuplicate(type, currentId);
   }
 
   async function doDelete() {
@@ -552,7 +564,9 @@ export default function DetailScreen({
 
   const title = editing
     ? currentId == null
-      ? "Novo item"
+      ? duplicateFromId
+        ? "Duplicar"
+        : "Novo item"
       : "Editar"
     : values[nameField.col] || TYPE_LABEL_SINGULAR[type];
 

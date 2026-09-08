@@ -9,13 +9,7 @@ import { initialsFor } from "@/lib/utils";
 import { refreshAllWithMessage } from "@/lib/refreshAll";
 import { fmtDecimalBR } from "@/lib/numberBR";
 import { useCatalog } from "@/components/CatalogProvider";
-import {
-  deleteItem,
-  duplicateItem,
-  TYPE_LABELS,
-  type Item,
-  type ItemType,
-} from "@/lib/catalog";
+import { deleteItem, type Item, type ItemType } from "@/lib/catalog";
 import type { SecondaryProfile } from "@/lib/profiles";
 
 type ViewMode = "deck" | "table" | "gallery";
@@ -82,6 +76,7 @@ export default function ListScreen({
   onOpenProfile,
   onOpenItem,
   onEditItem,
+  onDuplicateItem,
   onAddItem,
   onCatalogChanged,
 }: {
@@ -95,6 +90,7 @@ export default function ListScreen({
   onOpenProfile: () => void;
   onOpenItem: (item: Item) => void;
   onEditItem: (item: Item) => void;
+  onDuplicateItem: (item: Item) => void;
   onAddItem: () => void;
   onCatalogChanged: () => void;
 }) {
@@ -230,20 +226,14 @@ export default function ListScreen({
     } else showToast("Erro ao excluir");
   }
 
-  async function doDuplicate(item: Item) {
+  function doDuplicate(item: Item) {
     if (!item.canEdit) {
       showToast("Erro ao duplicar");
       return;
     }
-    const newId = await duplicateItem(item.type, item.id, ownUserId);
-    if (newId) {
-      onCatalogChanged();
-      // Abre a cópia direto em edição (pedido do Carlos 2026-09-02) - é raro duplicar um item e
-      // querer ele idêntico ao original, então poupa o "abrir > Editar" manual de cada vez.
-      onEditItem({ ...item, id: newId });
-    } else {
-      showToast("Erro ao duplicar");
-    }
+    // Abre a tela como item NOVO pré-preenchido - só cria no Salvar (pedido do Carlos 2026-09-08;
+    // antes a cópia era gravada na planilha na hora).
+    onDuplicateItem(item);
   }
 
   const activeProfileInitials = initialsFor(viewedProfile ? viewedProfile.name : ownName);

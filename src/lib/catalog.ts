@@ -1,10 +1,5 @@
 import { canEditRow } from "@/lib/itemPermissions";
-import {
-  createItemOffline,
-  deleteItemOffline,
-  getCachedItem,
-  type ItemTab,
-} from "@/lib/offline/sync";
+import { deleteItemOffline, type ItemTab } from "@/lib/offline/sync";
 import { getLocalPreview } from "@/lib/localPhotoPreview";
 import { parseNumBR } from "@/lib/numberBR";
 
@@ -127,16 +122,6 @@ export async function deleteItem(type: ItemType, id: string): Promise<boolean> {
   return true;
 }
 
-/** Duplica um item: lê a linha inteira (cache local primeiro), tira id/dono/user_access/
- *  user_edit/updated_at (createItemOffline recalcula) e recria — sai sempre como item seu, mesmo
- *  duplicando um item compartilhado com você. */
-/** Devolve o id do item novo (pra quem chamou poder abrir ele direto em edição - pedido do
- *  Carlos 2026-09-02), ou null se o item original não estiver no cache. */
-export async function duplicateItem(type: ItemType, id: string, ownerId: string): Promise<string | null> {
-  const tab = TYPE_TAB[type] as ItemTab;
-  const row = await getCachedItem(tab, id);
-  if (!row) return null;
-  const { id: _id, user_owner: _owner, user_access: _access, user_edit: _edit, updated_at: _ts, ...payload } = row;
-  void _id; void _owner; void _access; void _edit; void _ts;
-  return createItemOffline(tab, payload as Record<string, string>, ownerId);
-}
+// Duplicar não vive mais aqui (2026-09-08): virou "abrir a tela de detalhe como item NOVO
+// pré-preenchido, criar só no Salvar" - ver `duplicateFromId` em DetailScreen e o handler em
+// MainApp. Não grava nada na planilha antes de o usuário confirmar.

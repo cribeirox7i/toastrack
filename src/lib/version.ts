@@ -14,7 +14,7 @@
  */
 
 /** Incremente ao subir uma versão que o Carlos vai conferir. */
-export const BUILD_NUMERO = 19;
+export const BUILD_NUMERO = 20;
 
 /** Commit publicado. `VERCEL_GIT_COMMIT_SHA` é preenchido pelo Vercel; em dev não existe. */
 export const BUILD_SHA = (process.env.NEXT_PUBLIC_BUILD_SHA ?? "").slice(0, 7) || "local";

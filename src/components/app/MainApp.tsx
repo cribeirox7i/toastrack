@@ -60,6 +60,9 @@ export default function MainApp() {
   const [detailType, setDetailType] = useState<ItemType>("beer");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
+  // Duplicar: abre a tela como item NOVO (detailId null), mas pré-preenchido com os dados deste
+  // id. O item só é criado de fato no Salvar (pedido do Carlos 2026-09-08).
+  const [detailDuplicateFrom, setDetailDuplicateFrom] = useState<string | null>(null);
 
   // Secondary-profile state (persists across category tabs; resets on remount = login/logout).
   const [secondaryProfiles, setSecondaryProfiles] = useState<SecondaryProfile[]>([]);
@@ -101,6 +104,7 @@ export default function MainApp() {
     if (isMainView(view)) setPrevView(view);
     setDetailType(item.type);
     setDetailId(item.id);
+    setDetailDuplicateFrom(null);
     setDetailEditing(false);
     setView("detail");
   }
@@ -108,6 +112,7 @@ export default function MainApp() {
     if (isMainView(view)) setPrevView(view);
     setDetailType(item.type);
     setDetailId(item.id);
+    setDetailDuplicateFrom(null);
     setDetailEditing(true);
     setView("detail");
   }
@@ -115,6 +120,15 @@ export default function MainApp() {
     if (isMainView(view)) setPrevView(view);
     setDetailType(type);
     setDetailId(null);
+    setDetailDuplicateFrom(null);
+    setDetailEditing(true);
+    setView("detail");
+  }
+  function duplicateItem(type: ItemType, sourceId: string) {
+    if (isMainView(view)) setPrevView(view);
+    setDetailType(type);
+    setDetailId(null);
+    setDetailDuplicateFrom(sourceId);
     setDetailEditing(true);
     setView("detail");
   }
@@ -211,18 +225,22 @@ export default function MainApp() {
             onOpenProfile={openProfile}
             onOpenItem={openItem}
             onEditItem={editItem}
+            onDuplicateItem={(item) => duplicateItem(item.type, item.id)}
             onAddItem={() => addItem(view)}
             onCatalogChanged={reloadCatalog}
           />
         )}
         {view === "detail" && (
           <DetailScreen
+            key={`${detailType}-${detailId ?? "new"}-${detailDuplicateFrom ?? ""}`}
             type={detailType}
             itemId={detailId}
+            duplicateFromId={detailDuplicateFrom}
             initialEditing={detailEditing}
             ownUserId={ownUserId}
             onClose={closeDetail}
             onChanged={reloadCatalog}
+            onDuplicate={duplicateItem}
           />
         )}
         {view === "stats" && (
