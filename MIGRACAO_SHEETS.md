@@ -1149,6 +1149,30 @@ próxima vez que o item for salvo.
 **Verificação:** `test:number-br` (6 casos, incl. ida-e-volta formulário↔planilha e o dado misto),
 `tsc`, lint e build limpos; demais testes puros verdes.
 
+## 8.15 Melhorias no "Ler rótulo" + BJCP no dropdown (2026-09-08)
+
+Cinco ajustes pedidos pelo Carlos depois de usar o "Ler rótulo":
+
+1. **Nome = cervejaria + produto/estilo** ("Antuérpia Puro Malte", não só "Puro Malte").
+   `nomeCompletoCerveja` (`beerLookup.ts`) - não duplica se o nome do produto já traz a
+   cervejaria ("Colorado Appia" fica igual).
+2. **ABV que estava evidente não vinha.** Prompt do Gemini reforçado com os formatos reais de
+   rótulo BR: "Álc. 5,2% Vol.", "GL 5,2", "5,2°", "TEOR ALCOÓLICO", "% ALC/VOL"... e instrução de
+   converter vírgula pra ponto.
+3. **Cervejaria canônica da tabela.** `acharCervejariaCanonica` (`beerLookup.ts`): casa o nome
+   lido contra as cervejas JÁ cadastradas (`catalog.beer`, normalizando caixa/acento/palavras
+   genéricas tipo "Cervejaria"/"Brewing"), e usa a grafia mais frequente que já está no catálogo
+   em vez do que o Gemini leu. `DetailScreen` passou a usar `useCatalog()`.
+4. **País a partir da cervejaria.** Do mesmo match do item 3: o país mais comum das cervejas
+   daquela cervejaria no catálogo, preferido sobre o que o Gemini leu.
+5. **Dropdown de estilo BJCP** mostra `bjcp21_subestilo` ("21A - American IPA") em vez de só
+   `bjcp21_cod` ("21A"). O lookup já trazia o campo (desde 8.6).
+
+**Verificação:** `test:beer-lookup` (7 casos), `test:number-br`, `tsc`, lint e build limpos;
+demais testes puros verdes. Reteste dos 3 rótulos: `nome` agora vem só o produto (o app compõe),
+Patagonia manteve ABV 5.5/IBU 40. ABV segue vazio nos thumbnails pequenos sem a letra miúda
+visível - foto de celular de verdade com o ABV legível é outra história.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

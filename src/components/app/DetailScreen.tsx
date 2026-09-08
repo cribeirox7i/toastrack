@@ -19,7 +19,9 @@ import { lerBytes } from "@/lib/imageDecode";
 import { scanLabelBase64 } from "@/lib/labelScan";
 import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import { setLocalPreview } from "@/lib/localPhotoPreview";
-import { parseNumBR, toDisplayBR } from "@/lib/numberBR";
+import { parseNumBR, toDisplayBR, toFormBR } from "@/lib/numberBR";
+import { acharCervejariaCanonica, nomeCompletoCerveja } from "@/lib/beerLookup";
+import { useCatalog } from "@/components/CatalogProvider";
 import PhotoViewer from "@/components/PhotoViewer";
 import {
   SCHEMA,
@@ -53,6 +55,7 @@ export default function DetailScreen({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { catalog } = useCatalog();
   const fields = SCHEMA[type].fields;
   const nameField = fieldByRole(type, "name")!;
   const producerField = fieldByRole(type, "producer")!;
@@ -422,8 +425,12 @@ export default function DetailScreen({
   /**
    * "Ler rótulo" (pedido do Carlos 2026-09-07): manda a foto JÁ preparada (não recomprime) pro
    * Gemini via `/api/items/analisar-rotulo` e pré-preenche os campos. Só preenche o que estiver
-   * VAZIO - não sobrescreve o que o usuário já digitou. País e estilo BJCP são resolvidos aqui,
-   * onde os lookups estão à mão: país por nome, BJCP por código ou pelo texto do subestilo.
+   * VAZIO - não sobrescreve o que o usuário já digitou.
+   *
+   * 2026-09-08 (Carlos): a cervejaria lida é casada contra as cervejas JÁ cadastradas
+   * (`acharCervejariaCanonica`) - se existir, usa a grafia canônica dela E o país que ela usa no
+   * catálogo, em vez do que o Gemini leu. O nome da cerveja vira "cervejaria + produto/estilo"
+   * ("Antuérpia Puro Malte", não só "Puro Malte").
    */
   async function doScanLabel() {
     const foto = preparedPhoto.current;
@@ -441,14 +448,18 @@ export default function DetailScreen({
     };
     const colDe = (sufixo: string) => fields.find((f) => f.col.endsWith(sufixo))?.col;
 
-    setSeVazio(nameField.col, c.nome);
-    setSeVazio(producerField.col, c.cervejaria);
+    const canonica = acharCervejariaCanonica(c.cervejaria, catalog.beer);
+    const cervejaria = canonica?.nome || c.cervejaria;
+    const paisNome = canonica?.paisNome || c.pais;
+
+    setSeVazio(nameField.col, nomeCompletoCerveja(cervejaria, c.nome, c.estilo));
+    setSeVazio(producerField.col, cervejaria);
     setSeVazio(colDe("_estilo_livre"), c.estilo);
-    setSeVazio(colDe("_abv"), c.abv);
+    setSeVazio(colDe("_abv"), toFormBR(c.abv)); // Gemini deve mandar ponto, mas garante
     setSeVazio(colDe("_ibu"), c.ibu);
 
-    if (c.pais && !(valuesRef.current.pais_id ?? "").trim()) {
-      const alvo = c.pais.trim().toLowerCase();
+    if (paisNome && !(valuesRef.current.pais_id ?? "").trim()) {
+      const alvo = paisNome.trim().toLowerCase();
       const pais = lookup.pais.find((p) => p.pais_nome.toLowerCase() === alvo);
       if (pais) set("pais_id", String(pais.pais_id));
     }
@@ -894,7 +905,7 @@ function EditField({
         <option value="">-</option>
         {lookup.bjcp.map((b) => (
           <option key={b.bjcp21_id} value={b.bjcp21_id}>
-            {b.bjcp21_cod}
+            {b.bjcp21_subestilo || b.bjcp21_cod}
           </option>
         ))}
       </select>

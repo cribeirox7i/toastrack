@@ -12,6 +12,7 @@
     "test:photo-date": "node scripts/test-photo-date.mjs",
     "test:image-decode": "node scripts/test-image-decode.mjs",
     "test:number-br": "node scripts/test-number-br.mjs",
+    "test:beer-lookup": "node scripts/test-beer-lookup.mjs",
     "test:sheets-integration": "tsx --conditions=react-server scripts/test-sheets-integration.mjs",
     "test:items-sync-integration": "tsx --conditions=react-server scripts/test-items-sync-integration.mjs",
     "test:index-sync-integration": "tsx --conditions=react-server scripts/test-index-sync-integration.mjs",

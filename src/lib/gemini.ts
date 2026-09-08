@@ -22,16 +22,19 @@ campos abaixo lendo o que está escrito no rótulo e devolva SÓ o JSON pedido p
 - Todo campo do schema precisa estar presente na resposta (mesmo que "").
 
 Campos:
-- nome: o nome comercial da cerveja (ex.: "Petroleum", "Original", "Colorado Appia"). Só o nome
-  do produto, sem o nome da cervejaria junto, a menos que faça parte do nome.
-- cervejaria: nome da cervejaria/fabricante.
-- pais: país de origem da cervejaria, escrito por extenso em PORTUGUÊS (ex.: "Brasil", "Estados
-  Unidos", "Bélgica", "Alemanha"). Se o rótulo não disser e você não tiver certeza, deixe "".
-- estilo: o estilo da cerveja como aparece no rótulo, em texto livre (ex.: "American IPA", "Weiss",
-  "Imperial Stout", "Witbier", "Pilsen"). Copie o que está escrito.
-- estilo_bjcp: se o rótulo trouxer explicitamente um CÓDIGO de estilo BJCP (ex.: "21A", "13C"),
-  devolva só o código. Senão, "".
-- abv: teor alcoólico, SÓ o número, com ponto decimal (ex.: "5.2", "8"). Sem o símbolo "%".
+- nome: o nome comercial da cerveja (ex.: "Petroleum", "Puro Malte", "Appia"). Só o nome do
+  produto - NÃO junte o nome da cervejaria (o app junta depois).
+- cervejaria: nome da cervejaria/fabricante como escrito no rótulo (ex.: "Antuérpia", "Cervejaria
+  Colorado", "Bodebrown").
+- pais: país de origem da cervejaria, por extenso em PORTUGUÊS (ex.: "Brasil", "Estados Unidos",
+  "Bélgica"). Se não tiver certeza, deixe "".
+- estilo: o estilo da cerveja como aparece no rótulo, texto livre (ex.: "American IPA", "Weiss",
+  "Imperial Stout", "Witbier", "Pilsen", "Puro Malte"). Copie o que está escrito.
+- estilo_bjcp: só se o rótulo trouxer explicitamente um CÓDIGO BJCP (ex.: "21A", "13C"). Senão "".
+- abv: teor alcoólico. PROCURE COM ATENÇÃO - quase todo rótulo tem, em algum destes formatos:
+  "ABV 5,2%", "Álc. 5,2% Vol.", "5.2% ALC/VOL", "TEOR ALCOÓLICO 5,2%", "GL 5,2", "5,2°",
+  "álcool 5,2% em volume". Devolva SÓ o número, com PONTO decimal (ex.: "5.2", "8"), sem "%".
+  Se o rótulo usar vírgula ("5,2"), converta pra ponto ("5.2").
 - ibu: amargor IBU, só o número inteiro (ex.: "45"). "" se não aparecer.`;
 
 const RESPONSE_SCHEMA = {
