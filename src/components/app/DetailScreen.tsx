@@ -20,9 +20,16 @@ import { scanLabelBase64 } from "@/lib/labelScan";
 import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import { setLocalPreview } from "@/lib/localPhotoPreview";
 import { parseNumBR, toDisplayBR, toFormBR } from "@/lib/numberBR";
-import { acharCervejariaCanonica, nomeCompletoCerveja } from "@/lib/beerLookup";
+import {
+  acharCervejariaCanonica,
+  acharEstiloCanonico,
+  bjcpDoEstiloLivre,
+  construirDeParaEstiloBjcp,
+  nomeCompletoCerveja,
+} from "@/lib/beerLookup";
 import { useCatalog } from "@/components/CatalogProvider";
 import PhotoViewer from "@/components/PhotoViewer";
+import CountrySelect, { CountryFlag } from "@/components/CountrySelect";
 import {
   SCHEMA,
   buildFieldRows,
@@ -64,6 +71,12 @@ export default function DetailScreen({
   const fieldRows = useMemo(
     () => buildFieldRows(fields.filter((f) => f.role === "field")),
     [fields],
+  );
+  // De/para estilo livre -> BJCP, das cervejas já cadastradas (pedido do Carlos 2026-09-08).
+  // Montado uma vez por catálogo; a consulta é O(1)-ish. Só faz sentido pra cerveja.
+  const estiloParaBjcp = useMemo(
+    () => (type === "beer" ? construirDeParaEstiloBjcp(catalog.beer) : new Map<string, string>()),
+    [type, catalog.beer],
   );
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
@@ -223,6 +236,10 @@ export default function DetailScreen({
 
   const paisName = useMemo(() => {
     const map = new Map(lookup.pais.map((p) => [String(p.pais_id), p.pais_nome]));
+    return (id: string) => map.get(id) ?? "";
+  }, [lookup.pais]);
+  const paisImg = useMemo(() => {
+    const map = new Map(lookup.pais.map((p) => [String(p.pais_id), p.pais_img]));
     return (id: string) => map.get(id) ?? "";
   }, [lookup.pais]);
   // Exibição mostra código + descrição do subestilo (pedido do Carlos 2026-09-04) - a coluna
@@ -452,11 +469,16 @@ export default function DetailScreen({
     const cervejaria = canonica?.nome || c.cervejaria;
     const paisNome = canonica?.paisNome || c.pais;
 
-    setSeVazio(nameField.col, nomeCompletoCerveja(cervejaria, c.nome, c.estilo));
+    // Estilo livre canônico: mesma lógica da cervejaria (item 3 do Carlos 2026-09-08).
+    const estilosCadastrados = catalog.beer.map((b) => b.category).filter(Boolean);
+    const estilo = acharEstiloCanonico(c.estilo, estilosCadastrados) ?? c.estilo;
+
+    setSeVazio(nameField.col, nomeCompletoCerveja(cervejaria, c.nome, estilo));
     setSeVazio(producerField.col, cervejaria);
-    setSeVazio(colDe("_estilo_livre"), c.estilo);
+    setSeVazio(colDe("_estilo_livre"), estilo);
     setSeVazio(colDe("_abv"), toFormBR(c.abv)); // Gemini deve mandar ponto, mas garante
-    setSeVazio(colDe("_ibu"), c.ibu);
+    // IBU: se a API não achou, entra 0 (pedido do Carlos 2026-09-08).
+    setSeVazio(colDe("_ibu"), c.ibu || "0");
 
     if (paisNome && !(valuesRef.current.pais_id ?? "").trim()) {
       const alvo = paisNome.trim().toLowerCase();
@@ -467,14 +489,16 @@ export default function DetailScreen({
       const porCod = c.estilo_bjcp
         ? lookup.bjcp.find((b) => b.bjcp21_cod.toLowerCase() === c.estilo_bjcp.trim().toLowerCase())
         : undefined;
+      // De/para do estilo livre pras cervejas já cadastradas (item 4 do Carlos).
+      const porDePara = !porCod && estilo ? bjcpDoEstiloLivre(estilo, estiloParaBjcp) : undefined;
       const porTexto =
-        !porCod && c.estilo
+        !porCod && !porDePara && c.estilo
           ? lookup.bjcp.find((b) =>
               b.bjcp21_subestilo.toLowerCase().includes(c.estilo.trim().toLowerCase()),
             )
           : undefined;
-      const bjcp = porCod ?? porTexto;
-      if (bjcp) set("bjcp21_id", String(bjcp.bjcp21_id));
+      const bjcpId = porCod ? String(porCod.bjcp21_id) : porDePara || (porTexto ? String(porTexto.bjcp21_id) : "");
+      if (bjcpId) set("bjcp21_id", bjcpId);
     }
 
     const achou = [c.nome, c.cervejaria, c.estilo, c.abv, c.ibu].filter(Boolean).length;
@@ -603,32 +627,28 @@ export default function DetailScreen({
               </span>
             </button>
 
-            {photoStatus === "pronta" && (
-              <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] font-semibold text-muted">
-                <span>Foto pronta - sobe quando você salvar.</span>
-                {type === "beer" && (
-                  <button
-                    type="button"
+            {/* Ações de foto como ícones em frame, mesmo padrão dos botões de ação do modo
+                visualização (pedido do Carlos 2026-09-08). "Ler rótulo" só pra cerveja e só
+                quando há foto pronta. */}
+            {photoStatus !== "preparando" && (
+              <div className="mb-2 flex gap-2">
+                <ActionBtn label="Tirar foto" icon="camera" onClick={() => pickPhoto("camera")} />
+                <ActionBtn label="Buscar em arquivos" icon="folder" onClick={() => pickPhoto("arquivos")} />
+                {type === "beer" && photoStatus === "pronta" && (
+                  <ActionBtn
+                    label={scanning ? "Lendo rótulo…" : "Ler rótulo"}
+                    icon="scan"
                     onClick={() => void doScanLabel()}
                     disabled={scanning}
-                    className="font-bold text-accent disabled:opacity-60"
-                  >
-                    {scanning ? "Lendo rótulo…" : "Ler rótulo"}
-                  </button>
+                    spinning={scanning}
+                  />
                 )}
               </div>
             )}
 
-            {/* As outras portas de entrada, sempre à mão. Enquanto o seletor de fotos entrega
-                arquivo vazio neste aparelho, é por aqui que dá pra anexar. */}
-            {photoStatus !== "preparando" && (
-              <div className="mb-2 flex gap-3 text-[12px] font-bold">
-                <button onClick={() => pickPhoto("camera")} className="text-accent">
-                  Tirar foto
-                </button>
-                <button onClick={() => pickPhoto("arquivos")} className="text-accent">
-                  Buscar em Arquivos
-                </button>
+            {photoStatus === "pronta" && (
+              <div className="mb-2 text-[12px] font-semibold text-muted">
+                Foto pronta - sobe quando você salvar.
               </div>
             )}
 
@@ -692,7 +712,20 @@ export default function DetailScreen({
                 {row.map((f) => (
                   <div key={f.col} className={row.length === 2 ? "min-w-0 flex-1" : undefined}>
                     <label className={labelCls}>{f.label}</label>
-                    <EditField f={f} value={values[f.col] ?? ""} onChange={(v) => set(f.col, v)} lookup={lookup} />
+                    <EditField
+                      f={f}
+                      value={values[f.col] ?? ""}
+                      onChange={(v) => {
+                        set(f.col, v);
+                        // Estilo livre digitado/colado -> tenta o BJCP do de/para, se o BJCP ainda
+                        // estiver vazio (item 4 do Carlos 2026-09-08).
+                        if (f.col.endsWith("_estilo_livre") && v.trim() && !(valuesRef.current.bjcp21_id ?? "").trim()) {
+                          const id = bjcpDoEstiloLivre(v, estiloParaBjcp);
+                          if (id) set("bjcp21_id", id);
+                        }
+                      }}
+                      lookup={lookup}
+                    />
                     {f.kind === "bjcp" && (
                       <BjcpStyleHint
                         estilo={lookup.bjcp.find((b) => String(b.bjcp21_id) === values[f.col])}
@@ -733,8 +766,15 @@ export default function DetailScreen({
             <h1 className="mt-4 text-[22px] font-extrabold leading-tight">
               {values[nameField.col]}
             </h1>
-            <div className="mt-1 text-[13px] text-muted">
-              {[values[producerField.col], paisName(values.pais_id ?? "")].filter(Boolean).join(" · ")}
+            <div className="mt-1 flex items-center gap-1.5 text-[13px] text-muted">
+              <span>{values[producerField.col]}</span>
+              {paisName(values.pais_id ?? "") && (
+                <>
+                  {values[producerField.col] && <span>·</span>}
+                  <CountryFlag src={paisImg(values.pais_id ?? "")} className="h-3 w-4" />
+                  <span>{paisName(values.pais_id ?? "")}</span>
+                </>
+              )}
             </div>
             <div className="mt-2">
               <Stars value={parseNumBR(values[ratingField.col]) || 0} className="text-[18px]" />
@@ -751,7 +791,12 @@ export default function DetailScreen({
                       <div className="text-[11px] font-semibold uppercase tracking-wide text-muted">
                         {f.label}
                       </div>
-                      <div className="text-[14px] font-semibold">{disp}</div>
+                      <div className="flex items-center gap-1.5 text-[14px] font-semibold">
+                        {f.kind === "country" && (
+                          <CountryFlag src={paisImg(values[f.col] ?? "")} className="h-3.5 w-5" />
+                        )}
+                        <span>{disp}</span>
+                      </div>
                     </div>
                   );
                 })}
@@ -888,16 +933,7 @@ function EditField({
     );
   }
   if (f.kind === "country") {
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">-</option>
-        {lookup.pais.map((p) => (
-          <option key={p.pais_id} value={p.pais_id}>
-            {p.pais_nome}
-          </option>
-        ))}
-      </select>
-    );
+    return <CountrySelect value={value} onChange={onChange} options={lookup.pais} />;
   }
   if (f.kind === "bjcp") {
     return (
@@ -920,25 +956,34 @@ function ActionBtn({
   icon,
   text,
   danger,
+  disabled,
+  spinning,
 }: {
   label: string;
   onClick: () => void;
   icon?: string;
   text?: string;
   danger?: boolean;
+  disabled?: boolean;
+  spinning?: boolean;
 }) {
   return (
     <button
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex size-10 items-center justify-center rounded-xl border"
+      disabled={disabled}
+      className="flex size-10 items-center justify-center rounded-xl border disabled:opacity-50"
       style={{
         borderColor: danger ? "var(--danger)" : "var(--border)",
         color: danger ? "var(--danger)" : "var(--text)",
       }}
     >
-      {icon ? <Icon name={icon} size={18} /> : <span className="text-[15px]">{text}</span>}
+      {icon ? (
+        <Icon name={icon} size={18} className={spinning ? "animate-spin" : ""} />
+      ) : (
+        <span className="text-[15px]">{text}</span>
+      )}
     </button>
   );
 }

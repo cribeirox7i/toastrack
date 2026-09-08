@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
 import { Stars } from "@/components/ui";
-import { noCacheUrl } from "@/lib/utils";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 import { fmtDecimalBR } from "@/lib/numberBR";
+import { flagUrl } from "@/lib/flags";
 
 type Group = { name: string; count: number };
 
@@ -72,19 +72,18 @@ function RankSection({
 export default function StatsScreen({ type }: { type: ItemType }) {
   const { catalog } = useCatalog();
   const items = catalog[type];
-  const [flags, setFlags] = useState<Map<string, string>>(new Map());
-
-  useEffect(() => {
-    fetch(noCacheUrl("/api/lookups"), { cache: "no-store" })
-      .then((res) => (res.ok ? res.json() : { paises: [] }))
-      .then((data: { paises: { pais_nome: string; pais_img: string | null }[] }) => {
-        const m = new Map<string, string>();
-        for (const p of data.paises) {
-          if (p.pais_img) m.set(p.pais_nome, p.pais_img);
-        }
-        setFlags(m);
-      });
-  }, []);
+  // Bandeiras resolvidas do nome (a coluna pais_img da planilha está vazia, ver flags.ts) - não
+  // precisa mais buscar /api/lookups só pra isso.
+  const flags = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const it of items) {
+      if (it.country && !m.has(it.country)) {
+        const url = flagUrl(it.country);
+        if (url) m.set(it.country, url);
+      }
+    }
+    return m;
+  }, [items]);
 
   const { total, avg, byCountry, byCategory, byManufacturer } = useMemo(() => {
     const rated = items.filter((i) => i.rating > 0);

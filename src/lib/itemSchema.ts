@@ -1,6 +1,7 @@
 import { TYPE_TAB, type ItemType } from "@/lib/catalog";
 import { noCacheUrl } from "@/lib/utils";
 import { toFormBR, toStoredBR } from "@/lib/numberBR";
+import { flagUrl } from "@/lib/flags";
 import {
   createItemOffline,
   getCachedItem,
@@ -160,7 +161,7 @@ export type BjcpEstilo = {
 };
 
 export type Lookup = {
-  pais: { pais_id: number; pais_nome: string }[];
+  pais: { pais_id: number; pais_nome: string; pais_img: string }[];
   bjcp: BjcpEstilo[];
 };
 
@@ -172,7 +173,12 @@ export async function fetchLookups(): Promise<Lookup> {
   const data = cached ?? (await fetchLookupsNetwork());
   void pullLookups(); // sempre atualiza em segundo plano, tendo cache ou não
   return {
-    pais: data.paises.map((p) => ({ pais_id: Number(p.pais_id), pais_nome: p.pais_nome })),
+    pais: data.paises.map((p) => ({
+      pais_id: Number(p.pais_id),
+      pais_nome: p.pais_nome,
+      // A coluna da planilha está vazia; resolve pela flags.ts a partir do nome.
+      pais_img: p.pais_img || flagUrl(p.pais_nome),
+    })),
     bjcp: data.bjcp.map((b) => ({
       bjcp21_id: Number(b.bjcp21_id),
       bjcp21_cod: b.bjcp21_cod,
@@ -196,13 +202,13 @@ type BjcpRaw = {
 };
 
 async function fetchLookupsNetwork(): Promise<{
-  paises: { pais_id: string; pais_nome: string }[];
+  paises: { pais_id: string; pais_nome: string; pais_img?: string }[];
   bjcp: BjcpRaw[];
 }> {
   const res = await fetch(noCacheUrl("/api/lookups"), { cache: "no-store" });
   if (!res.ok) return { paises: [], bjcp: [] };
   return (await res.json()) as {
-    paises: { pais_id: string; pais_nome: string }[];
+    paises: { pais_id: string; pais_nome: string; pais_img?: string }[];
     bjcp: BjcpRaw[];
   };
 }

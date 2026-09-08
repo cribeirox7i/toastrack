@@ -7,6 +7,10 @@ import {
   normalizarCervejaria,
   acharCervejariaCanonica,
   nomeCompletoCerveja,
+  normalizarEstilo,
+  acharEstiloCanonico,
+  construirDeParaEstiloBjcp,
+  bjcpDoEstiloLivre,
 } from "../src/lib/beerLookup.ts";
 
 let passed = 0;
@@ -60,6 +64,30 @@ check("nomeCompletoCerveja: não duplica se o produto já traz a cervejaria", ()
 
 check("nomeCompletoCerveja: sem cervejaria devolve só o resto", () => {
   assert.equal(nomeCompletoCerveja("", "Petroleum", "Imperial Stout"), "Petroleum");
+});
+
+check("acharEstiloCanonico: grafia mais frequente do catálogo", () => {
+  const estilos = ["American IPA", "American IPA", "american ipa", "Witbier"];
+  assert.equal(acharEstiloCanonico("IPA Americana", estilos), undefined); // texto diferente
+  assert.equal(acharEstiloCanonico("american ipa", estilos), "American IPA");
+  assert.equal(acharEstiloCanonico("Witbier", estilos), "Witbier");
+  assert.equal(normalizarEstilo("Imperial Stout"), "imperial stout");
+});
+
+check("de/para estilo->BJCP das cervejas cadastradas", () => {
+  const beers = [
+    { category: "American IPA", bjcpId: "58" },
+    { category: "American IPA", bjcpId: "58" },
+    { category: "American IPA", bjcpId: "99" },
+    { category: "Witbier", bjcpId: "42" },
+    { category: "Puro Malte", bjcpId: "" }, // sem BJCP - não entra
+  ];
+  const mapa = construirDeParaEstiloBjcp(beers);
+  assert.equal(bjcpDoEstiloLivre("American IPA", mapa), "58"); // 58 é o mais frequente
+  assert.equal(bjcpDoEstiloLivre("american ipa", mapa), "58");
+  assert.equal(bjcpDoEstiloLivre("Witbier", mapa), "42");
+  assert.equal(bjcpDoEstiloLivre("Puro Malte", mapa), undefined);
+  assert.equal(bjcpDoEstiloLivre("Estilo Novo", mapa), undefined);
 });
 
 console.log(`\n${passed} testes de beerLookup passaram.`);

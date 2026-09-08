@@ -1173,6 +1173,32 @@ demais testes puros verdes. Reteste dos 3 rótulos: `nome` agora vem só o produ
 Patagonia manteve ABV 5.5/IBU 40. ABV segue vazio nos thumbnails pequenos sem a letra miúda
 visível - foto de celular de verdade com o ABV legível é outra história.
 
+## 8.16 Cadastro: ícones de foto, mais lógica no "Ler rótulo", bandeiras (2026-09-08)
+
+Cinco pedidos do Carlos:
+
+1. **Ações de foto como ícones em frame** (câmera / pasta / "scan" pra Ler rótulo), abaixo da
+   foto, no mesmo padrão dos botões de ação do modo visualização (`ActionBtn`, que ganhou
+   `disabled`/`spinning`). Ícones novos no `Icon.tsx`.
+2. **IBU = 0 quando a API não acha.** No `doScanLabel`: `setSeVazio(colDe("_ibu"), c.ibu || "0")`.
+3. **Estilo livre canônico.** `acharEstiloCanonico` (`beerLookup.ts`) - mesma ideia da cervejaria:
+   varre os `beer_estilo_livre` já cadastrados (`catalog.beer[].category`) e usa a grafia mais
+   frequente.
+4. **De/para estilo livre → BJCP.** `construirDeParaEstiloBjcp`/`bjcpDoEstiloLivre` montam um mapa
+   das cervejas que têm estilo livre E `bjcp21_id` preenchidos. Consultado no `doScanLabel` e
+   também no onChange do campo de estilo livre (digitar o estilo já sugere o BJCP, se estiver
+   vazio). `Item` ganhou `bjcpId` e `paisId` crus pra isso.
+5. **Bandeiras de país.** A coluna `pais_img` da aba `list_pais` está VAZIA (o seed do Supabase
+   tinha as URLs mas não chegaram na planilha) - `src/lib/flags.ts` resolve a bandeira do nome do
+   país, mapa estático dos 40 pro código flagcdn (Escócia/Inglaterra/País de Gales usam `gb-sct`
+   etc.). `fetchLookups` passou a preencher `pais_img` por aí. Novo `<CountrySelect>` (dropdown
+   próprio, `<option>` nativo não renderiza imagem) com bandeira, usado na edição; bandeira também
+   no cabeçalho e na grade de campos do modo visualização e no ranking "Por país" do Stats (que
+   já tentava, com a coluna vazia).
+
+**Verificação:** `test:beer-lookup` (9 casos), `tsc`, lint e build limpos; testes puros verdes;
+URLs do flagcdn conferidas (200, incl. `gb-eng`/`gb-sct`/`gb-wls`).
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

@@ -89,3 +89,70 @@ export function nomeCompletoCerveja(cervejaria: string, nomeProduto: string, est
   if (normalizarCervejaria(resto).includes(normalizarCervejaria(marca))) return resto;
   return `${marca} ${resto}`;
 }
+
+// ---------- Estilo livre ----------
+
+/** Minúsculo, sem acento, sem pontuação, espaços colapsados. Sem lista de palavras genéricas -
+ *  estilo de cerveja quase nunca tem ruído tipo "cervejaria". */
+export function normalizarEstilo(s: string): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Estilo livre canônico: mesma ideia da cervejaria - varre os estilos livres já cadastrados
+ * (`existentes`) e, se algum bate com o lido, devolve a grafia mais frequente que já está no
+ * catálogo. `undefined` se nada bate.
+ */
+export function acharEstiloCanonico(lido: string, existentes: string[]): string | undefined {
+  const alvo = normalizarEstilo(lido);
+  if (alvo.length < 3) return undefined;
+
+  const combina = existentes.filter((e) => {
+    const n = normalizarEstilo(e);
+    if (!n) return false;
+    if (n === alvo) return true;
+    if (alvo.length >= 4 && n.includes(alvo)) return true;
+    if (n.length >= 4 && alvo.includes(n)) return true;
+    return false;
+  });
+  if (!combina.length) return undefined;
+  return maisFrequente(combina);
+}
+
+/**
+ * De/para estilo livre -> id BJCP, montado das cervejas já cadastradas que têm OS DOIS
+ * preenchidos (pedido do Carlos 2026-09-08). Chave = estilo livre normalizado, valor = o
+ * `bjcp21_id` mais frequente pra aquele estilo.
+ */
+export function construirDeParaEstiloBjcp(
+  beers: { category: string; bjcpId: string }[],
+): Map<string, string> {
+  const porEstilo = new Map<string, string[]>();
+  for (const b of beers) {
+    const est = normalizarEstilo(b.category);
+    const bjcp = (b.bjcpId ?? "").trim();
+    if (!est || !bjcp) continue;
+    (porEstilo.get(est) ?? porEstilo.set(est, []).get(est)!).push(bjcp);
+  }
+  const mapa = new Map<string, string>();
+  for (const [est, ids] of porEstilo) mapa.set(est, maisFrequente(ids));
+  return mapa;
+}
+
+/** Consulta o de/para: id BJCP pro estilo livre dado (exato normalizado, ou por conter). */
+export function bjcpDoEstiloLivre(estilo: string, deParaMap: Map<string, string>): string | undefined {
+  const alvo = normalizarEstilo(estilo);
+  if (alvo.length < 3) return undefined;
+  const exato = deParaMap.get(alvo);
+  if (exato) return exato;
+  for (const [chave, id] of deParaMap) {
+    if (chave.length >= 4 && (chave.includes(alvo) || alvo.includes(chave))) return id;
+  }
+  return undefined;
+}

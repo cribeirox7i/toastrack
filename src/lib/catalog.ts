@@ -17,9 +17,11 @@ export type Item = {
   name: string;
   manufacturer: string;
   country: string; // pais_nome, or ""
+  paisId: string; // pais_id cru, or "" - pra reverse-lookup e o de/para do "Ler rótulo"
   rating: number; // 0–5
   date: string; // "YYYY-MM-DD" or ""
-  category: string; // beer: BJCP label · wine: cor · spirit: tipo · drink: ""
+  category: string; // beer: estilo livre · wine: cor · spirit: tipo · drink: ""
+  bjcpId: string; // bjcp21_id cru (só beer), or "" - pro de/para estilo→BJCP
   imgUrl: string; // beer_img_url etc., ou "" quando o item não tem foto
   /** Dono ou listado em user_edit — item compartilhado só por user_access dá false. */
   canEdit: boolean;
@@ -98,9 +100,11 @@ export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) =
     name: row[cfg.nameCol] ?? "",
     manufacturer: row[cfg.manufacturerCol] ?? "",
     country: paisNome(row.pais_id ?? ""),
+    paisId: row.pais_id ?? "",
     rating: parseNumBR(row[cfg.ratingCol]) || 0,
     date: row[cfg.dateCol] ?? "",
     category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
+    bjcpId: row.bjcp21_id ?? "",
     // A coluna real (planilha) sempre vence quando existe; o preview local é só um substituto
     // enquanto o upload em segundo plano não termina - ver localPhotoPreview.ts.
     imgUrl: driveImageUrl(row[cfg.imgUrlCol]) || getLocalPreview(TYPE_TAB[type], row.id ?? "") || "",

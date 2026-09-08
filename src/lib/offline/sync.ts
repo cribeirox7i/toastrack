@@ -271,7 +271,7 @@ export async function getCachedItems(tab: ItemTab): Promise<RawItemRow[]> {
 // ---------- Lookups (países/BJCP) — pequenos, sem carimbo, só evita refetch a cada tela ----------
 
 export interface LookupsResponse {
-  paises: { pais_id: string; pais_nome: string }[];
+  paises: { pais_id: string; pais_nome: string; pais_img?: string }[];
   // bjcp21_subestilo: descrição do subestilo. bjcp21_{abv,ibu}_{inicial,final}: as faixas do guia
   // BJCP (já preenchidas na aba `list_bjcp_21`) - usadas pra oferecer preencher ABV/IBU pelo
   // estilo (pedido do Carlos 2026-09-07). Todos opcionais - linha antiga pode não ter a coluna.
