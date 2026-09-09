@@ -44,7 +44,11 @@ import {
  */
 
 /**
- * Escadinha de compressão: o primeiro degrau que couber em ALVO_BASE64 vence.
+ * Escadinha de compressão: o primeiro degrau que couber em ALVO_BASE64 vence. Começa em qualidade
+ * ALTA de propósito - a ideia é chegar PERTO do teto, não bem abaixo dele (relato do Carlos
+ * 2026-09-09: a compressão estava baixando foto pra menos de 100 KB; ele quer ~400 KB). O degrau
+ * só desce se a foto ainda passar do teto naquela qualidade; uma foto que já sai pequena em
+ * qualidade máxima fica pequena mesmo - não dá pra inflar detalhe que a imagem não tem.
  *
  * O teto existe por latência, não por banda: medido contra a produção em 2026-09-03, a rota /foto
  * leva de 10s a 80s pro mesmo trabalho (a oscilação vem do Apps Script, ver seção 8.1), e o
@@ -52,15 +56,16 @@ import {
  * PhotoViewer usa pra dar zoom.
  */
 const DEGRAUS = [
-  { maxDim: 1600, quality: 0.78 },
-  { maxDim: 1600, quality: 0.62 },
-  { maxDim: 1280, quality: 0.68 },
+  { maxDim: 1600, quality: 0.92 },
+  { maxDim: 1600, quality: 0.82 },
+  { maxDim: 1600, quality: 0.7 },
+  { maxDim: 1400, quality: 0.62 },
   { maxDim: 1280, quality: 0.55 },
-  { maxDim: 1024, quality: 0.55 },
 ] as const;
 
-/** ~300 KB de JPEG. Escolha do Carlos em 2026-09-03 (500 KB levaram 12,6s; 700 KB, 25,8s). */
-const ALVO_BASE64 = 400_000;
+/** ~400 KB de JPEG (base64 é ~4/3 do arquivo). Subido de ~300 KB a pedido do Carlos 2026-09-09 -
+ *  ele topa o segundo a mais de latência pra manter a foto com mais qualidade. */
+const ALVO_BASE64 = 560_000;
 
 /** Teto do envio do arquivo original, quando a recompressão falha mas o arquivo já é pequeno.
  *  Fica bem abaixo do limite de 6.000.000 da rota (`/api/items/[tipo]/[id]/foto`). */

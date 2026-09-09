@@ -1306,6 +1306,22 @@ de um usuário só; era assim no fallback pré-contador também).
 (`wine_img_nome`). Ver `ITEM_IMG_URL_COL`/`ITEM_IMG_NOME_COL` (sheets/types.ts) e `IMG_URL_COL`
 (catalog.ts). `beer` usa `beer_img_url`/`beer_img_nome`, `dest` idem, `drink` idem.
 
+## 8.21 Busca preservada + compressão menos agressiva (2026-09-09) — v23
+
+1. **Busca da lista some ao voltar de um item.** `query`/`searchField` eram `useState` da
+   `ListScreen`, que desmonta ao abrir o Detalhe (mesmo caso do `viewMode` na 8.18). Elevados pro
+   `MainApp` (`listQuery`/`listSearchField`). Voltar de um item mantém o filtro; trocar de
+   categoria (`openTab`) zera. Botão **X** no canto direito do campo de busca (aparece só com
+   texto) limpa a busca e volta o `searchField` pra "Todos". Ícone `x` novo em Icon.tsx.
+2. **Compressão de foto estava exagerada** (arquivos < 100 KB; Carlos quer ~400 KB). A escadinha
+   `DEGRAUS` começava em `quality: 0.78`, que pra muita foto já cai bem abaixo do teto. Agora
+   começa em `0.92` e o teto `ALVO_BASE64` subiu de 400.000 (~300 KB de JPEG) pra 560.000
+   (~400 KB). A escadinha só desce se a foto ainda passar do teto naquela qualidade - foto que já
+   sai pequena em qualidade máxima continua pequena (não dá pra inflar detalhe que não existe). O
+   segundo a mais de latência no upload é aceito pelo Carlos.
+
+**Verificação:** `tsc`, lint (só os pré-existentes) e build limpos.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

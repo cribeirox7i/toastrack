@@ -14,7 +14,7 @@ import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 import { fetchFollowedProfiles, type SecondaryProfile } from "@/lib/profiles";
 import HomeScreen from "@/components/app/HomeScreen";
 import ProfileScreen from "@/components/app/ProfileScreen";
-import ListScreen, { type ViewMode } from "@/components/app/ListScreen";
+import ListScreen, { type SearchField, type ViewMode } from "@/components/app/ListScreen";
 import DetailScreen from "@/components/app/DetailScreen";
 import StatsScreen from "@/components/app/StatsScreen";
 import GlobalPhotoToast from "@/components/app/GlobalPhotoToast";
@@ -58,6 +58,10 @@ export default function MainApp() {
   // Modo de exibição da lista (deck/tabela/galeria) - fica AQUI porque a ListScreen desmonta ao
   // abrir o Detalhe; guardado nela, voltava sempre pro "deck" (relato do Carlos 2026-09-09).
   const [listViewMode, setListViewMode] = useState<ViewMode>("deck");
+  // Busca da lista - aqui e não na ListScreen (que desmonta ao abrir o Detalhe), senão voltar de
+  // um item abria a lista sem o filtro (relato do Carlos 2026-09-09).
+  const [listQuery, setListQuery] = useState("");
+  const [listSearchField, setListSearchField] = useState<SearchField>("all");
 
   // Detail/edit screen state.
   const [detailType, setDetailType] = useState<ItemType>("beer");
@@ -122,6 +126,11 @@ export default function MainApp() {
   }
 
   function openTab(key: "home" | ItemType) {
+    // Trocar de categoria zera a busca (voltar de um item, não - aí passa por closeOverlay).
+    if (key !== view) {
+      setListQuery("");
+      setListSearchField("all");
+    }
     setView(key);
     setQuery("");
   }
@@ -267,6 +276,10 @@ export default function MainApp() {
             onCatalogChanged={reloadCatalog}
             viewMode={listViewMode}
             onViewModeChange={setListViewMode}
+            query={listQuery}
+            onQueryChange={setListQuery}
+            searchField={listSearchField}
+            onSearchFieldChange={setListSearchField}
           />
         )}
         {view === "detail" && (

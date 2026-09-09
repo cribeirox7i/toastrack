@@ -13,7 +13,7 @@ import { deleteItem, type Item, type ItemType } from "@/lib/catalog";
 import type { SecondaryProfile } from "@/lib/profiles";
 
 export type ViewMode = "deck" | "table" | "gallery";
-type SearchField = "all" | "name" | "manufacturer" | "country";
+export type SearchField = "all" | "name" | "manufacturer" | "country";
 type SortField = "name" | "manufacturer" | "category" | "date" | "rating" | "id";
 
 const SEARCH_FIELDS: { value: SearchField; label: string }[] = [
@@ -81,6 +81,10 @@ export default function ListScreen({
   onCatalogChanged,
   viewMode,
   onViewModeChange,
+  query,
+  onQueryChange,
+  searchField,
+  onSearchFieldChange,
 }: {
   listType: ItemType;
   ownUserId: string;
@@ -99,6 +103,12 @@ export default function ListScreen({
   // então guardar o modo aqui fazia ele voltar sempre pro "deck" ao clicar em Voltar.
   viewMode: ViewMode;
   onViewModeChange: (m: ViewMode) => void;
+  // Busca também elevada ao MainApp (pedido do Carlos 2026-09-09): entrar num item da lista
+  // filtrada e voltar tem que manter o filtro (a ListScreen desmonta no meio).
+  query: string;
+  onQueryChange: (q: string) => void;
+  searchField: SearchField;
+  onSearchFieldChange: (f: SearchField) => void;
 }) {
   const isOwnView = !viewedProfileId || viewedProfileId === ownUserId;
   const hasSecondary = secondaryProfiles.length > 0;
@@ -106,8 +116,6 @@ export default function ListScreen({
 
   const { catalog, loading } = useCatalog();
   const items = catalog[listType];
-  const [query, setQuery] = useState("");
-  const [searchField, setSearchField] = useState<SearchField>("all");
   // Padrão por código (id), decrescente - pedido do Carlos 2026-09-04: o item mais recente
   // (maior id sequencial) primeiro, em vez de por data de degustação.
   const [sortField, setSortField] = useState<SortField>("id");
@@ -253,10 +261,22 @@ export default function ListScreen({
           </span>
           <input
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Buscar…"
-            className="w-full rounded-full border border-border bg-surface py-2.5 pl-9 pr-3 text-[14px] outline-none placeholder:text-muted focus:border-accent"
+            className="w-full rounded-full border border-border bg-surface py-2.5 pl-9 pr-9 text-[14px] outline-none placeholder:text-muted focus:border-accent"
           />
+          {query && (
+            <button
+              onClick={() => {
+                onQueryChange("");
+                onSearchFieldChange("all");
+              }}
+              aria-label="Limpar busca"
+              className="absolute right-2.5 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full bg-track text-muted"
+            >
+              <Icon name="x" size={13} strokeWidth={2.5} />
+            </button>
+          )}
         </div>
         {/* Filtro de campo da busca - mesmo padrão visual do botão Ordenar (pedido do Carlos
             2026-09-04), no lugar do <select> largo que sobrava espaço do campo de busca. */}
@@ -282,7 +302,7 @@ export default function ListScreen({
                     <button
                       key={f.value}
                       onClick={() => {
-                        setSearchField(f.value);
+                        onSearchFieldChange(f.value);
                         setSearchMenuOpen(false);
                       }}
                       className="flex w-full items-center justify-between gap-2 rounded-xl px-3 py-2 text-left text-[13px] font-semibold"
