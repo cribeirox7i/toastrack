@@ -338,51 +338,46 @@ function tocarMeta(nome) {
 }
 
 /**
- * Devolve o próximo id sequencial (inteiro, como texto) de uma aba de item - decisão do Carlos
- * 2026-09-02: "a chave das tabelas (ID) precisa ser sequencial, sempre acréscimo do maior número
- * que está na tabela" - cada aba (beer/wine/dest/drink) com a própria contagem, não uma única
- * global. Guarda o contador em SyncMeta (chave `nextId:{tab}`), tudo sob UM lock (não reaproveita
- * metaGet/metaSet, que teriam seu próprio lock cada - evita depender de o lock do Apps Script ser
- * reentrante), pra duas criações concorrentes (dois usuários ao mesmo tempo) nunca saírem com o
- * mesmo número.
+ * Devolve o próximo id sequencial (inteiro, como texto) de uma aba de item: SEMPRE o maior `id`
+ * numérico que está na aba + 1, lido na hora - decisão do Carlos 2026-09-02 ("sempre acréscimo do
+ * maior número que está na tabela"), reafirmada em 2026-09-09.
  *
- * Se o contador ainda não existe (primeira chamada depois desta mudança), inicializa varrendo o
- * maior `id` numérico já usado na aba - preserva a continuidade com os ids antigos (que já eram
- * sequenciais antes da migração pra Sheets, ver MIGRACAO_SHEETS.md seção 3) em vez de reiniciar
- * do 1 e colidir com uma linha existente. Esse é o ÚNICO ponto que lê a aba inteira; depois disso
- * o contador fica em SyncMeta e as chamadas seguintes são baratas.
+ * Antes guardava um contador em SyncMeta (`nextId:{tab}`). Isso FURAVA a sequência: todo `append`
+ * que falhava (Apps Script devolve 500/timeout, comum) e era retentado pelo outbox do cliente
+ * queimava um número - o contador já tinha avançado, o item nunca entrou. Lendo o maior id da aba
+ * na hora, um append que falha não gasta id nenhum: a próxima chamada devolve o mesmo número.
+ * (As linhas `nextId:*` que sobraram em SyncMeta viram dado morto - pode apagar à mão.)
+ *
+ * Lê só a coluna `id` (uma leitura de intervalo, sem varrer as ~40 colunas nem sanitizar datas),
+ * então é barato mesmo na `beer` com ~3600 linhas. O lock protege contra a leitura sair no meio
+ * de outra criação; a janela entre isto retornar e o `append` acontecer (no createItem, do lado
+ * do servidor Next) ainda permite, em tese, dois clientes DIFERENTES criando ao mesmo tempo
+ * pegarem o mesmo número - risco aceito (uso quase sempre de um usuário só; era assim no fallback
+ * pré-contador também).
  */
 function proximoIdSequencial(tab) {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const chave = 'nextId:' + tab;
-    const sh = getSheet('SyncMeta');
-    const valores = sh.getDataRange().getValues();
-    let linha = -1;
-    let atual = '';
-    for (let r = 1; r < valores.length; r++) {
-      if (valores[r][0] === chave) { linha = r; atual = valores[r][1]; break; }
-    }
-    const proximo = atual ? (Number(atual) + 1) : (maiorIdNumericoAtual(tab) + 1);
-    if (linha !== -1) {
-      sh.getRange(linha + 1, 2).setValue(String(proximo));
-    } else {
-      sh.appendRow([chave, String(proximo)]);
-    }
-    return String(proximo);
+    return String(maiorIdNumericoAtual(tab) + 1);
   } finally {
     lock.releaseLock();
   }
 }
 
 function maiorIdNumericoAtual(tab) {
-  const linhas = lerTabela(tab);
+  const sh = getSheet(tab);
+  const ultimaLinha = sh.getLastRow();
+  if (ultimaLinha < 2) return 0;
+  const cabecalhos = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  var colId = cabecalhos.indexOf('id');
+  if (colId === -1) colId = 0;
+  const ids = sh.getRange(2, colId + 1, ultimaLinha - 1, 1).getValues();
   let maior = 0;
-  linhas.forEach(function (linha) {
-    const n = Number(linha.id);
+  for (let i = 0; i < ids.length; i++) {
+    const n = Number(ids[i][0]);
     if (!isNaN(n) && n > maior) maior = n;
-  });
+  }
   return maior;
 }
 

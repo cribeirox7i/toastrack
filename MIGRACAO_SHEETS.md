@@ -1283,6 +1283,29 @@ foto, item 3 não salvou nada. Duas causas:
 Carlos confere no aparelho: criar 3 itens seguidos com foto, fechar o app logo depois, reabrir e
 ver as fotos aparecerem.
 
+## 8.20 Id sequencial furando a sequência (2026-09-09)
+
+Relato do Carlos: "alguns itens que salvei, o sequencial pulou". Causa: `proximoIdSequencial`
+(Codigo.gs) usava um contador em `SyncMeta` (`nextId:{tab}`). Todo `append` que falhava
+(Apps Script 500/timeout, comum) e era retentado pelo outbox do cliente **queimava um número** -
+o contador já tinha avançado, o item nunca entrou.
+
+**Correção (só Codigo.gs, Carlos redeploya):** `proximoIdSequencial` agora devolve sempre
+`maiorIdNumericoAtual(tab) + 1`, lido na hora - só a coluna `id` (leitura de intervalo barata,
+mesmo na `beer`). Append que falha não gasta id: a próxima chamada devolve o mesmo número. As
+linhas `nextId:*` em SyncMeta viram dado morto (pode apagar à mão). Nenhuma mudança no Next.js -
+o `proximoId` do servidor (`src/lib/sheets/items.ts`) já chamava essa ação; o fallback dele
+(ler + max+1) agora é idêntico ao caminho principal.
+
+Caveat aceito: a janela entre `proximoIdSequencial` retornar e o `append` acontecer permite, em
+tese, dois clientes DIFERENTES pegarem o mesmo número ao criar ao mesmo tempo (uso quase sempre
+de um usuário só; era assim no fallback pré-contador também).
+
+**Colunas de imagem por aba** (referência - pergunta do Carlos 2026-09-09): a URL exibida/gravada
+é `{tab}_img_url` (`wine_img_url` pro vinho), o nome do arquivo no Drive é `{tab}_img_nome`
+(`wine_img_nome`). Ver `ITEM_IMG_URL_COL`/`ITEM_IMG_NOME_COL` (sheets/types.ts) e `IMG_URL_COL`
+(catalog.ts). `beer` usa `beer_img_url`/`beer_img_nome`, `dest` idem, `drink` idem.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
