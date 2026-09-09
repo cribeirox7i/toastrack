@@ -23,6 +23,27 @@ export interface OutboxEntry {
   lastError?: string;
 }
 
+/**
+ * Foto de item esperando pra subir. Espelha o `outbox` de texto (mesmo motivo de existir): o
+ * upload de foto começa no Salvar e roda em segundo plano - se o app for morto no meio (comum em
+ * PWA no celular), sem isto a foto sumia sem rastro (relato do Carlos 2026-09-09: "salvou dados
+ * mas não salvou imagem"). Agora fica no IndexedDB e é retomada no próximo boot.
+ *
+ * `itemId` pode ser um id temporário (uuid) até o `createItem` do texto sincronizar; `remapItemId`
+ * (sync.ts) atualiza aqui também quando o id real chega.
+ */
+export interface PhotoOutboxEntry {
+  localId: string;
+  tab: ItemTab;
+  itemId: string;
+  base64: string;
+  mimeType: string;
+  filename: string;
+  createdAt: number;
+  attempts: number;
+  lastError?: string;
+}
+
 interface ToastrackDB extends DBSchema {
   beer: { key: string; value: RawItemRow };
   wine: { key: string; value: RawItemRow };
@@ -30,10 +51,11 @@ interface ToastrackDB extends DBSchema {
   drink: { key: string; value: RawItemRow };
   meta: { key: string; value: { key: string; value: unknown } };
   outbox: { key: string; value: OutboxEntry };
+  photoOutbox: { key: string; value: PhotoOutboxEntry };
 }
 
 const DB_NAME = "toastrack-offline";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBPDatabase<ToastrackDB>> | null = null;
 
@@ -54,6 +76,9 @@ export function getDB(): Promise<IDBPDatabase<ToastrackDB>> {
         }
         if (!db.objectStoreNames.contains("outbox")) {
           db.createObjectStore("outbox", { keyPath: "localId" });
+        }
+        if (!db.objectStoreNames.contains("photoOutbox")) {
+          db.createObjectStore("photoOutbox", { keyPath: "localId" });
         }
       },
     });
@@ -127,6 +152,24 @@ export async function removeOutboxEntry(localId: string) {
 export async function updateOutboxEntry(entry: OutboxEntry) {
   const db = await getDB();
   await db.put("outbox", entry);
+}
+
+// ---------- Fila de fotos ----------
+
+export async function putPhotoOutbox(entry: PhotoOutboxEntry): Promise<void> {
+  const db = await getDB();
+  await db.put("photoOutbox", entry);
+}
+
+export async function listPhotoOutbox(): Promise<PhotoOutboxEntry[]> {
+  const db = await getDB();
+  const all = await db.getAll("photoOutbox");
+  return all.sort((a, b) => a.createdAt - b.createdAt);
+}
+
+export async function removePhotoOutbox(localId: string): Promise<void> {
+  const db = await getDB();
+  await db.delete("photoOutbox", localId);
 }
 
 /** Apaga tudo (dados de item, lookups, fila) — chamado no logout, senão os dados de quem saiu

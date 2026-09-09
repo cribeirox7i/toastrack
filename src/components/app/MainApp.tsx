@@ -97,10 +97,15 @@ export default function MainApp() {
   useEffect(() => {
     prevViewRef.current = prevView;
   }, [prevView]);
+  // Verdadeiro só enquanto a NOSSA entrada de histórico está no topo. Impede `closeOverlay` de
+  // chamar `history.back()` quando não há o que desempilhar (o back sairia do PWA).
+  const overlayPushed = useRef(false);
   useEffect(() => {
     if (!overlay) return;
     window.history.pushState({ ttOverlay: true }, "");
+    overlayPushed.current = true;
     function onPop() {
+      overlayPushed.current = false;
       setView(prevViewRef.current);
     }
     window.addEventListener("popstate", onPop);
@@ -108,8 +113,12 @@ export default function MainApp() {
   }, [overlay]);
 
   function closeOverlay() {
-    // Desfaz a entrada empurrada quando a sobreposição abriu; o `popstate` faz o setView.
-    window.history.back();
+    if (overlayPushed.current) {
+      overlayPushed.current = false;
+      window.history.back(); // dispara o popstate, que faz o setView
+    } else {
+      setView(prevViewRef.current);
+    }
   }
 
   function openTab(key: "home" | ItemType) {

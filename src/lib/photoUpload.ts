@@ -1,5 +1,11 @@
 import { IMG_URL_COL, TYPE_TAB, type ItemType } from "@/lib/catalog";
-import { applyServerPatch, type ItemTab } from "@/lib/offline/sync";
+import { applyServerPatch, syncEvents, waitForRealId, type ItemTab } from "@/lib/offline/sync";
+import {
+  listPhotoOutbox,
+  putPhotoOutbox,
+  removePhotoOutbox,
+  type PhotoOutboxEntry,
+} from "@/lib/offline/db";
 import { SCHEMA } from "@/lib/itemSchema";
 import { clearLocalPreview } from "@/lib/localPhotoPreview";
 import {
@@ -386,45 +392,146 @@ export interface PhotoUploadEventDetail {
   result: UploadPhotoResult;
 }
 
-/** Emite "done" quando um envio em segundo plano termina - é como uma tela que já fechou (voltou
- *  pra lista antes do envio acabar) ainda avisa o usuário. Ver `GlobalPhotoToast`. */
+/** Emite "done" quando um envio em segundo plano termina EM DEFINITIVO (sucesso, ou depois de
+ *  esgotar as tentativas) - é como uma tela que já fechou (voltou pra lista antes do envio acabar)
+ *  ainda avisa o usuário. Falha intermediária não emite: vai ser retentada. Ver `GlobalPhotoToast`. */
 export const photoUploadEvents = new EventTarget();
 
-/** Envios em andamento, por `${type}:${id}` - permite reabrir o MESMO item e ver "Enviando…" em
- *  vez da foto velha, e impede dois envios paralelos pro mesmo item. */
+const TAB_TYPE: Record<ItemTab, ItemType> = {
+  beer: "beer",
+  wine: "wine",
+  dest: "spirit",
+  drink: "drink",
+};
+
+/** Quantas vezes tentar antes de desistir. O Apps Script oscila muito (10s a 80s, às vezes
+ *  HTTP 500) - ver seção 8.1 do MIGRACAO_SHEETS.md -, então vale insistir. Com o flush a cada 45s,
+ *  são ~6 min de tentativas. */
+const MAX_PHOTO_ATTEMPTS = 8;
+
+/** Envios em andamento, por `${tab}:${id}` - permite reabrir o MESMO item e ver "Enviando…" em vez
+ *  da foto velha, e impede dois envios paralelos pro mesmo item. */
 const emCurso = new Map<string, Promise<UploadPhotoResult>>();
 
-function chave(type: ItemType, id: string): string {
-  return `${type}:${id}`;
+function isTempId(id: string): boolean {
+  return !/^\d+$/.test(id);
 }
 
 export function getPendingPhotoUpload(type: ItemType, id: string): Promise<UploadPhotoResult> | undefined {
-  return emCurso.get(chave(type, id));
+  return emCurso.get(`${TYPE_TAB[type]}:${id}`);
 }
 
 /**
- * Dispara o envio e NÃO espera terminar - quem chama segue em frente (`DetailScreen.save()` fecha
- * a tela na hora). O resultado chega pelo `photoUploadEvents` e, dando certo, direto no cache
- * local, sem precisar de nenhuma tela aberta.
+ * Enfileira a foto pra subir. **Grava no IndexedDB ANTES de tocar a rede** (`putPhotoOutbox`):
+ * daí em diante o app pode ser fechado, morto pelo sistema ou perder o sinal que a foto não some -
+ * é retomada no próximo boot / reconexão (ver `flushPhotoOutbox`/`initPhotoOutbox`). Não espera o
+ * envio terminar; quem chama (`DetailScreen.save()`) segue em frente e fecha a tela.
+ *
+ * `id` pode ser temporário (item recém-criado, o `createItem` do texto ainda não sincronizou) - o
+ * flush espera o remap antes de mandar, e `remapItemId` (sync.ts) reaponta a entrada da fila.
  */
 export function queuePhotoUpload(type: ItemType, id: string, photo: PreparedPhoto): void {
-  const k = chave(type, id);
-  const tarefa = uploadPreparedPhoto(type, id, photo);
-  emCurso.set(k, tarefa);
-  void tarefa
-    .then((result) => {
-      photoUploadEvents.dispatchEvent(
-        new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id, result } }),
-      );
-      // Termina o papel do preview local da lista (ver localPhotoPreview.ts): dando certo, a
-      // coluna *_img_url real já está no cache (`applyServerPatch`, dentro de uploadPreparedPhoto)
-      // e a lista já pode usar ela; falhando, não faz sentido segurar um preview de uma foto que
-      // não subiu.
-      clearLocalPreview(TYPE_TAB[type] as ItemTab, id);
-    })
-    .finally(() => {
+  const entry: PhotoOutboxEntry = {
+    localId: crypto.randomUUID(),
+    tab: TYPE_TAB[type] as ItemTab,
+    itemId: id,
+    base64: photo.base64,
+    mimeType: photo.mimeType,
+    filename: photo.filename,
+    createdAt: Date.now(),
+    attempts: 0,
+  };
+  void putPhotoOutbox(entry).then(() => flushPhotoOutbox());
+}
+
+function stubDiagnostics(entry: PhotoOutboxEntry): PhotoDiagnostics {
+  return {
+    arquivo: entry.filename,
+    tipo: entry.mimeType,
+    tamanhoKb: Math.round((entry.base64.length * 0.75) / 1024),
+    navegador: capacidadesDoNavegador(),
+    etapas: [`fila: tentativa ${entry.attempts + 1}`],
+    erro: entry.lastError,
+  };
+}
+
+let flushing = false;
+
+/**
+ * Tenta subir toda foto pendente na fila. Idempotente e reentrante-safe (`flushing`). Uma falha
+ * numa foto não trava as outras - incrementa `attempts` e segue; a próxima rodada retenta.
+ */
+export async function flushPhotoOutbox(): Promise<void> {
+  if (flushing) return;
+  if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  flushing = true;
+  try {
+    const entries = await listPhotoOutbox();
+    for (const entry of entries) {
+      if (entry.attempts >= MAX_PHOTO_ATTEMPTS) continue;
+
+      let itemId = entry.itemId;
+      if (isTempId(itemId)) {
+        // O createItem do texto ainda não sincronizou. Espera curta pelo remap; se não vier,
+        // deixa pra próxima rodada sem gastar tentativa.
+        const real = await Promise.race([
+          waitForRealId(entry.tab, itemId),
+          new Promise<null>((r) => setTimeout(() => r(null), 8000)),
+        ]);
+        if (!real) continue;
+        itemId = real;
+      }
+
+      const type = TAB_TYPE[entry.tab];
+      const k = `${entry.tab}:${itemId}`;
+      const photo: PreparedPhoto = {
+        base64: entry.base64,
+        mimeType: entry.mimeType,
+        filename: entry.filename,
+        previewUrl: "",
+        larguraKb: Math.round((entry.base64.length * 0.75) / 1024),
+        diagnostics: stubDiagnostics(entry),
+      };
+      const tarefa = uploadPreparedPhoto(type, itemId, photo);
+      emCurso.set(k, tarefa);
+      const result = await tarefa;
       if (emCurso.get(k) === tarefa) emCurso.delete(k);
-    });
+
+      if (result.ok) {
+        await removePhotoOutbox(entry.localId);
+        clearLocalPreview(entry.tab, itemId);
+        photoUploadEvents.dispatchEvent(
+          new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id: itemId, result } }),
+        );
+      } else {
+        const atualizada = { ...entry, itemId, attempts: entry.attempts + 1, lastError: result.error };
+        await putPhotoOutbox(atualizada);
+        if (atualizada.attempts >= MAX_PHOTO_ATTEMPTS) {
+          // Desistiu: aí sim avisa (a linha fica no IndexedDB pra um retry manual futuro).
+          photoUploadEvents.dispatchEvent(
+            new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id: itemId, result } }),
+          );
+        }
+      }
+    }
+  } finally {
+    flushing = false;
+  }
+}
+
+let inited = false;
+
+/** Chamar uma vez no boot client-side (ver CatalogProvider), ao lado de `initSync`. */
+export function initPhotoOutbox(): void {
+  if (inited || typeof window === "undefined") return;
+  inited = true;
+  void flushPhotoOutbox();
+  window.addEventListener("online", () => void flushPhotoOutbox());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void flushPhotoOutbox();
+  });
+  syncEvents.addEventListener("remap", () => void flushPhotoOutbox());
+  setInterval(() => void flushPhotoOutbox(), 45_000);
 }
 
 /** Laudo em texto, pro botão "Detalhes" do erro - é isto que o Carlos me manda por print quando

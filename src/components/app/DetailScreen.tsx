@@ -17,7 +17,7 @@ import {
 import { photoDateFromBytes, toDateInputValue } from "@/lib/photoDate";
 import { lerBytes } from "@/lib/imageDecode";
 import { scanLabelBase64 } from "@/lib/labelScan";
-import { syncEvents, waitForRealId, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
+import { syncEvents, type ItemTab, type RemapDetail } from "@/lib/offline/sync";
 import { setLocalPreview } from "@/lib/localPhotoPreview";
 import { parseNumBR, toDisplayBR, toFormBR } from "@/lib/numberBR";
 import {
@@ -353,10 +353,12 @@ export default function DetailScreen({
     if (pronta) {
       // Mesmo preview que a tela de edição mostrou, oferecido pra LISTA (ver localPhotoPreview.ts,
       // pedido do Carlos 2026-09-04: "o item volta pra lista, mas o campo de imagem não traz a
-      // imagem"). Registra já no id local - `setLocalPreview` acompanha o remap sozinho, então não
-      // precisa esperar `waitForRealId` só pra isso aparecer.
+      // imagem"). Registra já no id local - `setLocalPreview` acompanha o remap sozinho.
       setLocalPreview(tab, id, pronta.previewUrl);
-      void waitForRealId(tab, id).then((realId) => queuePhotoUpload(type, realId, pronta));
+      // Enfileira: `queuePhotoUpload` grava a foto no IndexedDB ANTES de tocar a rede (2026-09-09),
+      // então ela sobrevive à tela fechar e até ao app ser morto - retomada no próximo boot. A
+      // espera pelo id real (item novo) acontece dentro da fila, não aqui.
+      queuePhotoUpload(type, id, pronta);
     }
     // A posse do object URL passou pro preview local (`setLocalPreview`) - `clearLocalPreview`
     // é quem revoga, quando o envio de verdade terminar. Só limpa a REFERÊNCIA daqui, nunca
@@ -973,6 +975,14 @@ function ComboBox({
     return arr.slice(0, 40);
   }, [suggestions, value]);
 
+  // Fecha no blur (com um respiro pro toque numa opção registrar antes). Nada de um catcher
+  // `fixed inset-0`: com ele aberto, o toque no botão Salvar do cabeçalho e nos outros campos era
+  // engolido pelo catcher em vez de agir (bug do v21 - relato do Carlos 2026-09-09: "salvamento
+  // instável").
+  function fecharEmBreve() {
+    window.setTimeout(() => setOpen(false), 150);
+  }
+
   return (
     <div className="relative">
       <input
@@ -983,28 +993,27 @@ function ComboBox({
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
+        onBlur={fecharEmBreve}
         className={inputCls}
       />
       {open && matches.length > 0 && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
-            {matches.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => {
-                  onChange(s);
-                  onPick?.(s);
-                  setOpen(false);
-                }}
-                className="block w-full truncate rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold"
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-        </>
+        <div className="absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
+          {matches.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                onChange(s);
+                onPick?.(s);
+                setOpen(false);
+              }}
+              className="block w-full truncate rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   );

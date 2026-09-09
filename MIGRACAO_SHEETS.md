@@ -1251,6 +1251,38 @@ Lote de 8 ajustes.
 Auth/Theme/useOfflineData) e build limpos; testes puros verdes. Browser pane proibida no projeto -
 Carlos confere no aparelho.
 
+## 8.19 Salvamento de foto instável — fila persistente (2026-09-09) — v22
+
+Relato do Carlos: "salvamento de arquivos instável" - item 1 ok, item 2 salvou dados mas não a
+foto, item 3 não salvou nada. Duas causas:
+
+1. **`ComboBox` (v21) engolia toques.** Quando aberto, renderizava um `<div className="fixed
+   inset-0 z-10">` de catch-all por cima da tela inteira, cabeçalho incluso. Com a lista de
+   sugestões aberta (fácil de deixar assim - é um campo de texto), o toque em **Salvar** era
+   comido pelo catcher em vez de salvar; idem o toque no botão de foto. Corrigido: `ComboBox`
+   fecha no `onBlur` (com 150ms de respiro pro toque numa opção), sem catcher. Mesmo tratamento
+   defensivo em `MainApp.closeOverlay` (só chama `history.back()` se a entrada empurrada ainda
+   está no topo, senão faria o back sair do PWA).
+
+2. **Foto sumia sem rastro se o app fosse morto no meio do upload.** O upload começava no Salvar,
+   em segundo plano, e o controle de tentativas era um `Map` **em memória** (`emCurso`). PWA no
+   celular é morto agressivamente - fechou o app antes do upload terminar, a foto ia embora, sem
+   erro nenhum na tela. Agora existe uma **fila de fotos no IndexedDB** (`photoOutbox`, store nova,
+   DB v2), espelhando o `outbox` de texto:
+   - `queuePhotoUpload` grava a foto (base64) no IndexedDB **antes** de tocar a rede.
+   - `flushPhotoOutbox` tenta subir tudo que está pendente; falha numa foto não trava as outras
+     (incrementa `attempts`, retoma na próxima rodada). Até 8 tentativas (~6 min com flush de 45s).
+   - `initPhotoOutbox` (chamado no boot, ao lado de `initSync`) retoma a fila no boot, ao
+     reconectar, ao voltar o foco e a cada 45s; e sempre que um `remap` de id acontece.
+   - `remapItemId` (sync.ts) reaponta as entradas da fila de foto pro id real (a foto de um item
+     novo é enfileirada antes de o `createItem` sincronizar).
+   - `GlobalPhotoToast`: erro agora **fica na tela até o toque** (antes sumia em 3s e o Carlos
+     nem via). Sucesso continua sumindo sozinho. Falha intermediária não vira toast (vai retentar).
+
+**Verificação:** `tsc`, lint (só os pré-existentes) e build limpos. Browser pane proibida -
+Carlos confere no aparelho: criar 3 itens seguidos com foto, fechar o app logo depois, reabrir e
+ver as fotos aparecerem.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

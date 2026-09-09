@@ -8,8 +8,10 @@ import {
   getOne,
   listAll,
   listOutbox,
+  listPhotoOutbox,
   putAll,
   putOne,
+  putPhotoOutbox,
   removeOutboxEntry,
   setMeta,
   updateOutboxEntry,
@@ -357,6 +359,15 @@ async function remapItemId(tab: ItemTab, oldId: string, newId: string, pendingEn
     if (other.tab === tab && other.itemId === oldId) {
       other.itemId = newId;
       await updateOutboxEntry(other);
+    }
+  }
+  // A fila de fotos também aponta pro id (a foto de um item novo é enfileirada antes de o
+  // createItem sincronizar) - repontar pro id real, senão o upload cai numa linha que não existe.
+  const photos = await listPhotoOutbox();
+  for (const p of photos) {
+    if (p.tab === tab && p.itemId === oldId) {
+      p.itemId = newId;
+      await putPhotoOutbox(p);
     }
   }
   notifyRemap({ tab, oldId, newId });

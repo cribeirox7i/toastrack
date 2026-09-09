@@ -5,6 +5,7 @@ import { useAuth } from "@/components/AuthProvider";
 import { EMPTY_CATALOG, mapRows, type Catalog } from "@/lib/catalog";
 import { useOfflineItems, useOfflineLookups } from "@/lib/offline/useOfflineData";
 import { initSync, pullItemsIfStale } from "@/lib/offline/sync";
+import { initPhotoOutbox } from "@/lib/photoUpload";
 
 type CatalogContextValue = {
   catalog: Catalog;
@@ -28,6 +29,7 @@ export default function CatalogProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     initSync();
+    initPhotoOutbox();
   }, []);
 
   const beer = useOfflineItems("beer");
