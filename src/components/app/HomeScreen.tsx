@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
 import Icon from "@/components/Icon";
 import { Thumb, Stars, formatDate } from "@/components/ui";
@@ -72,6 +72,28 @@ export default function HomeScreen({
     return () => clearInterval(t);
   }, [slides.length]);
 
+  // Arrastar pro lado troca de slide (pedido do Carlos 2026-09-09). `swiped` distingue arraste de
+  // toque, pra o arraste não abrir o item por engano.
+  const touchX = useRef<number | null>(null);
+  const swiped = useRef(false);
+  function onTouchStart(e: React.TouchEvent) {
+    touchX.current = e.touches[0].clientX;
+    swiped.current = false;
+  }
+  function onTouchMove(e: React.TouchEvent) {
+    if (touchX.current != null && Math.abs(e.touches[0].clientX - touchX.current) > 10) {
+      swiped.current = true;
+    }
+  }
+  function onTouchEnd(e: React.TouchEvent) {
+    if (touchX.current == null) return;
+    const dx = e.changedTouches[0].clientX - touchX.current;
+    touchX.current = null;
+    if (slides.length > 1 && Math.abs(dx) > 50) {
+      setIdx((i) => (i + (dx < 0 ? 1 : -1) + slides.length) % slides.length);
+    }
+  }
+
   const results = useMemo(
     () => (searching ? searchCatalog(catalog, searchQuery) : []),
     [searching, catalog, searchQuery],
@@ -121,11 +143,22 @@ export default function HomeScreen({
             {loading ? "Carregando…" : "Adicione itens para ver destaques aqui."}
           </div>
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <div
+            className="overflow-hidden rounded-2xl border border-border bg-surface"
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          >
             {slides.map(
               (slide, i) =>
                 i === safeIdx && (
-                  <div key={`${slide.type}-${slide.id}`} className="flex gap-4 p-4">
+                  <div
+                    key={`${slide.type}-${slide.id}`}
+                    onClick={() => {
+                      if (!swiped.current) onOpenItem(slide);
+                    }}
+                    className="flex cursor-pointer gap-4 p-4 transition active:scale-[0.99]"
+                  >
                     <Thumb label={slide.name} src={slide.imgUrl} className="h-32 w-28 shrink-0 rounded-xl" />
                     <div className="flex min-w-0 flex-col justify-center">
                       <div className="text-[11px] font-bold uppercase tracking-wide text-accent">

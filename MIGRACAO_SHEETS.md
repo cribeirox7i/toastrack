@@ -1221,6 +1221,36 @@ também ganhou `max-w-[calc(100vw-2.5rem)]` como trava.
 **Verificação:** `tsc`, lint e build limpos; testes puros verdes; PNGs gerados com `sharp`,
 conferidos visualmente.
 
+## 8.18 Navegação, dropdowns padronizadas e carrossel (2026-09-09) — v21
+
+Lote de 8 ajustes.
+
+1. **Modo de exibição da lista não volta mais pro "deck".** `viewMode` (deck/tabela/galeria)
+   estava num `useState` da `ListScreen`, que desmonta ao abrir o Detalhe - ao voltar, remontava
+   no padrão. Elevado pro `MainApp` (`listViewMode`), passado como `viewMode`/`onViewModeChange`.
+2. **Cervejaria/produtor e "estilo livre" agora têm dropdown das opções já cadastradas**
+   (`ComboBox` em DetailScreen) - lista filtrável dos valores distintos do catálogo, digitação
+   livre continua valendo. `EditField` renderiza `ComboBox` quando recebe `suggestions`.
+3. **Ao escolher a cervejaria/produtor, herda o país** de itens já cadastrados da mesma casa
+   (`preencherPaisPelaProducao` reusa `acharCervejariaCanonica`) - só se o país estiver vazio.
+   Dispara no `onPick` do ComboBox (escolha de sugestão), não a cada tecla.
+4. **Ao definir o "estilo livre", herda o BJCP** dos cadastros anteriores - já existia via
+   `bjcpDoEstiloLivre`/`construirDeParaEstiloBjcp`; agora vale também escolhendo da lista.
+5. **Clicar no carrossel da Home abre o item** exibido (`onOpenItem(slide)`).
+6. **Arrastar o carrossel pro lado troca de slide** (touch handlers no container; `swiped` ref
+   distingue arraste de toque pra não abrir o item por engano).
+7. **Botão "voltar" do celular fecha a tela de sobreposição** (detalhe/perfil/stats) em vez de
+   sair do PWA. `MainApp` empurra uma entrada no histórico ao abrir a sobreposição e trata
+   `popstate`; os botões "Voltar" internos chamam `history.back()` (`closeOverlay`).
+8. **Dropdowns de País e BJCP padronizadas como lista em tela cheia com busca no topo**
+   (`PickerModal`, novo componente). `CountrySelect` virou gatilho + `PickerModal`; o BJCP saiu
+   do `<select>` nativo pra `BjcpSelect` (gatilho + `PickerModal`). Os `<select>` de cor/tipo de
+   vinho e destilado ficam nativos (Carlos citou só país e BJCP).
+
+**Verificação:** `tsc`, lint (só os erros pré-existentes de `set-state-in-effect` em
+Auth/Theme/useOfflineData) e build limpos; testes puros verdes. Browser pane proibida no projeto -
+Carlos confere no aparelho.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

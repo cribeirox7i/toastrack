@@ -12,7 +12,7 @@ import { useCatalog } from "@/components/CatalogProvider";
 import { deleteItem, type Item, type ItemType } from "@/lib/catalog";
 import type { SecondaryProfile } from "@/lib/profiles";
 
-type ViewMode = "deck" | "table" | "gallery";
+export type ViewMode = "deck" | "table" | "gallery";
 type SearchField = "all" | "name" | "manufacturer" | "country";
 type SortField = "name" | "manufacturer" | "category" | "date" | "rating" | "id";
 
@@ -79,6 +79,8 @@ export default function ListScreen({
   onDuplicateItem,
   onAddItem,
   onCatalogChanged,
+  viewMode,
+  onViewModeChange,
 }: {
   listType: ItemType;
   ownUserId: string;
@@ -93,6 +95,10 @@ export default function ListScreen({
   onDuplicateItem: (item: Item) => void;
   onAddItem: () => void;
   onCatalogChanged: () => void;
+  // Elevado ao MainApp (pedido do Carlos 2026-09-09): a ListScreen desmonta ao abrir o Detalhe,
+  // então guardar o modo aqui fazia ele voltar sempre pro "deck" ao clicar em Voltar.
+  viewMode: ViewMode;
+  onViewModeChange: (m: ViewMode) => void;
 }) {
   const isOwnView = !viewedProfileId || viewedProfileId === ownUserId;
   const hasSecondary = secondaryProfiles.length > 0;
@@ -100,7 +106,6 @@ export default function ListScreen({
 
   const { catalog, loading } = useCatalog();
   const items = catalog[listType];
-  const [viewMode, setViewMode] = useState<ViewMode>("deck");
   const [query, setQuery] = useState("");
   const [searchField, setSearchField] = useState<SearchField>("all");
   // Padrão por código (id), decrescente - pedido do Carlos 2026-09-04: o item mais recente
@@ -397,7 +402,7 @@ export default function ListScreen({
           return (
             <button
               key={vm.key}
-              onClick={() => setViewMode(vm.key)}
+              onClick={() => onViewModeChange(vm.key)}
               title={vm.label}
               className="flex h-[38px] w-10 items-center justify-center rounded-[10px] border"
               style={{

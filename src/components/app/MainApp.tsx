@@ -14,7 +14,7 @@ import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
 import { fetchFollowedProfiles, type SecondaryProfile } from "@/lib/profiles";
 import HomeScreen from "@/components/app/HomeScreen";
 import ProfileScreen from "@/components/app/ProfileScreen";
-import ListScreen from "@/components/app/ListScreen";
+import ListScreen, { type ViewMode } from "@/components/app/ListScreen";
 import DetailScreen from "@/components/app/DetailScreen";
 import StatsScreen from "@/components/app/StatsScreen";
 import GlobalPhotoToast from "@/components/app/GlobalPhotoToast";
@@ -55,6 +55,9 @@ export default function MainApp() {
   const [prevView, setPrevView] = useState<"home" | ItemType>("home");
   const [statsType, setStatsType] = useState<ItemType>("beer");
   const [query, setQuery] = useState("");
+  // Modo de exibição da lista (deck/tabela/galeria) - fica AQUI porque a ListScreen desmonta ao
+  // abrir o Detalhe; guardado nela, voltava sempre pro "deck" (relato do Carlos 2026-09-09).
+  const [listViewMode, setListViewMode] = useState<ViewMode>("deck");
 
   // Detail/edit screen state.
   const [detailType, setDetailType] = useState<ItemType>("beer");
@@ -84,6 +87,31 @@ export default function MainApp() {
 
   const main = isMainView(view);
 
+  // Botão "voltar" do celular / navegador: enquanto uma tela de sobreposição (detalhe/perfil/
+  // stats) está aberta, o back deve FECHAR ela e voltar pra lista - não sair do PWA (pedido do
+  // Carlos 2026-09-09). Empurra uma entrada no histórico ao abrir a sobreposição; o `popstate`
+  // devolve a view anterior. Os botões "Voltar" internos chamam `history.back()`, pra o histórico
+  // desenrolar simétrico.
+  const overlay = view === "detail" || view === "profile" || view === "stats";
+  const prevViewRef = useRef(prevView);
+  useEffect(() => {
+    prevViewRef.current = prevView;
+  }, [prevView]);
+  useEffect(() => {
+    if (!overlay) return;
+    window.history.pushState({ ttOverlay: true }, "");
+    function onPop() {
+      setView(prevViewRef.current);
+    }
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [overlay]);
+
+  function closeOverlay() {
+    // Desfaz a entrada empurrada quando a sobreposição abriu; o `popstate` faz o setView.
+    window.history.back();
+  }
+
   function openTab(key: "home" | ItemType) {
     setView(key);
     setQuery("");
@@ -98,7 +126,7 @@ export default function MainApp() {
     setView("stats");
   }
   function goBack() {
-    setView(prevView);
+    closeOverlay();
   }
   function openItem(item: Item) {
     if (isMainView(view)) setPrevView(view);
@@ -133,7 +161,7 @@ export default function MainApp() {
     setView("detail");
   }
   function closeDetail() {
-    setView(prevView);
+    closeOverlay();
   }
 
   const avatarBtn = (
@@ -228,6 +256,8 @@ export default function MainApp() {
             onDuplicateItem={(item) => duplicateItem(item.type, item.id)}
             onAddItem={() => addItem(view)}
             onCatalogChanged={reloadCatalog}
+            viewMode={listViewMode}
+            onViewModeChange={setListViewMode}
           />
         )}
         {view === "detail" && (

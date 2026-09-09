@@ -30,6 +30,7 @@ import {
 import { useCatalog } from "@/components/CatalogProvider";
 import PhotoViewer from "@/components/PhotoViewer";
 import CountrySelect, { CountryFlag } from "@/components/CountrySelect";
+import PickerModal from "@/components/PickerModal";
 import {
   SCHEMA,
   buildFieldRows,
@@ -84,6 +85,15 @@ export default function DetailScreen({
     () => (type === "beer" ? construirDeParaEstiloBjcp(catalog.beer) : new Map<string, string>()),
     [type, catalog.beer],
   );
+
+  // Sugestões dos itens já cadastrados pros campos de texto livre (pedido do Carlos 2026-09-09:
+  // dropdown baseado no que já existe, digitação livre também vale). Produtor/cervejaria sai do
+  // próprio tipo; "estilo livre" só existe pra cerveja.
+  const producerSuggestions = useMemo(
+    () => distinct(catalog[type].map((i) => i.manufacturer)),
+    [catalog, type],
+  );
+  const estiloSuggestions = useMemo(() => distinct(catalog.beer.map((i) => i.category)), [catalog.beer]);
 
   const [currentId, setCurrentId] = useState<string | null>(itemId);
   const [editing, setEditing] = useState(initialEditing);
@@ -279,6 +289,21 @@ export default function DetailScreen({
     // valuesRef no mesmo tick em que o campo de data é alterado.
     valuesRef.current = { ...valuesRef.current, [col]: v };
     setValues((prev) => ({ ...prev, [col]: v }));
+  }
+
+  /**
+   * Ao escolher/definir a cervejaria (ou produtor), tenta herdar o país de itens já cadastrados
+   * da mesma casa (pedido do Carlos 2026-09-09). Só preenche se o país ainda estiver vazio -
+   * escolha do usuário nunca é sobrescrita.
+   */
+  function preencherPaisPelaProducao(nomeProducao: string) {
+    if ((valuesRef.current.pais_id ?? "").trim()) return;
+    const existentes = catalog[type].map((i) => ({ manufacturer: i.manufacturer, country: i.country }));
+    const canonica = acharCervejariaCanonica(nomeProducao, existentes);
+    if (!canonica?.paisNome) return;
+    const alvo = canonica.paisNome.trim().toLowerCase();
+    const pais = lookup.pais.find((p) => p.pais_nome.toLowerCase() === alvo);
+    if (pais) set("pais_id", String(pais.pais_id));
   }
 
   /**
@@ -715,7 +740,14 @@ export default function DetailScreen({
             {[nameField, producerField].map((f) => (
               <div key={f.col}>
                 <label className={labelCls}>{f.label}</label>
-                <EditField f={f} value={values[f.col] ?? ""} onChange={(v) => set(f.col, v)} lookup={lookup} />
+                <EditField
+                  f={f}
+                  value={values[f.col] ?? ""}
+                  onChange={(v) => set(f.col, v)}
+                  lookup={lookup}
+                  suggestions={f === producerField ? producerSuggestions : undefined}
+                  onPick={f === producerField ? (v) => preencherPaisPelaProducao(v) : undefined}
+                />
               </div>
             ))}
 
@@ -739,6 +771,7 @@ export default function DetailScreen({
                         }
                       }}
                       lookup={lookup}
+                      suggestions={f.col.endsWith("_estilo_livre") ? estiloSuggestions : undefined}
                     />
                     {f.kind === "bjcp" && (
                       <BjcpStyleHint
@@ -909,16 +942,128 @@ function displayValue(
   return raw + (f.suffix ?? "");
 }
 
+/** Valores distintos não-vazios, aparados, ordem alfabética pt-BR. */
+function distinct(vals: string[]): string[] {
+  const uniq = Array.from(new Set(vals.map((v) => (v ?? "").trim()).filter(Boolean)));
+  return uniq.sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+/**
+ * Campo de texto livre com sugestões dos itens já cadastrados (pedido do Carlos 2026-09-09).
+ * Digitar continua valendo - a lista é só atalho. `onPick` dispara só quando o usuário escolhe
+ * uma sugestão (não a cada tecla), pra efeitos colaterais tipo "herdar o país da cervejaria".
+ */
+function ComboBox({
+  value,
+  onChange,
+  onPick,
+  suggestions,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onPick?: (v: string) => void;
+  suggestions: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const matches = useMemo(() => {
+    const q = value.trim().toLowerCase();
+    const arr = q
+      ? suggestions.filter((s) => s.toLowerCase().includes(q) && s.toLowerCase() !== q)
+      : suggestions;
+    return arr.slice(0, 40);
+  }, [suggestions, value]);
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => {
+          onChange(e.target.value);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        className={inputCls}
+      />
+      {open && matches.length > 0 && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute inset-x-0 top-[calc(100%+4px)] z-20 max-h-56 overflow-y-auto rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
+            {matches.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => {
+                  onChange(s);
+                  onPick?.(s);
+                  setOpen(false);
+                }}
+                className="block w-full truncate rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+const bjcpRotulo = (b: BjcpEstilo) =>
+  b.bjcp21_subestilo ? `${b.bjcp21_cod} - ${b.bjcp21_subestilo}` : b.bjcp21_cod;
+
+/** Seletor de estilo BJCP em tela cheia com busca (pedido do Carlos 2026-09-09). */
+function BjcpSelect({
+  value,
+  onChange,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: BjcpEstilo[];
+}) {
+  const [open, setOpen] = useState(false);
+  const sel = options.find((b) => String(b.bjcp21_id) === value);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex w-full items-center gap-2 rounded-xl border border-border bg-bg px-3.5 py-2.5 text-[14px] outline-none focus:border-accent"
+      >
+        <span className={`flex-1 truncate text-left ${sel ? "" : "text-muted"}`}>
+          {sel ? bjcpRotulo(sel) : "-"}
+        </span>
+        <Icon name="chevronDown" size={16} className="text-muted" />
+      </button>
+      <PickerModal
+        open={open}
+        title="Estilo BJCP"
+        value={value}
+        clearLabel="- sem estilo"
+        onClose={() => setOpen(false)}
+        onPick={onChange}
+        options={options.map((b) => ({ key: String(b.bjcp21_id), label: bjcpRotulo(b) }))}
+      />
+    </>
+  );
+}
+
 function EditField({
   f,
   value,
   onChange,
   lookup,
+  suggestions,
+  onPick,
 }: {
   f: Field;
   value: string;
   onChange: (v: string) => void;
   lookup: Lookup;
+  suggestions?: string[];
+  onPick?: (v: string) => void;
 }) {
   if (f.kind === "date") {
     return <input type="date" value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />;
@@ -950,16 +1095,10 @@ function EditField({
     return <CountrySelect value={value} onChange={onChange} options={lookup.pais} />;
   }
   if (f.kind === "bjcp") {
-    return (
-      <select value={value} onChange={(e) => onChange(e.target.value)} className={inputCls}>
-        <option value="">-</option>
-        {lookup.bjcp.map((b) => (
-          <option key={b.bjcp21_id} value={b.bjcp21_id}>
-            {b.bjcp21_subestilo || b.bjcp21_cod}
-          </option>
-        ))}
-      </select>
-    );
+    return <BjcpSelect value={value} onChange={onChange} options={lookup.bjcp} />;
+  }
+  if (suggestions) {
+    return <ComboBox value={value} onChange={onChange} onPick={onPick} suggestions={suggestions} />;
   }
   return <input type="text" value={value} onChange={(e) => onChange(e.target.value)} className={inputCls} />;
 }
