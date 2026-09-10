@@ -1322,6 +1322,35 @@ de um usuário só; era assim no fallback pré-contador também).
 
 **Verificação:** `tsc`, lint (só os pré-existentes) e build limpos.
 
+## 8.22 Item novo sumindo da lista, stats, obrigatórios, BJCP (2026-09-10) — v24
+
+1. **Item recém-salvo não aparecia na lista por minutos.** Ele ENTRAVA no IndexedDB e no estado na
+   hora (outbox ok), mas a ordenação padrão por id-desc tratava o id temporário (uuid) como `0`,
+   jogando o item pro fim de ~3600 linhas, fora da janela de paginação de 60. Agora id não-numérico
+   conta como `+Infinity` no comparador de id → vai pro TOPO no desc e aparece na hora. Depois do
+   sync o remap troca pro id real (que também é o maior) e ele fica onde estava.
+2. **Bandeira do país antes do produtor** no ranking "Por fabricante" do Stats (`manufacturerFlags`
+   = país mais comum entre os itens daquela casa; `RankSection` já aceitava `flags`).
+3. **Campos obrigatórios pra toda bebida** (`DetailScreen.save()`): foto, nome, nota e país. Falta
+   algum → toast "Falta preencher: …" e não salva. Foto já existente (edição) ou recém-preparada
+   conta.
+4. **Estilo livre → BJCP ao escolher da lista** força o preenchimento (sobrescreve) - o `onPick`
+   do ComboBox chama `aplicarBjcpDoEstilo(v, true)`; digitar à mão continua só preenchendo se
+   vazio (`false`).
+5. **Dropdown de BJCP repetia o código.** A coluna `bjcp21_subestilo` da planilha já vem como
+   "01A - American Light Lager", e o rótulo era `${cod} - ${subestilo}` = "01A - 01A - American
+   Light Lager". Agora usa a coluna `bjcp21_estilo` ("American Light Lager") + o código à parte:
+   `bjcpRotulo` = `${bjcp21_cod} - ${bjcp21_estilo}`. `bjcp21_id` é único (sem linhas duplicadas);
+   códigos como 21B (8×) e 27A (9×) agora aparecem distinguíveis pelo nome do estilo. Precisou
+   levar `bjcp21_estilo` até o `Lookup` (itemSchema.ts, sync.ts `LookupsResponse`); `/api/lookups`
+   já mandava a coluna (o `read` da aba traz tudo).
+
+Também: o reset de foto "ao trocar de item" em `DetailScreen` foi removido - era código morto
+(desde 2026-09-08 "Duplicar" REMONTA a tela, não troca `currentId` no lugar) e virava lint.
+
+**Verificação:** `tsc`, lint (só os 4 pré-existentes) e build limpos; `test:beer-lookup` verde.
+Colunas de `list_bjcp_21` conferidas por sondagem (129 linhas, `bjcp21_id` único).
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

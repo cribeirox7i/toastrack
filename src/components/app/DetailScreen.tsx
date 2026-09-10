@@ -75,6 +75,7 @@ export default function DetailScreen({
   const producerField = fieldByRole(type, "producer")!;
   const ratingField = fieldByRole(type, "rating")!;
   const dateField = useMemo(() => fields.find((f) => f.kind === "date"), [fields]);
+  const paisField = useMemo(() => fields.find((f) => f.kind === "country"), [fields]);
   const fieldRows = useMemo(
     () => buildFieldRows(fields.filter((f) => f.role === "field")),
     [fields],
@@ -151,19 +152,11 @@ export default function DetailScreen({
     window.setTimeout(() => setToast(""), 2200);
   }
 
-  // Trocar de item sem desmontar a tela ("Duplicar" troca currentId no lugar) descarta a foto
-  // escolhida e ainda não salva - ela pertencia ao item anterior. Ajuste de estado durante a
-  // renderização, o padrão do React pra "resetar estado quando uma prop muda" (mesmo que o Thumb
-  // usa em ui.tsx); num efeito isto viraria um render em cascata.
-  const chaveDoItem = `${type}:${currentId}`;
-  const [prevChave, setPrevChave] = useState(chaveDoItem);
-  if (chaveDoItem !== prevChave) {
-    setPrevChave(chaveDoItem);
-    descartarFotoLocal();
-  }
-
   /** Joga fora a foto escolhida nesta edição e o preview dela. Nada disso chegou ao servidor -
-   *  a preparação é local e o envio só começa no Salvar -, então não há o que desfazer lá. */
+   *  a preparação é local e o envio só começa no Salvar -, então não há o que desfazer lá.
+   *  Chamado por `cancel()`; a limpeza no fim da vida da tela fica no efeito de unmount abaixo.
+   *  (Não há mais reset "ao trocar de item": desde 2026-09-08 "Duplicar" REMONTA a tela - a `key`
+   *  em MainApp inclui o id de origem -, então nasce com estado limpo por conta própria.) */
   function descartarFotoLocal() {
     if (previewRef.current) URL.revokeObjectURL(previewRef.current);
     previewRef.current = null;
@@ -270,16 +263,9 @@ export default function DetailScreen({
     const map = new Map(lookup.pais.map((p) => [String(p.pais_id), p.pais_img]));
     return (id: string) => map.get(id) ?? "";
   }, [lookup.pais]);
-  // Exibição mostra código + descrição do subestilo (pedido do Carlos 2026-09-04) - a coluna
-  // `bjcp21_subestilo` pode vir vazia pra algumas linhas da aba `list_bjcp_21`; nesse caso fica só
-  // o código, como antes.
+  // Rótulo "01A - American Light Lager" (ver bjcpRotulo) - tanto no dropdown quanto na exibição.
   const bjcpLabel = useMemo(() => {
-    const map = new Map(
-      lookup.bjcp.map((b) => [
-        String(b.bjcp21_id),
-        b.bjcp21_subestilo ? `${b.bjcp21_cod} - ${b.bjcp21_subestilo}` : b.bjcp21_cod,
-      ]),
-    );
+    const map = new Map(lookup.bjcp.map((b) => [String(b.bjcp21_id), bjcpRotulo(b)]));
     return (id: string) => map.get(id) ?? "";
   }, [lookup.bjcp]);
 
@@ -307,6 +293,18 @@ export default function DetailScreen({
   }
 
   /**
+   * Estilo livre -> id BJCP correlacionado pelo histórico de cervejas (item 4 do Carlos,
+   * 2026-09-08 e reforçado 2026-09-10). `forcar` sobrescreve um BJCP já preenchido - usado quando
+   * o usuário ESCOLHE o estilo da lista (sinal forte); digitar à mão só preenche se estiver vazio.
+   */
+  function aplicarBjcpDoEstilo(estilo: string, forcar: boolean) {
+    if (type !== "beer" || !estilo.trim()) return;
+    if (!forcar && (valuesRef.current.bjcp21_id ?? "").trim()) return;
+    const id = bjcpDoEstiloLivre(estilo, estiloParaBjcp);
+    if (id) set("bjcp21_id", id);
+  }
+
+  /**
    * Salvar é local-primeiro (ver `saveItem` em itemSchema.ts, redesenho de 2026-09-04): grava no
    * IndexedDB e enfileira no outbox, sem esperar rede nenhuma. Esta função nunca fica presa - o
    * try/finally garante que `saving` sempre volta a `false`, mesmo que algo dê errado, porque
@@ -314,8 +312,15 @@ export default function DetailScreen({
    * que o Carlos viu em 2026-09-04: HTTP 500 no meio, "quase um minuto e nada").
    */
   async function save() {
-    if (!(values[nameField.col] ?? "").trim()) {
-      showToast("Informe o nome.");
+    // Campos obrigatórios pra toda bebida (pedido do Carlos 2026-09-10): foto, nome, nota e país.
+    const faltando: string[] = [];
+    if (!(values[nameField.col] ?? "").trim()) faltando.push("nome");
+    if ((parseNumBR(values[ratingField.col]) || 0) <= 0) faltando.push("nota");
+    if (paisField && !(values[paisField.col] ?? "").trim()) faltando.push("país");
+    // Foto: uma já existente (imgUrl, edição) ou uma recém-preparada/em preparo conta.
+    if (!imgUrl && photoStatus !== "pronta" && photoStatus !== "preparando") faltando.push("foto");
+    if (faltando.length) {
+      showToast(`Falta preencher: ${faltando.join(", ")}`);
       return;
     }
     // A foto ainda está sendo comprimida: esperar aqui custa no máximo um segundo e evita salvar
@@ -765,13 +770,11 @@ export default function DetailScreen({
                       value={values[f.col] ?? ""}
                       onChange={(v) => {
                         set(f.col, v);
-                        // Estilo livre digitado/colado -> tenta o BJCP do de/para, se o BJCP ainda
-                        // estiver vazio (item 4 do Carlos 2026-09-08).
-                        if (f.col.endsWith("_estilo_livre") && v.trim() && !(valuesRef.current.bjcp21_id ?? "").trim()) {
-                          const id = bjcpDoEstiloLivre(v, estiloParaBjcp);
-                          if (id) set("bjcp21_id", id);
-                        }
+                        if (f.col.endsWith("_estilo_livre")) aplicarBjcpDoEstilo(v, false);
                       }}
+                      onPick={
+                        f.col.endsWith("_estilo_livre") ? (v) => aplicarBjcpDoEstilo(v, true) : undefined
+                      }
                       lookup={lookup}
                       suggestions={f.col.endsWith("_estilo_livre") ? estiloSuggestions : undefined}
                     />
@@ -1019,8 +1022,11 @@ function ComboBox({
   );
 }
 
+/** "01A - American Light Lager". Usa `bjcp21_estilo` + o código à parte - a coluna
+ *  `bjcp21_subestilo` da planilha já vem com o código embutido ("01A - American Light Lager"),
+ *  o que fazia o dropdown repetir o código (relato do Carlos 2026-09-10). */
 const bjcpRotulo = (b: BjcpEstilo) =>
-  b.bjcp21_subestilo ? `${b.bjcp21_cod} - ${b.bjcp21_subestilo}` : b.bjcp21_cod;
+  b.bjcp21_estilo ? `${b.bjcp21_cod} - ${b.bjcp21_estilo}` : b.bjcp21_subestilo || b.bjcp21_cod;
 
 /** Seletor de estilo BJCP em tela cheia com busca (pedido do Carlos 2026-09-09). */
 function BjcpSelect({

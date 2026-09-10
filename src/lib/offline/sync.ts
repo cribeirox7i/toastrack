@@ -280,6 +280,7 @@ export interface LookupsResponse {
   bjcp: {
     bjcp21_id: string;
     bjcp21_cod: string;
+    bjcp21_estilo?: string;
     bjcp21_subestilo?: string;
     bjcp21_abv_inicial?: string;
     bjcp21_abv_final?: string;

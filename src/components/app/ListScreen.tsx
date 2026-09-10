@@ -149,14 +149,15 @@ export default function ListScreen({
         av = a.date;
         bv = b.date;
       } else if (sortField === "id") {
-        // Comparação NUMÉRICA - id é string ("3591"), e comparar string faz "10" vir antes de
-        // "9". Passou despercebido enquanto "ID" era só uma opção a mais no menu; virou bug real
-        // ao se tornar o padrão (pedido do Carlos 2026-09-04: "ordenação padrão por código, desc").
-        // Item local ainda não sincronizado tem id de uuid (não numérico) - Number() vira NaN, que
-        // nenhuma comparação `<`/`>` numérica bate, então essas linhas ficam empatadas entre si;
-        // aceitável (é uma janela de poucos segundos até o outbox sincronizar).
-        av = Number(a.id) || 0;
-        bv = Number(b.id) || 0;
+        // Comparação NUMÉRICA - id é string ("3591"), e comparar string faz "10" vir antes de "9".
+        // Item recém-salvo ainda não sincronizado tem id de uuid (não numérico): ele é o MAIS
+        // recente, então conta como +infinito pra ir pro TOPO no desc (padrão) e aparecer na hora
+        // (pedido do Carlos 2026-09-10: "ao salvar, aparecer na lista na hora"). Antes virava 0 e
+        // afundava pro fim da lista de ~3600, fora da janela de paginação = "sumia" por minutos.
+        const na = Number(a.id);
+        const nb = Number(b.id);
+        av = Number.isFinite(na) ? na : Number.POSITIVE_INFINITY;
+        bv = Number.isFinite(nb) ? nb : Number.POSITIVE_INFINITY;
       } else {
         av = (a[sortField] || "").toLowerCase();
         bv = (b[sortField] || "").toLowerCase();

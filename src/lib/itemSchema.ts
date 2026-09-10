@@ -154,6 +154,10 @@ export function buildFieldRows(fields: Field[]): Field[][] {
 export type BjcpEstilo = {
   bjcp21_id: number;
   bjcp21_cod: string;
+  /** Nome do subestilo (ex.: "American Light Lager"). `bjcp21_subestilo` da planilha já vem como
+   *  "01A - American Light Lager" (código repetido) - por isso o dropdown usa este + o código à
+   *  parte, não aquele (pedido do Carlos 2026-09-10). */
+  bjcp21_estilo: string;
   bjcp21_subestilo: string;
   /** Faixas do guia BJCP (números; NaN quando a aba não tem o valor). Ver "preencher pelo estilo"
    *  em DetailScreen (pedido do Carlos 2026-09-07). */
@@ -185,6 +189,7 @@ export async function fetchLookups(): Promise<Lookup> {
     bjcp: data.bjcp.map((b) => ({
       bjcp21_id: Number(b.bjcp21_id),
       bjcp21_cod: b.bjcp21_cod,
+      bjcp21_estilo: b.bjcp21_estilo ?? "",
       bjcp21_subestilo: b.bjcp21_subestilo ?? "",
       abvIni: Number(b.bjcp21_abv_inicial),
       abvFim: Number(b.bjcp21_abv_final),
@@ -197,6 +202,7 @@ export async function fetchLookups(): Promise<Lookup> {
 type BjcpRaw = {
   bjcp21_id: string;
   bjcp21_cod: string;
+  bjcp21_estilo?: string;
   bjcp21_subestilo?: string;
   bjcp21_abv_inicial?: string;
   bjcp21_abv_final?: string;

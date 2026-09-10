@@ -85,6 +85,33 @@ export default function StatsScreen({ type }: { type: ItemType }) {
     return m;
   }, [items]);
 
+  // Bandeira por fabricante/produtor: o país mais comum entre os itens daquela casa (pedido do
+  // Carlos 2026-09-10 - bandeirinha antes do nome do produtor no ranking).
+  const manufacturerFlags = useMemo(() => {
+    const paisPorFab = new Map<string, Map<string, number>>();
+    for (const it of items) {
+      const fab = it.manufacturer.trim();
+      if (!fab || !it.country) continue;
+      const cont = paisPorFab.get(fab) ?? new Map<string, number>();
+      cont.set(it.country, (cont.get(it.country) ?? 0) + 1);
+      paisPorFab.set(fab, cont);
+    }
+    const m = new Map<string, string>();
+    for (const [fab, cont] of paisPorFab) {
+      let melhor = "";
+      let max = 0;
+      for (const [pais, n] of cont) {
+        if (n > max) {
+          max = n;
+          melhor = pais;
+        }
+      }
+      const url = melhor ? flagUrl(melhor) : "";
+      if (url) m.set(fab, url);
+    }
+    return m;
+  }, [items]);
+
   const { total, avg, byCountry, byCategory, byManufacturer } = useMemo(() => {
     const rated = items.filter((i) => i.rating > 0);
     const avgVal = rated.length
@@ -120,7 +147,7 @@ export default function StatsScreen({ type }: { type: ItemType }) {
       <RankSection rows={byCategory} />
 
       <div className={sectionLabel}>Por fabricante</div>
-      <RankSection rows={byManufacturer} />
+      <RankSection rows={byManufacturer} flags={manufacturerFlags} />
     </div>
   );
 }
