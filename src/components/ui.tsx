@@ -35,23 +35,26 @@ export function Avatar({ url, name, className = "" }: { url?: string; name: stri
 }
 
 /** Read-only star row, preenchimento contínuo por `%` (suporta fração, ex.: média). `max` é o
- *  total de estrelas - 5 pra cerveja/destilado/drink, 10 pra vinho (ver `RATING_SCALE` em
- *  itemSchema.ts, pedido do Carlos 2026-09-22). */
+ *  teto real da nota (5 pra cerveja/destilado/drink, 100 pra vinho) e `starCount` é quantas
+ *  estrelas a UI desenha (5 pra cerveja, 10 pra vinho - cada uma valendo `max/starCount` pontos,
+ *  ver `RATING_SCALE` em itemSchema.ts, pedido do Carlos 2026-09-22). */
 export function Stars({
   value,
   max = 5,
+  starCount = max,
   className = "text-[13px]",
 }: {
   value: number;
   max?: number;
+  starCount?: number;
   className?: string;
 }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
-  const stars = "★".repeat(max);
+  const stars = "★".repeat(starCount);
   return (
     <span
       className={`relative inline-block leading-none ${className}`}
-      aria-label={`${value} de ${max} estrelas`}
+      aria-label={`${value} de ${max}`}
     >
       <span className="text-border">{stars}</span>
       <span

@@ -171,7 +171,11 @@ export default function HomeScreen({
                         {slide.category ? ` · ${slide.category}` : ""}
                       </div>
                       <div className="mt-2 flex items-center gap-2 text-[12.5px]">
-                        <Stars value={slide.rating} max={RATING_SCALE[slide.type].max} />
+                        <Stars
+                          value={slide.rating}
+                          max={RATING_SCALE[slide.type].max}
+                          starCount={RATING_SCALE[slide.type].starCount}
+                        />
                         <span className="text-muted">{formatDate(slide.date)}</span>
                       </div>
                     </div>

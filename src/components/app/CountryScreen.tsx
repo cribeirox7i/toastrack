@@ -56,7 +56,12 @@ export default function CountryScreen({ countryName }: { countryName: string }) 
             <div className="min-w-0 flex-1">
               <div className="text-[13.5px] font-bold">{TYPE_LABELS[r.type]}</div>
               <div className="mt-1 flex items-center gap-1.5">
-                <Stars value={r.avg} max={RATING_SCALE[r.type].max} className="text-[14px]" />
+                <Stars
+                  value={r.avg}
+                  max={RATING_SCALE[r.type].max}
+                  starCount={RATING_SCALE[r.type].starCount}
+                  className="text-[14px]"
+                />
                 <span className="text-[12px] text-muted">{r.avg ? fmtDecimalBR(r.avg) : "—"}</span>
               </div>
             </div>

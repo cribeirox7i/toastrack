@@ -745,7 +745,12 @@ function TableView({
             <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.category}</div>
             <div className="flex-1 px-3 py-2.5 text-muted">{formatDate(item.date)}</div>
             <div className="flex-1 px-3 py-2.5">
-              <Stars value={item.rating} max={RATING_SCALE[item.type].max} className="text-[12px]" />
+              <Stars
+                value={item.rating}
+                max={RATING_SCALE[item.type].max}
+                starCount={RATING_SCALE[item.type].starCount}
+                className="text-[12px]"
+              />
             </div>
             {showActionsCol && (
               <div className="flex w-20 justify-end gap-1 px-3 py-2.5">

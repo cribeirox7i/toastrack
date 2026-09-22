@@ -93,14 +93,23 @@ export const SCHEMA: Record<ItemType, TypeSchema> = {
   },
 };
 
-/** Escala de nota por tipo - vinho é 1 a 10 inteiro (pedido do Carlos 2026-09-22: pontuação de
- *  vinho é tradicionalmente 0-100, então 1-10 fica mais fácil de comparar que 0-5); os demais
- *  tipos continuam 0 a 5 com meia estrela, como sempre foram. */
-export const RATING_SCALE: Record<ItemType, { max: number; step: 0.5 | 1 }> = {
-  beer: { max: 5, step: 0.5 },
-  wine: { max: 10, step: 1 },
-  spirit: { max: 5, step: 0.5 },
-  drink: { max: 5, step: 0.5 },
+/**
+ * Escala de nota por tipo. `max` é o valor CRU gravado na coluna `_nota` (o teto real da nota);
+ * `starCount` é quantas estrelas a UI desenha; `step` é a menor variação que dá pra escolher, na
+ * mesma unidade de `max`.
+ *
+ * Vinho (pedido do Carlos 2026-09-22): a nota já é gravada em pontos, 0-100 (é como o Carlos
+ * pontua vinho hoje, direto na planilha, mesmo antes deste app existir) - por isso `max: 100`,
+ * SEM conversão nenhuma do que já está gravado. A UI só desenha isso como 10 estrelas (`starCount:
+ * 10`, cada uma valendo 10 pontos) com granularidade de 1 ponto (`step: 1` = "1/10 de estrela").
+ * Cerveja/destilado/drink continuam 0-5 com meia estrela, como sempre foram (`max === starCount`,
+ * então 1 estrela = 1 ponto, e meia estrela é `step: 0.5`).
+ */
+export const RATING_SCALE: Record<ItemType, { max: number; starCount: number; step: number }> = {
+  beer: { max: 5, starCount: 5, step: 0.5 },
+  wine: { max: 100, starCount: 10, step: 1 },
+  spirit: { max: 5, starCount: 5, step: 0.5 },
+  drink: { max: 5, starCount: 5, step: 0.5 },
 };
 
 export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined {

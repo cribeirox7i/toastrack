@@ -797,6 +797,7 @@ export default function DetailScreen({
               value={parseNumBR(values[ratingField.col]) || 0}
               onChange={(v) => set(ratingField.col, String(v))}
               max={RATING_SCALE[type].max}
+              starCount={RATING_SCALE[type].starCount}
               step={RATING_SCALE[type].step}
             />
 
@@ -893,6 +894,7 @@ export default function DetailScreen({
               <Stars
                 value={parseNumBR(values[ratingField.col]) || 0}
                 max={RATING_SCALE[type].max}
+                starCount={RATING_SCALE[type].starCount}
                 className="text-[18px]"
               />
             </div>

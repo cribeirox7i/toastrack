@@ -151,7 +151,12 @@ export default function StatsScreen({
         <div className="text-[40px] font-extrabold leading-none">{total}</div>
         <div className="mt-1 text-[13px] font-semibold text-muted">{TYPE_LABELS[type]}</div>
         <div className="mt-3 flex flex-col items-center gap-1">
-          <Stars value={avg} max={RATING_SCALE[type].max} className="text-[20px]" />
+          <Stars
+            value={avg}
+            max={RATING_SCALE[type].max}
+            starCount={RATING_SCALE[type].starCount}
+            className="text-[20px]"
+          />
           <div className="text-[12px] text-muted">
             Média · {avg ? fmtDecimalBR(avg) : "—"}
           </div>
