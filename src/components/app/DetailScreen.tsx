@@ -67,6 +67,7 @@ export default function DetailScreen({
   onClose,
   onChanged,
   onDuplicate,
+  onOpenCountry,
 }: {
   type: ItemType;
   itemId: string | null;
@@ -78,6 +79,7 @@ export default function DetailScreen({
   onClose: () => void;
   onChanged: () => void;
   onDuplicate: (type: ItemType, sourceId: string) => void;
+  onOpenCountry: (name: string) => void;
 }) {
   const { catalog } = useCatalog();
   const fields = SCHEMA[type].fields;
@@ -874,8 +876,13 @@ export default function DetailScreen({
               {paisName(values.pais_id ?? "") && (
                 <>
                   {values[producerField.col] && <span>·</span>}
-                  <CountryFlag src={paisImg(values.pais_id ?? "")} className="h-3 w-4" />
-                  <span>{paisName(values.pais_id ?? "")}</span>
+                  <button
+                    onClick={() => onOpenCountry(paisName(values.pais_id ?? ""))}
+                    className="flex items-center gap-1.5"
+                  >
+                    <CountryFlag src={paisImg(values.pais_id ?? "")} className="h-3 w-4" />
+                    <span className="underline decoration-dotted">{paisName(values.pais_id ?? "")}</span>
+                  </button>
                 </>
               )}
             </div>

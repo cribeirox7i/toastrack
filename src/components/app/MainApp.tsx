@@ -17,9 +17,10 @@ import ProfileScreen from "@/components/app/ProfileScreen";
 import ListScreen, { type SearchField, type ViewMode } from "@/components/app/ListScreen";
 import DetailScreen from "@/components/app/DetailScreen";
 import StatsScreen from "@/components/app/StatsScreen";
+import CountryScreen from "@/components/app/CountryScreen";
 import GlobalPhotoToast from "@/components/app/GlobalPhotoToast";
 
-type View = "home" | ItemType | "profile" | "stats" | "detail";
+type View = "home" | ItemType | "profile" | "stats" | "detail" | "country";
 
 const MAIN_TABS: { key: "home" | ItemType; label: string; icon: string }[] = [
   { key: "home", label: "Home", icon: "home" },
@@ -54,6 +55,7 @@ export default function MainApp() {
   const [view, setView] = useState<View>("home");
   const [prevView, setPrevView] = useState<"home" | ItemType>("home");
   const [statsType, setStatsType] = useState<ItemType>("beer");
+  const [countryName, setCountryName] = useState("");
   const [query, setQuery] = useState("");
   // Modo de exibição da lista (deck/tabela/galeria) - fica AQUI porque a ListScreen desmonta ao
   // abrir o Detalhe; guardado nela, voltava sempre pro "deck" (relato do Carlos 2026-09-09).
@@ -96,7 +98,7 @@ export default function MainApp() {
   // Carlos 2026-09-09). Empurra uma entrada no histórico ao abrir a sobreposição; o `popstate`
   // devolve a view anterior. Os botões "Voltar" internos chamam `history.back()`, pra o histórico
   // desenrolar simétrico.
-  const overlay = view === "detail" || view === "profile" || view === "stats";
+  const overlay = view === "detail" || view === "profile" || view === "stats" || view === "country";
   const prevViewRef = useRef(prevView);
   useEffect(() => {
     prevViewRef.current = prevView;
@@ -142,6 +144,11 @@ export default function MainApp() {
     if (isMainView(view)) setPrevView(view);
     setStatsType(type);
     setView("stats");
+  }
+  function openCountry(name: string) {
+    if (isMainView(view)) setPrevView(view);
+    setCountryName(name);
+    setView("country");
   }
   function goBack() {
     closeOverlay();
@@ -240,13 +247,13 @@ export default function MainApp() {
           </div>
         </header>
       )}
-      {(view === "profile" || view === "stats") && (
+      {(view === "profile" || view === "stats" || view === "country") && (
         <header className="flex items-center border-b border-border px-5 py-3">
           <button onClick={goBack} className="text-[13px] font-bold text-accent">
             ← Voltar
           </button>
-          <div className="mx-auto text-[16px] font-extrabold">
-            {view === "profile" ? "Perfil" : TYPE_LABELS[statsType]}
+          <div className="mx-auto truncate px-3 text-[16px] font-extrabold">
+            {view === "profile" ? "Perfil" : view === "stats" ? TYPE_LABELS[statsType] : countryName}
           </div>
           <RefreshButton />
         </header>
@@ -293,12 +300,18 @@ export default function MainApp() {
             onClose={closeDetail}
             onChanged={reloadCatalog}
             onDuplicate={duplicateItem}
+            onOpenCountry={openCountry}
           />
         )}
         {view === "stats" && (
           <PullToRefresh onRefresh={onPullRefresh} className="min-h-0 flex-1">
-            <StatsScreen type={statsType} />
+            <StatsScreen type={statsType} onOpenCountry={openCountry} />
           </PullToRefresh>
+        )}
+        {view === "country" && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <CountryScreen countryName={countryName} />
+          </div>
         )}
         {view === "profile" && (
           <div className="min-h-0 flex-1 overflow-y-auto">

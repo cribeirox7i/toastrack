@@ -26,34 +26,45 @@ const sectionLabel = "mb-2 mt-6 text-[11px] font-bold uppercase tracking-wider t
 function RankSection({
   rows,
   flags,
+  onRowClick,
 }: {
   rows: Group[];
   flags?: Map<string, string>;
+  /** Presente só na seção "Por país" - clicar na linha abre a Página do País (pedido do Carlos
+   *  2026-09-22). As demais seções (categoria, fabricante) não navegam a lugar nenhum. */
+  onRowClick?: (name: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const max = rows[0]?.count ?? 1;
   const shown = expanded ? rows : rows.slice(0, 5);
   return (
     <div className="rounded-2xl border border-border bg-surface p-3">
-      {shown.map((r) => (
-        <div key={r.name} className="flex items-center gap-2 py-1.5">
-          {flags &&
-            (flags.get(r.name) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={flags.get(r.name)} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
-            ) : (
-              <span className="w-5" />
-            ))}
-          <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{r.name}</div>
-          <div className="h-1.5 w-24 overflow-hidden rounded-full bg-track">
-            <div
-              className="h-full rounded-full bg-accent"
-              style={{ width: `${(r.count / max) * 100}%` }}
-            />
-          </div>
-          <div className="w-6 text-right text-[13px] font-bold text-muted">{r.count}</div>
-        </div>
-      ))}
+      {shown.map((r) => {
+        const Row = onRowClick ? "button" : "div";
+        return (
+          <Row
+            key={r.name}
+            onClick={onRowClick ? () => onRowClick(r.name) : undefined}
+            className={`flex w-full items-center gap-2 py-1.5 ${onRowClick ? "text-left active:opacity-70" : ""}`}
+          >
+            {flags &&
+              (flags.get(r.name) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={flags.get(r.name)} alt="" className="h-3.5 w-5 rounded-sm object-cover" />
+              ) : (
+                <span className="w-5" />
+              ))}
+            <div className="min-w-0 flex-1 truncate text-[13px] font-semibold">{r.name}</div>
+            <div className="h-1.5 w-24 overflow-hidden rounded-full bg-track">
+              <div
+                className="h-full rounded-full bg-accent"
+                style={{ width: `${(r.count / max) * 100}%` }}
+              />
+            </div>
+            <div className="w-6 text-right text-[13px] font-bold text-muted">{r.count}</div>
+          </Row>
+        );
+      })}
       {rows.length > 5 && (
         <button
           onClick={() => setExpanded((v) => !v)}
@@ -69,7 +80,13 @@ function RankSection({
 
 /** Stats drill-down for one category. Always scoped to the user's OWN items
  *  (catalog is own-only), ignoring any secondary profile selected elsewhere. */
-export default function StatsScreen({ type }: { type: ItemType }) {
+export default function StatsScreen({
+  type,
+  onOpenCountry,
+}: {
+  type: ItemType;
+  onOpenCountry: (name: string) => void;
+}) {
   const { catalog } = useCatalog();
   const items = catalog[type];
   // Bandeiras resolvidas do nome (a coluna pais_img da planilha está vazia, ver flags.ts) - não
@@ -141,7 +158,7 @@ export default function StatsScreen({ type }: { type: ItemType }) {
       </div>
 
       <div className={sectionLabel}>Por país</div>
-      <RankSection rows={byCountry} flags={flags} />
+      <RankSection rows={byCountry} flags={flags} onRowClick={onOpenCountry} />
 
       <div className={sectionLabel}>Por categoria</div>
       <RankSection rows={byCategory} />
