@@ -33,6 +33,8 @@ import CountrySelect, { CountryFlag } from "@/components/CountrySelect";
 import PickerModal from "@/components/PickerModal";
 import {
   SCHEMA,
+  WINE_COR,
+  WINE_TIPO,
   buildFieldRows,
   fieldByRole,
   fetchLookups,
@@ -47,6 +49,14 @@ import {
 const inputCls =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-2.5 text-[14px] outline-none focus:border-accent";
 const labelCls = "mb-1 mt-3 block text-[12.5px] font-semibold text-muted";
+
+/** Casa o texto lido pelo Gemini contra as opções fixas do `<select>` (WINE_COR/WINE_TIPO), sem
+ *  sensibilidade a maiúsculas/acentos - devolve a grafia CANÔNICA da opção, não o texto lido. */
+function matchOption(lido: string, options: readonly string[]): string | undefined {
+  const alvo = lido.trim().toLowerCase();
+  if (!alvo) return undefined;
+  return options.find((o) => o.toLowerCase() === alvo);
+}
 
 export default function DetailScreen({
   type,
@@ -503,7 +513,7 @@ export default function DetailScreen({
     const foto = preparedPhoto.current;
     if (!foto || scanning) return;
     setScanning(true);
-    const r = await scanLabelBase64(foto.base64, foto.mimeType);
+    const r = await scanLabelBase64(foto.base64, foto.mimeType, "beer");
     setScanning(false);
     if (!r.ok) {
       showToast(r.error);
@@ -552,6 +562,47 @@ export default function DetailScreen({
     }
 
     const achou = [c.nome, c.cervejaria, c.estilo, c.abv, c.ibu].filter(Boolean).length;
+    showToast(achou ? "Rótulo lido - confira os campos" : "Não consegui ler nada do rótulo");
+  }
+
+  /** "Ler rótulo" pra vinho (pedido do Carlos 2026-09-22) - mesma mecânica do `doScanLabel` de
+   *  cerveja (só preenche campo vazio), mas sem os lookups de cervejaria/BJCP: vinho não tem
+   *  catálogo canônico próprio, então nome/produtor/região/uva vão exatamente como o Gemini leu. */
+  async function doScanLabelWine() {
+    const foto = preparedPhoto.current;
+    if (!foto || scanning) return;
+    setScanning(true);
+    const r = await scanLabelBase64(foto.base64, foto.mimeType, "wine");
+    setScanning(false);
+    if (!r.ok) {
+      showToast(r.error);
+      return;
+    }
+    const c = r.campos;
+    const setSeVazio = (col: string | undefined, valor: string) => {
+      if (col && valor && !(valuesRef.current[col] ?? "").trim()) set(col, valor);
+    };
+    const colDe = (sufixo: string) => fields.find((f) => f.col.endsWith(sufixo))?.col;
+
+    setSeVazio(nameField.col, c.nome);
+    setSeVazio(producerField.col, c.produtor);
+    setSeVazio(colDe("_uva"), c.uva);
+    setSeVazio(colDe("_regiao"), c.regiao);
+    setSeVazio(colDe("_safra"), c.safra);
+    setSeVazio(colDe("_abv"), toFormBR(c.abv));
+
+    const cor = matchOption(c.cor, WINE_COR);
+    if (cor) setSeVazio(colDe("_cor"), cor);
+    const tipoVinho = matchOption(c.tipo, WINE_TIPO);
+    if (tipoVinho) setSeVazio(colDe("_tipo"), tipoVinho);
+
+    if (c.pais && !(valuesRef.current.pais_id ?? "").trim()) {
+      const alvo = c.pais.trim().toLowerCase();
+      const pais = lookup.pais.find((p) => p.pais_nome.toLowerCase() === alvo);
+      if (pais) set("pais_id", String(pais.pais_id));
+    }
+
+    const achou = [c.nome, c.produtor, c.uva, c.regiao, c.safra, c.abv].filter(Boolean).length;
     showToast(achou ? "Rótulo lido - confira os campos" : "Não consegui ler nada do rótulo");
   }
 
@@ -674,17 +725,17 @@ export default function DetailScreen({
             </button>
 
             {/* Ações de foto como ícones em frame, mesmo padrão dos botões de ação do modo
-                visualização (pedido do Carlos 2026-09-08). "Ler rótulo" só pra cerveja e só
-                quando há foto pronta. */}
+                visualização (pedido do Carlos 2026-09-08). "Ler rótulo" só pra cerveja e vinho
+                (pedido do Carlos 2026-09-22) e só quando há foto pronta. */}
             {photoStatus !== "preparando" && (
               <div className="mb-2 flex gap-2">
                 <ActionBtn label="Tirar foto" icon="camera" onClick={() => pickPhoto("camera")} />
                 <ActionBtn label="Buscar em arquivos" icon="folder" onClick={() => pickPhoto("arquivos")} />
-                {type === "beer" && photoStatus === "pronta" && (
+                {(type === "beer" || type === "wine") && photoStatus === "pronta" && (
                   <ActionBtn
                     label={scanning ? "Lendo rótulo…" : "Ler rótulo"}
                     icon="scan"
-                    onClick={() => void doScanLabel()}
+                    onClick={() => void (type === "beer" ? doScanLabel() : doScanLabelWine())}
                     disabled={scanning}
                     spinning={scanning}
                   />

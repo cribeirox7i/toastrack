@@ -1,10 +1,10 @@
 import "server-only";
 
 /**
- * Leitura de rótulo de cerveja (foto) via Gemini API (Google AI Studio, free tier) - só do
- * servidor, a `GEMINI_API_KEY` nunca chega ao cliente (mesmo padrão do `APPS_SCRIPT_SHARED_SECRET`).
- * `fetch` direto na REST API, sem SDK novo como dependência. Portado do `gemini.ts` do TravelTrack
- * (que faz o mesmo pra vouchers de viagem), com prompt/schema próprios pra cerveja.
+ * Leitura de rótulo (foto) via Gemini API (Google AI Studio, free tier) - só do servidor, a
+ * `GEMINI_API_KEY` nunca chega ao cliente (mesmo padrão do `APPS_SCRIPT_SHARED_SECRET`). `fetch`
+ * direto na REST API, sem SDK novo como dependência. Portado do `gemini.ts` do TravelTrack (que faz
+ * o mesmo pra vouchers de viagem), com prompt/schema próprios por tipo de bebida.
  *
  * Modelo: `gemini-3.5-flash-lite`. Testado contra a chave real do Carlos no TravelTrack em
  * 2026-08-25 - a geração 2.x parou de aceitar chave nova, e entre os que respondem o Lite tem
@@ -15,7 +15,9 @@ import "server-only";
 const MODEL = "gemini-3.5-flash-lite";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-const PROMPT = `Você recebe a FOTO DO RÓTULO de uma cerveja (lata, garrafa ou growler). Extraia os
+export type TipoRotulo = "beer" | "wine";
+
+const BEER_PROMPT = `Você recebe a FOTO DO RÓTULO de uma cerveja (lata, garrafa ou growler). Extraia os
 campos abaixo lendo o que está escrito no rótulo e devolva SÓ o JSON pedido pelo schema. Regras:
 
 - NUNCA invente um valor que não está no rótulo. Se não encontrar, devolva string vazia "".
@@ -37,7 +39,7 @@ Campos:
   Se o rótulo usar vírgula ("5,2"), converta pra ponto ("5.2").
 - ibu: amargor IBU, só o número inteiro (ex.: "45"). "" se não aparecer.`;
 
-const RESPONSE_SCHEMA = {
+const BEER_SCHEMA = {
   type: "OBJECT",
   properties: {
     nome: { type: "STRING" },
@@ -51,7 +53,9 @@ const RESPONSE_SCHEMA = {
   required: ["nome", "cervejaria", "pais", "estilo", "estilo_bjcp", "abv", "ibu"],
 };
 
-export interface RotuloExtraido {
+const BEER_CAMPOS = ["nome", "cervejaria", "pais", "estilo", "estilo_bjcp", "abv", "ibu"] as const;
+
+export interface RotuloExtraidoBeer {
   nome: string;
   cervejaria: string;
   pais: string;
@@ -61,26 +65,80 @@ export interface RotuloExtraido {
   ibu: string;
 }
 
-const CAMPOS: (keyof RotuloExtraido)[] = [
-  "nome",
-  "cervejaria",
-  "pais",
-  "estilo",
-  "estilo_bjcp",
-  "abv",
-  "ibu",
-];
+// Textos exatos das opções de `WINE_COR`/`WINE_TIPO` (ver itemSchema.ts) - pedidos ao Gemini
+// literalmente assim pra poder casar 1:1 com o <select> do formulário sem lookup nenhum.
+const WINE_PROMPT = `Você recebe a FOTO DO RÓTULO de um vinho. Extraia os campos abaixo lendo o que
+está escrito no rótulo e devolva SÓ o JSON pedido pelo schema. Regras:
 
-/** Nunca confia cegamente na API: todo campo vira string, número solto no `abv`/`ibu` (o modelo
- *  às vezes manda number apesar do schema) vira texto. */
-function normalizar(bruto: unknown): RotuloExtraido {
+- NUNCA invente um valor que não está no rótulo. Se não encontrar/deduzir com segurança, devolva
+  string vazia "".
+- Todo campo do schema precisa estar presente na resposta (mesmo que "").
+
+Campos:
+- nome: nome comercial do vinho/rótulo (a "cuvée", ex.: "Reserva", "Gran Corte", "Colheita"). Só o
+  nome do produto - NÃO junte o nome da vinícola (o app junta depois, se preciso).
+- produtor: nome da vinícola/produtor como escrito no rótulo (ex.: "Miolo", "Casillero del Diablo",
+  "Château Margaux").
+- pais: país de origem, por extenso em PORTUGUÊS (ex.: "Brasil", "Argentina", "França", "Itália",
+  "Portugal", "Chile", "Espanha").
+- uva: casta(s) de uva como aparece no rótulo (ex.: "Cabernet Sauvignon", "Malbec", "Tannat"). Se
+  houver mais de uma, separe por vírgula.
+- regiao: região/denominação de origem como aparece no rótulo (ex.: "Mendoza", "Vale dos
+  Vinhedos", "Douro", "Napa Valley", "Rioja").
+- cor: EXATAMENTE uma destas palavras, a que melhor descrever o vinho: "Tinto", "Branco", "Rosé",
+  "Verde", "Laranja". Deduza pela cor/tipo de uva/rótulo. "" se não der pra saber.
+- tipo: EXATAMENTE uma destas palavras, só se o rótulo indicar claramente o teor de açúcar/estilo:
+  "Seco", "Semi-Seco", "Suave", "Brut". "" se não aparecer.
+- safra: ano da safra/colheita, só o número (ex.: "2019"). "" se não aparecer.
+- abv: teor alcoólico. PROCURE COM ATENÇÃO - geralmente em "ALC 13% VOL", "13% ALC/VOL", "Teor
+  alcoólico 13% vol". Devolva SÓ o número, com PONTO decimal (ex.: "13", "12.5"), sem "%". Se o
+  rótulo usar vírgula ("12,5"), converta pra ponto ("12.5").`;
+
+const WINE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    nome: { type: "STRING" },
+    produtor: { type: "STRING" },
+    pais: { type: "STRING" },
+    uva: { type: "STRING" },
+    regiao: { type: "STRING" },
+    cor: { type: "STRING" },
+    tipo: { type: "STRING" },
+    safra: { type: "STRING" },
+    abv: { type: "STRING" },
+  },
+  required: ["nome", "produtor", "pais", "uva", "regiao", "cor", "tipo", "safra", "abv"],
+};
+
+const WINE_CAMPOS = ["nome", "produtor", "pais", "uva", "regiao", "cor", "tipo", "safra", "abv"] as const;
+
+export interface RotuloExtraidoWine {
+  nome: string;
+  produtor: string;
+  pais: string;
+  uva: string;
+  regiao: string;
+  cor: string;
+  tipo: string;
+  safra: string;
+  abv: string;
+}
+
+const CONFIG = {
+  beer: { prompt: BEER_PROMPT, schema: BEER_SCHEMA, campos: BEER_CAMPOS },
+  wine: { prompt: WINE_PROMPT, schema: WINE_SCHEMA, campos: WINE_CAMPOS },
+} as const;
+
+/** Nunca confia cegamente na API: todo campo vira string, número solto (o modelo às vezes manda
+ *  number apesar do schema pedir STRING) vira texto. */
+function normalizar<T>(bruto: unknown, campos: readonly (keyof T & string)[]): T {
   const obj = (bruto && typeof bruto === "object" ? bruto : {}) as Record<string, unknown>;
-  const out = {} as RotuloExtraido;
-  for (const campo of CAMPOS) {
+  const out = {} as Record<string, string>;
+  for (const campo of campos) {
     const v = obj[campo];
     out[campo] = typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
   }
-  return out;
+  return out as T;
 }
 
 export class GeminiIndisponivelError extends Error {}
@@ -88,30 +146,39 @@ export class GeminiIndisponivelError extends Error {}
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * Manda a foto do rótulo (base64) pro Gemini e devolve os campos lidos. Lança
- * `GeminiIndisponivelError` em qualquer falha (sem chave, rede, cota, resposta estranha) - o
- * chamador trata como "não deu pra ler automaticamente", nunca fatal: o cadastro manual segue.
+ * Manda a foto do rótulo (base64) pro Gemini e devolve os campos lidos, no formato certo pro
+ * `tipo` pedido. Lança `GeminiIndisponivelError` em qualquer falha (sem chave, rede, cota, resposta
+ * estranha) - o chamador trata como "não deu pra ler automaticamente", nunca fatal: o cadastro
+ * manual segue.
  *
  * Uma retentativa em 503 ("high demand" - pico temporário do lado do Google, visto no teste de
  * 2026-09-08 e recuperou sozinho no retry). Não repete em 4xx (chave/cota são problema de config,
  * não transitório).
  */
-export async function analisarRotulo(base64Data: string, mimeType: string): Promise<RotuloExtraido> {
+export async function analisarRotulo(base64Data: string, mimeType: string, tipo: "beer"): Promise<RotuloExtraidoBeer>;
+export async function analisarRotulo(base64Data: string, mimeType: string, tipo: "wine"): Promise<RotuloExtraidoWine>;
+export async function analisarRotulo(
+  base64Data: string,
+  mimeType: string,
+  tipo: TipoRotulo,
+): Promise<RotuloExtraidoBeer | RotuloExtraidoWine> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new GeminiIndisponivelError("GEMINI_API_KEY não configurada");
+
+  const { prompt, schema, campos } = CONFIG[tipo];
 
   const corpo = JSON.stringify({
     contents: [
       {
         parts: [
           { inline_data: { mime_type: mimeType, data: base64Data } },
-          { text: PROMPT },
+          { text: prompt },
         ],
       },
     ],
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: RESPONSE_SCHEMA,
+      responseSchema: schema,
     },
   });
 
@@ -146,7 +213,10 @@ export async function analisarRotulo(base64Data: string, mimeType: string): Prom
   }
 
   try {
-    return normalizar(JSON.parse(texto));
+    const parsed = JSON.parse(texto);
+    return tipo === "beer"
+      ? normalizar<RotuloExtraidoBeer>(parsed, campos as readonly (keyof RotuloExtraidoBeer)[])
+      : normalizar<RotuloExtraidoWine>(parsed, campos as readonly (keyof RotuloExtraidoWine)[]);
   } catch {
     throw new GeminiIndisponivelError("Resposta do Gemini não é um JSON válido");
   }

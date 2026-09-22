@@ -18,10 +18,11 @@ const JANELA_MS = 60_000;
 const bodySchema = z.object({
   base64Data: z.string().min(1).max(MAX_BASE64_LEN),
   mimeType: z.string().min(1).max(100),
+  tipo: z.enum(["beer", "wine"]).default("beer"),
 });
 
-/** Lê a foto de um rótulo de cerveja e devolve os campos identificados (nome, cervejaria, país,
- *  estilo, ABV, IBU). Best-effort: falha vira 503 "preencha à mão", nunca erro fatal. */
+/** Lê a foto de um rótulo (cerveja ou vinho) e devolve os campos identificados. Best-effort: falha
+ *  vira 503 "preencha à mão", nunca erro fatal. */
 export async function POST(req: NextRequest) {
   const auth = await requireSession();
   if ("error" in auth) return auth.error;
@@ -34,12 +35,13 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) return errorResponse(parsed.error.issues[0].message);
 
   try {
-    const campos = await analisarRotulo(parsed.data.base64Data, parsed.data.mimeType);
+    const { base64Data, mimeType, tipo } = parsed.data;
+    const campos = tipo === "beer" ? await analisarRotulo(base64Data, mimeType, "beer") : await analisarRotulo(base64Data, mimeType, "wine");
     void logAccess({
       userId: auth.session.user.id,
       userMail: auth.session.user.email ?? "",
-      acao: "leu rótulo de cerveja (IA)",
-      tabela: "beer",
+      acao: `leu rótulo de ${tipo === "beer" ? "cerveja" : "vinho"} (IA)`,
+      tabela: tipo,
       registroId: "",
     });
     return NextResponse.json(campos);

@@ -9,7 +9,9 @@ import { initialsFor } from "@/lib/utils";
 import { refreshAllWithMessage } from "@/lib/refreshAll";
 import { fmtDecimalBR } from "@/lib/numberBR";
 import { useCatalog } from "@/components/CatalogProvider";
-import { deleteItem, type Item, type ItemType } from "@/lib/catalog";
+import { deleteItem, TYPE_TAB, type Item, type ItemType } from "@/lib/catalog";
+import { useSyncingIds } from "@/lib/offline/syncStatus";
+import type { ItemTab } from "@/lib/offline/db";
 import type { SecondaryProfile } from "@/lib/profiles";
 
 export type ViewMode = "deck" | "table" | "gallery";
@@ -116,6 +118,7 @@ export default function ListScreen({
 
   const { catalog, loading } = useCatalog();
   const items = catalog[listType];
+  const syncingIds = useSyncingIds(TYPE_TAB[listType] as ItemTab);
   // Padrão por código (id), decrescente - pedido do Carlos 2026-09-04: o item mais recente
   // (maior id sequencial) primeiro, em vez de por data de degustação.
   const [sortField, setSortField] = useState<SortField>("id");
@@ -480,6 +483,7 @@ export default function ListScreen({
           ) : viewMode === "deck" ? (
             <DeckView
               items={visibleItems}
+              syncingIds={syncingIds}
               onOpen={onOpenItem}
               onEdit={onEditItem}
               onDuplicate={doDuplicate}
@@ -488,6 +492,7 @@ export default function ListScreen({
           ) : viewMode === "table" ? (
             <TableView
               items={visibleItems}
+              syncingIds={syncingIds}
               showActionsCol={sorted.some((i) => i.canEdit)}
               sortField={sortField}
               sortDir={sortDir}
@@ -497,7 +502,7 @@ export default function ListScreen({
               onDelete={setConfirmItem}
             />
           ) : (
-            <GalleryView items={visibleItems} onOpen={onOpenItem} />
+            <GalleryView items={visibleItems} syncingIds={syncingIds} onOpen={onOpenItem} />
           )}
           {!loading && visibleCount < sorted.length && (
             <div ref={sentinelRef} className="py-6 text-center text-[12.5px] text-muted">
@@ -588,6 +593,18 @@ function ProfileRow({
   );
 }
 
+/** Bolinha azul indicando que o item ainda tem texto ou foto pendente de subir (ver
+ *  `useSyncingIds`) - some sozinha quando o outbox confirma o envio. */
+function SyncDot() {
+  return (
+    <span
+      className="inline-block size-[7px] shrink-0 rounded-full bg-accent"
+      title="Sincronizando…"
+      aria-label="Sincronizando"
+    />
+  );
+}
+
 function RowActions({
   item,
   onEdit,
@@ -622,12 +639,14 @@ function RowActions({
 
 function DeckView({
   items,
+  syncingIds,
   onOpen,
   onEdit,
   onDuplicate,
   onDelete,
 }: {
   items: Item[];
+  syncingIds: Set<string>;
   onOpen: (i: Item) => void;
   onEdit: (i: Item) => void;
   onDuplicate: (i: Item) => void;
@@ -643,7 +662,10 @@ function DeckView({
         >
           <Thumb label={item.name} src={item.imgUrl} className="size-[92px] shrink-0 rounded-2xl" />
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[15.5px] font-extrabold">{item.name}</div>
+            <div className="flex items-center gap-1.5">
+              {syncingIds.has(item.id) && <SyncDot />}
+              <span className="truncate text-[15.5px] font-extrabold">{item.name}</span>
+            </div>
             <div className="truncate text-[12.5px] text-muted">{item.manufacturer}</div>
             {item.category && (
               <div className="mt-2">
@@ -673,6 +695,7 @@ function DeckView({
 
 function TableView({
   items,
+  syncingIds,
   showActionsCol,
   sortField,
   sortDir,
@@ -682,6 +705,7 @@ function TableView({
   onDelete,
 }: {
   items: Item[];
+  syncingIds: Set<string>;
   showActionsCol: boolean;
   sortField: SortField;
   sortDir: "asc" | "desc";
@@ -711,9 +735,10 @@ function TableView({
           <div key={item.id} className="flex items-center border-b border-border text-[13px]">
             <button
               onClick={() => onOpen(item)}
-              className="flex-[2] truncate px-3 py-2.5 text-left font-semibold"
+              className="flex-[2] flex items-center gap-1.5 truncate px-3 py-2.5 text-left font-semibold"
             >
-              {item.name}
+              {syncingIds.has(item.id) && <SyncDot />}
+              <span className="truncate">{item.name}</span>
             </button>
             <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.manufacturer}</div>
             <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.category}</div>
@@ -750,7 +775,15 @@ function TableView({
   );
 }
 
-function GalleryView({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => void }) {
+function GalleryView({
+  items,
+  syncingIds,
+  onOpen,
+}: {
+  items: Item[];
+  syncingIds: Set<string>;
+  onOpen: (i: Item) => void;
+}) {
   return (
     <div
       className="mx-auto grid w-full max-w-3xl gap-3 px-5 py-3"
@@ -770,7 +803,10 @@ function GalleryView({ items, onOpen }: { items: Item[]; onOpen: (i: Item) => vo
             </span>
           </div>
           <div className="p-2.5">
-            <div className="truncate text-[13px] font-bold">{item.name}</div>
+            <div className="flex items-center gap-1.5">
+              {syncingIds.has(item.id) && <SyncDot />}
+              <span className="truncate text-[13px] font-bold">{item.name}</span>
+            </div>
             <div className="truncate text-[11px] text-muted">{item.manufacturer}</div>
             {item.category && (
               <span className="mt-1.5 inline-block max-w-full truncate rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
