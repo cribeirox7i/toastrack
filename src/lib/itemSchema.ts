@@ -100,14 +100,15 @@ export const SCHEMA: Record<ItemType, TypeSchema> = {
  *
  * Vinho (pedido do Carlos 2026-09-22): a nota já é gravada em pontos, 0-100 (é como o Carlos
  * pontua vinho hoje, direto na planilha, mesmo antes deste app existir) - por isso `max: 100`,
- * SEM conversão nenhuma do que já está gravado. A UI só desenha isso como 10 estrelas (`starCount:
- * 10`, cada uma valendo 10 pontos) com granularidade de 1 ponto (`step: 1` = "1/10 de estrela").
- * Cerveja/destilado/drink continuam 0-5 com meia estrela, como sempre foram (`max === starCount`,
- * então 1 estrela = 1 ponto, e meia estrela é `step: 0.5`).
+ * SEM conversão nenhuma do que já está gravado. A UI desenha isso como 5 estrelas (`starCount: 5`,
+ * cada uma valendo 20 pontos - eram 10 estrelas/10 pontos antes, mas desformatava o card na lista;
+ * ver RatingInput.tsx) com granularidade de 1 ponto (`step: 1`). Cerveja/destilado/drink continuam
+ * 0-5 com meia estrela, como sempre foram (`max === starCount`, então 1 estrela = 1 ponto, e meia
+ * estrela é `step: 0.5`).
  */
 export const RATING_SCALE: Record<ItemType, { max: number; starCount: number; step: number }> = {
   beer: { max: 5, starCount: 5, step: 0.5 },
-  wine: { max: 100, starCount: 10, step: 1 },
+  wine: { max: 100, starCount: 5, step: 1 },
   spirit: { max: 5, starCount: 5, step: 0.5 },
   drink: { max: 5, starCount: 5, step: 0.5 },
 };
