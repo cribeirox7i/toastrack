@@ -93,6 +93,16 @@ export const SCHEMA: Record<ItemType, TypeSchema> = {
   },
 };
 
+/** Escala de nota por tipo - vinho é 1 a 10 inteiro (pedido do Carlos 2026-09-22: pontuação de
+ *  vinho é tradicionalmente 0-100, então 1-10 fica mais fácil de comparar que 0-5); os demais
+ *  tipos continuam 0 a 5 com meia estrela, como sempre foram. */
+export const RATING_SCALE: Record<ItemType, { max: number; step: 0.5 | 1 }> = {
+  beer: { max: 5, step: 0.5 },
+  wine: { max: 10, step: 1 },
+  spirit: { max: 5, step: 0.5 },
+  drink: { max: 5, step: 0.5 },
+};
+
 export function fieldByRole(type: ItemType, role: FieldRole): Field | undefined {
   return SCHEMA[type].fields.find((f) => f.role === role);
 }

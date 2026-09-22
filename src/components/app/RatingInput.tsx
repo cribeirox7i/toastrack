@@ -1,20 +1,29 @@
 "use client";
 import { fmtDecimalBR } from "@/lib/numberBR";
 
-/** Tap-to-set half-star rating widget (0–5 in 0.5 steps). Each star has two
- *  half-width hit areas; the left sets x.5, the right sets x.0. */
+/**
+ * Widget de nota, tocável. `step: 0.5` (padrão - cerveja/destilado/drink) desenha `max` estrelas
+ * com duas hit-areas cada (metade esquerda = x.5, direita = x.0), igual sempre foi. `step: 1`
+ * (vinho, pedido do Carlos 2026-09-22: escala 1-10 inteira) desenha `max` estrelas com UMA hit-area
+ * cada, sempre valor inteiro - sem meia estrela.
+ */
 export default function RatingInput({
   value,
   onChange,
+  max = 5,
+  step = 0.5,
 }: {
   value: number;
   onChange: (v: number) => void;
+  max?: number;
+  step?: 0.5 | 1;
 }) {
+  const casas = step === 1 ? 0 : 1;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <div className="flex">
-        {[0, 1, 2, 3, 4].map((i) => {
-          const fill = Math.max(0, Math.min(1, value - i)); // 0, .5 or 1
+        {Array.from({ length: max }, (_, i) => {
+          const fill = Math.max(0, Math.min(1, value - i));
           return (
             <div key={i} className="relative h-8 w-8">
               {/* outline + fill */}
@@ -28,23 +37,36 @@ export default function RatingInput({
                 ★
               </div>
               {/* hit areas */}
-              <button
-                type="button"
-                aria-label={`${i + 0.5} estrelas`}
-                onClick={() => onChange(i + 0.5)}
-                className="absolute left-0 top-0 h-full w-1/2"
-              />
-              <button
-                type="button"
-                aria-label={`${i + 1} estrelas`}
-                onClick={() => onChange(i + 1)}
-                className="absolute right-0 top-0 h-full w-1/2"
-              />
+              {step === 1 ? (
+                <button
+                  type="button"
+                  aria-label={`${i + 1} estrelas`}
+                  onClick={() => onChange(i + 1)}
+                  className="absolute inset-0 h-full w-full"
+                />
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    aria-label={`${i + 0.5} estrelas`}
+                    onClick={() => onChange(i + 0.5)}
+                    className="absolute left-0 top-0 h-full w-1/2"
+                  />
+                  <button
+                    type="button"
+                    aria-label={`${i + 1} estrelas`}
+                    onClick={() => onChange(i + 1)}
+                    className="absolute right-0 top-0 h-full w-1/2"
+                  />
+                </>
+              )}
             </div>
           );
         })}
       </div>
-      <span className="text-[14px] font-bold text-muted">{value ? fmtDecimalBR(value) : "—"}</span>
+      <span className="text-[14px] font-bold text-muted">
+        {value ? fmtDecimalBR(value, casas) : "—"}
+      </span>
     </div>
   );
 }

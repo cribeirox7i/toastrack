@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
 import { Stars } from "@/components/ui";
 import { TYPE_LABELS, type ItemType } from "@/lib/catalog";
+import { RATING_SCALE } from "@/lib/itemSchema";
 import { fmtDecimalBR } from "@/lib/numberBR";
 import { flagUrl } from "@/lib/flags";
 
@@ -55,7 +56,7 @@ export default function CountryScreen({ countryName }: { countryName: string }) 
             <div className="min-w-0 flex-1">
               <div className="text-[13.5px] font-bold">{TYPE_LABELS[r.type]}</div>
               <div className="mt-1 flex items-center gap-1.5">
-                <Stars value={r.avg} className="text-[14px]" />
+                <Stars value={r.avg} max={RATING_SCALE[r.type].max} className="text-[14px]" />
                 <span className="text-[12px] text-muted">{r.avg ? fmtDecimalBR(r.avg) : "—"}</span>
               </div>
             </div>

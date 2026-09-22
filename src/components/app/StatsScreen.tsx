@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useCatalog } from "@/components/CatalogProvider";
 import { Stars } from "@/components/ui";
 import { TYPE_LABELS, type Item, type ItemType } from "@/lib/catalog";
+import { RATING_SCALE } from "@/lib/itemSchema";
 import { fmtDecimalBR } from "@/lib/numberBR";
 import { flagUrl } from "@/lib/flags";
 
@@ -150,7 +151,7 @@ export default function StatsScreen({
         <div className="text-[40px] font-extrabold leading-none">{total}</div>
         <div className="mt-1 text-[13px] font-semibold text-muted">{TYPE_LABELS[type]}</div>
         <div className="mt-3 flex flex-col items-center gap-1">
-          <Stars value={avg} className="text-[20px]" />
+          <Stars value={avg} max={RATING_SCALE[type].max} className="text-[20px]" />
           <div className="text-[12px] text-muted">
             Média · {avg ? fmtDecimalBR(avg) : "—"}
           </div>

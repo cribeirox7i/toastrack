@@ -11,6 +11,7 @@ import { fmtDecimalBR } from "@/lib/numberBR";
 import { useCatalog } from "@/components/CatalogProvider";
 import { deleteItem, TYPE_TAB, type Item, type ItemType } from "@/lib/catalog";
 import { useSyncingIds } from "@/lib/offline/syncStatus";
+import { RATING_SCALE } from "@/lib/itemSchema";
 import type { ItemTab } from "@/lib/offline/db";
 import type { SecondaryProfile } from "@/lib/profiles";
 
@@ -680,7 +681,7 @@ function DeckView({
               <span>{formatDate(item.date)}</span>
               <span className="flex items-center gap-1 rounded-full bg-track px-2 py-0.5 text-[11px] font-bold text-text">
                 <span className="text-accent">★</span>
-                {fmtDecimalBR(item.rating)}
+                {fmtDecimalBR(item.rating, RATING_SCALE[item.type].step === 1 ? 0 : 1)}
               </span>
             </div>
           </div>
@@ -744,7 +745,7 @@ function TableView({
             <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.category}</div>
             <div className="flex-1 px-3 py-2.5 text-muted">{formatDate(item.date)}</div>
             <div className="flex-1 px-3 py-2.5">
-              <Stars value={item.rating} className="text-[12px]" />
+              <Stars value={item.rating} max={RATING_SCALE[item.type].max} className="text-[12px]" />
             </div>
             {showActionsCol && (
               <div className="flex w-20 justify-end gap-1 px-3 py-2.5">
@@ -799,7 +800,7 @@ function GalleryView({
             <Thumb label={item.name} src={item.imgUrl} className="aspect-[3/4] w-full" />
             <span className="absolute right-1.5 top-1.5 flex items-center gap-1 rounded-full bg-bg/85 px-2 py-0.5 text-[11px] font-bold shadow-sm backdrop-blur-sm">
               <span className="text-accent">★</span>
-              {fmtDecimalBR(item.rating)}
+              {fmtDecimalBR(item.rating, RATING_SCALE[item.type].step === 1 ? 0 : 1)}
             </span>
           </div>
           <div className="p-2.5">

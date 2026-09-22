@@ -5,6 +5,7 @@ import { useCatalog } from "@/components/CatalogProvider";
 import Icon from "@/components/Icon";
 import { Thumb, Stars, formatDate } from "@/components/ui";
 import { TYPE_LABELS, type Item, type ItemType, type Catalog } from "@/lib/catalog";
+import { RATING_SCALE } from "@/lib/itemSchema";
 
 const OVERVIEW_ORDER: ItemType[] = ["beer", "wine", "drink", "spirit"];
 
@@ -170,7 +171,7 @@ export default function HomeScreen({
                         {slide.category ? ` · ${slide.category}` : ""}
                       </div>
                       <div className="mt-2 flex items-center gap-2 text-[12.5px]">
-                        <Stars value={slide.rating} />
+                        <Stars value={slide.rating} max={RATING_SCALE[slide.type].max} />
                         <span className="text-muted">{formatDate(slide.date)}</span>
                       </div>
                     </div>

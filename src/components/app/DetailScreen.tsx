@@ -32,6 +32,7 @@ import PhotoViewer from "@/components/PhotoViewer";
 import CountrySelect, { CountryFlag } from "@/components/CountrySelect";
 import PickerModal from "@/components/PickerModal";
 import {
+  RATING_SCALE,
   SCHEMA,
   WINE_COR,
   WINE_TIPO,
@@ -795,6 +796,8 @@ export default function DetailScreen({
             <RatingInput
               value={parseNumBR(values[ratingField.col]) || 0}
               onChange={(v) => set(ratingField.col, String(v))}
+              max={RATING_SCALE[type].max}
+              step={RATING_SCALE[type].step}
             />
 
             {[nameField, producerField].map((f) => (
@@ -887,7 +890,11 @@ export default function DetailScreen({
               )}
             </div>
             <div className="mt-2">
-              <Stars value={parseNumBR(values[ratingField.col]) || 0} className="text-[18px]" />
+              <Stars
+                value={parseNumBR(values[ratingField.col]) || 0}
+                max={RATING_SCALE[type].max}
+                className="text-[18px]"
+              />
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3">

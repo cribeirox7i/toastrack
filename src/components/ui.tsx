@@ -34,21 +34,32 @@ export function Avatar({ url, name, className = "" }: { url?: string; name: stri
   );
 }
 
-/** Read-only 5-star row supporting halves (0–5, 0.5 steps) via a clipped overlay. */
-export function Stars({ value, className = "text-[13px]" }: { value: number; className?: string }) {
-  const pct = Math.max(0, Math.min(100, (value / 5) * 100));
+/** Read-only star row, preenchimento contínuo por `%` (suporta fração, ex.: média). `max` é o
+ *  total de estrelas - 5 pra cerveja/destilado/drink, 10 pra vinho (ver `RATING_SCALE` em
+ *  itemSchema.ts, pedido do Carlos 2026-09-22). */
+export function Stars({
+  value,
+  max = 5,
+  className = "text-[13px]",
+}: {
+  value: number;
+  max?: number;
+  className?: string;
+}) {
+  const pct = Math.max(0, Math.min(100, (value / max) * 100));
+  const stars = "★".repeat(max);
   return (
     <span
       className={`relative inline-block leading-none ${className}`}
-      aria-label={`${value} de 5 estrelas`}
+      aria-label={`${value} de ${max} estrelas`}
     >
-      <span className="text-border">★★★★★</span>
+      <span className="text-border">{stars}</span>
       <span
         className="absolute left-0 top-0 overflow-hidden text-accent"
         style={{ width: `${pct}%` }}
         aria-hidden="true"
       >
-        ★★★★★
+        {stars}
       </span>
     </span>
   );
