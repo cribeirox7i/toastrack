@@ -60,12 +60,16 @@ type TypeCfg = {
   imgUrlCol: string;
 };
 
-/** A planilha guarda o link de "visualizar no Drive" (`drive.google.com/file/d/{id}/view...`,
- *  às vezes com lixo colado no fim, ex. aspas) — isso é uma página HTML, não uma imagem, não
- *  funciona direto num `<img src>`. Extrai o fileId e monta o link de imagem direta que o Drive
- *  serve sem exigir login (`lh3.googleusercontent.com/d/{id}`, confirmado com uma foto real). */
+/** A planilha guarda o link de "visualizar no Drive" - normalmente `.../file/d/{id}/view...`, mas
+ *  o link de "Compartilhar" do app Drive no celular sai como `.../open?id={id}&usp=drive_fs` (sem
+ *  `/d/` na URL, o id vem só como parâmetro de query) - relatado pelo Carlos 2026-09-22, foto
+ *  colada assim não aparecia (o regex antigo só pegava a primeira forma). Isso é uma página HTML,
+ *  não uma imagem, não funciona direto num `<img src>` de qualquer forma. Extrai o fileId (tentando
+ *  as duas formas) e monta o link de imagem direta que o Drive serve sem exigir login
+ *  (`lh3.googleusercontent.com/d/{id}`, confirmado com uma foto real). */
 export function driveImageUrl(raw: string | undefined): string {
-  const m = /\/d\/([\w-]+)/.exec(raw ?? "");
+  const s = raw ?? "";
+  const m = /\/d\/([\w-]+)/.exec(s) ?? /[?&]id=([\w-]+)/.exec(s);
   return m ? `https://lh3.googleusercontent.com/d/${m[1]}` : "";
 }
 
