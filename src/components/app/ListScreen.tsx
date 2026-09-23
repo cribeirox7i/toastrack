@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import Icon from "@/components/Icon";
 import RefreshButton from "@/components/RefreshButton";
 import { PullIndicator, usePullToRefresh } from "@/components/PullToRefresh";
@@ -32,9 +32,14 @@ const VIEW_MODES: { key: ViewMode; icon: string; label: string }[] = [
   { key: "gallery", icon: "gallery", label: "Galeria" },
 ];
 
+// Larguras das colunas da Tabela — arrastáveis (ver ColResizeHandle) e lembradas por aparelho.
+// Default reproduz a proporção flex-[2]/flex-1 de antes (Nome pesa o dobro) sobre os 560px de
+// largura mínima da tabela.
+type TableColKey = Exclude<SortField, "id">;
+
 // Usado pelos cabeçalhos da Tabela — precisa bater 1:1 com as colunas fixas renderizadas ali
 // embaixo (TableView), por isso "id" não entra aqui (a Tabela não tem coluna de id pra mostrar).
-const SORT_COLS: { key: SortField; label: string }[] = [
+const SORT_COLS: { key: TableColKey; label: string }[] = [
   { key: "name", label: "Nome" },
   { key: "manufacturer", label: "Fabricante" },
   { key: "category", label: "Categoria" },
@@ -45,6 +50,15 @@ const SORT_COLS: { key: SortField; label: string }[] = [
 // Usado pelo menu "Ordenar" ao lado da busca — vale pras 3 visões (Deck/Tabela/Galeria), então
 // pode ter uma opção a mais que a Tabela não expõe como coluna.
 const SORT_MENU_COLS: { key: SortField; label: string }[] = [...SORT_COLS, { key: "id", label: "ID" }];
+const DEFAULT_COL_WIDTHS: Record<TableColKey, number> = {
+  name: 187,
+  manufacturer: 93,
+  category: 93,
+  date: 93,
+  rating: 93,
+};
+const COL_WIDTHS_STORAGE_KEY = "toastrack:table-col-widths";
+const MIN_COL_WIDTH = 56;
 
 // Renderiza aos poucos em vez da lista inteira de uma vez — a aba `beer` tem ~3600 itens reais e
 // as 3 visões (Deck/Tabela/Galeria) fazem .map() direto sobre o array inteiro, sem paginação
@@ -694,6 +708,95 @@ function DeckView({
   );
 }
 
+// Larguras de coluna da Tabela: lê o que o usuário já ajustou (por aparelho, localStorage) e
+// grava a cada arraste solto. `colStyle` cobre width + flexShrink/flexGrow pra o flex parar de
+// redistribuir a coluna sozinho.
+function useColumnWidths() {
+  const [widths, setWidths] = useState<Record<TableColKey, number>>(DEFAULT_COL_WIDTHS);
+  const [resizing, setResizing] = useState<TableColKey | null>(null);
+  const drag = useRef<{ col: TableColKey; startX: number; startWidth: number } | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(COL_WIDTHS_STORAGE_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as Partial<Record<TableColKey, number>>;
+      setWidths((w) => ({ ...w, ...saved }));
+    } catch {}
+  }, []);
+
+  const startResize = useCallback(
+    (col: TableColKey, e: PointerEvent) => {
+      e.preventDefault();
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      drag.current = { col, startX: e.clientX, startWidth: widths[col] };
+      setResizing(col);
+    },
+    [widths],
+  );
+
+  const onPointerMove = useCallback((e: PointerEvent) => {
+    const d = drag.current;
+    if (!d) return;
+    const next = Math.max(MIN_COL_WIDTH, Math.round(d.startWidth + (e.clientX - d.startX)));
+    setWidths((w) => (w[d.col] === next ? w : { ...w, [d.col]: next }));
+  }, []);
+
+  const endResize = useCallback((e: PointerEvent) => {
+    if (!drag.current) return;
+    drag.current = null;
+    setResizing(null);
+    setWidths((w) => {
+      try {
+        localStorage.setItem(COL_WIDTHS_STORAGE_KEY, JSON.stringify(w));
+      } catch {}
+      return w;
+    });
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  }, []);
+
+  const colStyle = useCallback(
+    (col: TableColKey): CSSProperties => ({
+      width: widths[col],
+      flexShrink: 0,
+      flexGrow: 0,
+    }),
+    [widths],
+  );
+
+  return { widths, colStyle, startResize, resizing, onPointerMove, endResize };
+}
+
+// Alça fina no canto direito de cada cabeçalho - arrasta (mouse ou toque) pra redimensionar só
+// aquela coluna; as vizinhas não mexem, a tabela cresce/encolhe dentro do overflow-x-auto.
+function ColResizeHandle({
+  active,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  active: boolean;
+  onPointerDown: (e: PointerEvent) => void;
+  onPointerMove: (e: PointerEvent) => void;
+  onPointerUp: (e: PointerEvent) => void;
+}) {
+  return (
+    <div
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
+      className="group absolute inset-y-0 right-0 z-10 flex w-3 -mr-1.5 cursor-col-resize touch-none items-center justify-center"
+    >
+      <span
+        className={`h-4/5 w-[2px] rounded-full ${active ? "bg-accent" : "bg-border group-hover:bg-accent"}`}
+      />
+    </div>
+  );
+}
+
 function TableView({
   items,
   syncingIds,
@@ -716,35 +819,48 @@ function TableView({
   onDelete: (i: Item) => void;
 }) {
   const arrow = (f: SortField) => (sortField === f ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+  const { colStyle, startResize, resizing, onPointerMove, endResize } = useColumnWidths();
+
   return (
     <div className="w-full overflow-x-auto px-5 py-3">
-      <div className="min-w-[560px]">
-        <div className="flex items-center rounded-t-xl bg-track text-[12px] font-bold text-muted">
+      <div className="w-max min-w-[560px]">
+        <div className="flex items-stretch rounded-t-xl bg-track text-[12px] font-bold text-muted">
           {SORT_COLS.map((c) => (
-            <button
-              key={c.key}
-              onClick={() => onSort(c.key)}
-              className={`px-3 py-2.5 text-left ${c.key === "name" ? "flex-[2]" : "flex-1"}`}
-            >
-              {c.label}
-              {arrow(c.key)}
-            </button>
+            <div key={c.key} className="relative" style={colStyle(c.key)}>
+              <button onClick={() => onSort(c.key)} className="w-full px-3 py-2.5 text-left">
+                {c.label}
+                {arrow(c.key)}
+              </button>
+              <ColResizeHandle
+                active={resizing === c.key}
+                onPointerDown={(e) => startResize(c.key, e)}
+                onPointerMove={onPointerMove}
+                onPointerUp={endResize}
+              />
+            </div>
           ))}
-          {showActionsCol && <div className="w-20 px-3 py-2.5 text-right">Ações</div>}
+          {showActionsCol && <div className="w-20 shrink-0 px-3 py-2.5 text-right">Ações</div>}
         </div>
         {items.map((item) => (
-          <div key={item.id} className="flex items-center border-b border-border text-[13px]">
+          <div key={item.id} className="flex items-stretch border-b border-border text-[13px]">
             <button
               onClick={() => onOpen(item)}
-              className="flex-[2] flex items-center gap-1.5 truncate px-3 py-2.5 text-left font-semibold"
+              style={colStyle("name")}
+              className="flex items-center gap-1.5 truncate px-3 py-2.5 text-left font-semibold"
             >
               {syncingIds.has(item.id) && <SyncDot />}
               <span className="truncate">{item.name}</span>
             </button>
-            <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.manufacturer}</div>
-            <div className="flex-1 truncate px-3 py-2.5 text-muted">{item.category}</div>
-            <div className="flex-1 px-3 py-2.5 text-muted">{formatDate(item.date)}</div>
-            <div className="flex-1 px-3 py-2.5">
+            <div style={colStyle("manufacturer")} className="truncate px-3 py-2.5 text-muted">
+              {item.manufacturer}
+            </div>
+            <div style={colStyle("category")} className="truncate px-3 py-2.5 text-muted">
+              {item.category}
+            </div>
+            <div style={colStyle("date")} className="px-3 py-2.5 text-muted">
+              {formatDate(item.date)}
+            </div>
+            <div style={colStyle("rating")} className="px-3 py-2.5">
               <Stars
                 value={item.rating}
                 max={RATING_SCALE[item.type].max}
@@ -753,7 +869,7 @@ function TableView({
               />
             </div>
             {showActionsCol && (
-              <div className="flex w-20 justify-end gap-1 px-3 py-2.5">
+              <div className="flex w-20 shrink-0 justify-end gap-1 px-3 py-2.5">
                 {item.canEdit && (
                   <>
                     <button
