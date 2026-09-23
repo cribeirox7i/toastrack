@@ -16,6 +16,8 @@ export type Item = {
   rating: number; // 0–5
   date: string; // "YYYY-MM-DD" or ""
   category: string; // beer: estilo livre · wine: cor · spirit: tipo · drink: ""
+  abv: number | null; // graduação alcoólica (%) - todos os tipos têm a coluna; null = vazio na planilha
+  ibu: number | null; // amargor - só beer tem a coluna; sempre null nos outros 3 tipos
   bjcpId: string; // bjcp21_id cru (só beer), or "" - pro de/para estilo→BJCP
   imgUrl: string; // beer_img_url etc., ou "" quando o item não tem foto
   /** Dono ou listado em user_edit — item compartilhado só por user_access dá false. */
@@ -58,6 +60,8 @@ type TypeCfg = {
   dateCol: string;
   categoryCol?: string; // undefined = sem categoria (drink)
   imgUrlCol: string;
+  abvCol: string;
+  ibuCol?: string; // só beer tem coluna de IBU
 };
 
 /** A planilha guarda o link de "visualizar no Drive" - normalmente `.../file/d/{id}/view...`, mas
@@ -83,11 +87,18 @@ export const IMG_URL_COL: Record<ItemType, string> = {
 };
 
 const CONFIG: Record<ItemType, TypeCfg> = {
-  beer: { nameCol: "beer_nome", manufacturerCol: "beer_cervejaria", ratingCol: "beer_nota", dateCol: "beer_data", categoryCol: "beer_estilo_livre", imgUrlCol: IMG_URL_COL.beer },
-  wine: { nameCol: "wine_nome", manufacturerCol: "wine_produtor", ratingCol: "wine_nota", dateCol: "wine_data_degustacao", categoryCol: "wine_cor", imgUrlCol: IMG_URL_COL.wine },
-  spirit: { nameCol: "dest_nome", manufacturerCol: "dest_produtor", ratingCol: "dest_nota", dateCol: "dest_data_degustacao", categoryCol: "dest_tipo", imgUrlCol: IMG_URL_COL.spirit },
-  drink: { nameCol: "drink_nome", manufacturerCol: "drink_produtor", ratingCol: "drink_nota", dateCol: "drink_data_degustacao", imgUrlCol: IMG_URL_COL.drink },
+  beer: { nameCol: "beer_nome", manufacturerCol: "beer_cervejaria", ratingCol: "beer_nota", dateCol: "beer_data", categoryCol: "beer_estilo_livre", imgUrlCol: IMG_URL_COL.beer, abvCol: "beer_abv", ibuCol: "beer_ibu" },
+  wine: { nameCol: "wine_nome", manufacturerCol: "wine_produtor", ratingCol: "wine_nota", dateCol: "wine_data_degustacao", categoryCol: "wine_cor", imgUrlCol: IMG_URL_COL.wine, abvCol: "wine_abv" },
+  spirit: { nameCol: "dest_nome", manufacturerCol: "dest_produtor", ratingCol: "dest_nota", dateCol: "dest_data_degustacao", categoryCol: "dest_tipo", imgUrlCol: IMG_URL_COL.spirit, abvCol: "dest_abv" },
+  drink: { nameCol: "drink_nome", manufacturerCol: "drink_produtor", ratingCol: "drink_nota", dateCol: "drink_data_degustacao", imgUrlCol: IMG_URL_COL.drink, abvCol: "drink_abv" },
 };
+
+/** Texto da planilha -> number, ou `null` quando a célula tá vazia/não numérica - distingue "sem
+ *  dado" de "0" de verdade (ABV/IBU podem legitimamente ser 0). */
+function parseNumOrNull(v: string | undefined): number | null {
+  const n = parseNumBR(v);
+  return Number.isFinite(n) ? n : null;
+}
 
 // país vem só como pais_id na linha crua; o nome é resolvido à parte via /api/lookups, porque a
 // rota de itens não faz join (o Apps Script não sabe fazer join entre abas).
@@ -103,6 +114,8 @@ export function mapRow(type: ItemType, row: RawItemRow, paisNome: (id: string) =
     rating: parseNumBR(row[cfg.ratingCol]) || 0,
     date: row[cfg.dateCol] ?? "",
     category: cfg.categoryCol ? (row[cfg.categoryCol] ?? "") : "",
+    abv: parseNumOrNull(row[cfg.abvCol]),
+    ibu: cfg.ibuCol ? parseNumOrNull(row[cfg.ibuCol]) : null,
     bjcpId: row.bjcp21_id ?? "",
     // A coluna real (planilha) sempre vence quando existe; o preview local é só um substituto
     // enquanto o upload em segundo plano não termina - ver localPhotoPreview.ts.

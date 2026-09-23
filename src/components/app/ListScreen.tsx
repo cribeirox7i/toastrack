@@ -17,7 +17,7 @@ import type { SecondaryProfile } from "@/lib/profiles";
 
 export type ViewMode = "deck" | "table" | "gallery";
 export type SearchField = "all" | "name" | "manufacturer" | "country";
-type SortField = "name" | "manufacturer" | "category" | "date" | "rating" | "id";
+type SortField = "name" | "manufacturer" | "category" | "date" | "abv" | "ibu" | "rating" | "id";
 
 const SEARCH_FIELDS: { value: SearchField; label: string }[] = [
   { value: "all", label: "Todos" },
@@ -39,24 +39,36 @@ type TableColKey = Exclude<SortField, "id">;
 
 // Usado pelos cabeçalhos da Tabela — precisa bater 1:1 com as colunas fixas renderizadas ali
 // embaixo (TableView), por isso "id" não entra aqui (a Tabela não tem coluna de id pra mostrar).
-const SORT_COLS: { key: TableColKey; label: string }[] = [
+// IBU só existe pra cerveja (ver Item.ibu em catalog.ts) - `useTableCols` abaixo tira essa coluna
+// fora da aba Cervejas, senão ela apareceria sempre vazia nos outros 3 tipos.
+const BASE_SORT_COLS: { key: TableColKey; label: string }[] = [
   { key: "name", label: "Nome" },
   { key: "manufacturer", label: "Fabricante" },
   { key: "category", label: "Categoria" },
+  { key: "abv", label: "ABV" },
+  { key: "ibu", label: "IBU" },
   { key: "date", label: "Data" },
   { key: "rating", label: "Avaliação" },
 ];
-
-// Usado pelo menu "Ordenar" ao lado da busca — vale pras 3 visões (Deck/Tabela/Galeria), então
-// pode ter uma opção a mais que a Tabela não expõe como coluna.
-const SORT_MENU_COLS: { key: SortField; label: string }[] = [...SORT_COLS, { key: "id", label: "ID" }];
 const DEFAULT_COL_WIDTHS: Record<TableColKey, number> = {
-  name: 187,
+  name: 160,
   manufacturer: 93,
   category: 93,
+  abv: 70,
+  ibu: 60,
   date: 93,
   rating: 93,
 };
+
+// Colunas da Tabela + do menu "Ordenar" (esse último vale pras 3 visões, por isso tem "ID" a
+// mais) - filtradas por tipo pra tirar o IBU fora da aba Cervejas.
+function useTableCols(listType: ItemType) {
+  return useMemo(() => {
+    const cols = listType === "beer" ? BASE_SORT_COLS : BASE_SORT_COLS.filter((c) => c.key !== "ibu");
+    const menuCols: { key: SortField; label: string }[] = [...cols, { key: "id", label: "ID" }];
+    return { cols, menuCols };
+  }, [listType]);
+}
 const COL_WIDTHS_STORAGE_KEY = "toastrack:table-col-widths";
 const MIN_COL_WIDTH = 56;
 
@@ -133,6 +145,7 @@ export default function ListScreen({
 
   const { catalog, loading } = useCatalog();
   const items = catalog[listType];
+  const { cols: tableCols, menuCols: sortMenuCols } = useTableCols(listType);
   const syncingIds = useSyncingIds(TYPE_TAB[listType] as ItemTab);
   // Padrão por código (id), decrescente - pedido do Carlos 2026-09-04: o item mais recente
   // (maior id sequencial) primeiro, em vez de por data de degustação.
@@ -163,6 +176,12 @@ export default function ListScreen({
       if (sortField === "rating") {
         av = a.rating;
         bv = b.rating;
+      } else if (sortField === "abv" || sortField === "ibu") {
+        // null (sem dado na planilha) vai sempre pro fim, nos dois sentidos.
+        const na = sortField === "abv" ? a.abv : a.ibu;
+        const nb = sortField === "abv" ? b.abv : b.ibu;
+        av = na ?? (dir === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
+        bv = nb ?? (dir === 1 ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
       } else if (sortField === "date") {
         av = a.date;
         bv = b.date;
@@ -345,14 +364,14 @@ export default function ListScreen({
           >
             <Icon name="sort" size={15} />
             <span className="hidden sm:inline">
-              {SORT_MENU_COLS.find((c) => c.key === sortField)?.label}
+              {sortMenuCols.find((c) => c.key === sortField)?.label}
             </span>
           </button>
           {sortMenuOpen && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setSortMenuOpen(false)} />
               <div className="absolute right-0 top-[calc(100%+6px)] z-20 min-w-[190px] rounded-2xl border border-border bg-surface p-1.5 shadow-lg">
-                {SORT_MENU_COLS.map((c) => {
+                {sortMenuCols.map((c) => {
                   const active = sortField === c.key;
                   return (
                     <button
@@ -507,6 +526,7 @@ export default function ListScreen({
           ) : viewMode === "table" ? (
             <TableView
               items={visibleItems}
+              cols={tableCols}
               syncingIds={syncingIds}
               showActionsCol={sorted.some((i) => i.canEdit)}
               sortField={sortField}
@@ -797,8 +817,17 @@ function ColResizeHandle({
   );
 }
 
+// ABV/IBU: null = sem dado na planilha (não 0), ver catalog.ts. "—" cobre isso na Tabela.
+function fmtAbv(v: number | null): string {
+  return v == null ? "—" : `${fmtDecimalBR(v, 1)}%`;
+}
+function fmtIbu(v: number | null): string {
+  return v == null ? "—" : fmtDecimalBR(v, 0);
+}
+
 function TableView({
   items,
+  cols,
   syncingIds,
   showActionsCol,
   sortField,
@@ -809,6 +838,7 @@ function TableView({
   onDelete,
 }: {
   items: Item[];
+  cols: { key: TableColKey; label: string }[];
   syncingIds: Set<string>;
   showActionsCol: boolean;
   sortField: SortField;
@@ -820,12 +850,13 @@ function TableView({
 }) {
   const arrow = (f: SortField) => (sortField === f ? (sortDir === "asc" ? " ▲" : " ▼") : "");
   const { colStyle, startResize, resizing, onPointerMove, endResize } = useColumnWidths();
+  const restCols = cols.filter((c) => c.key !== "name");
 
   return (
     <div className="w-full overflow-x-auto px-5 py-3">
       <div className="w-max min-w-[560px]">
         <div className="flex items-stretch rounded-t-xl bg-track text-[12px] font-bold text-muted">
-          {SORT_COLS.map((c) => (
+          {cols.map((c) => (
             <div key={c.key} className="relative" style={colStyle(c.key)}>
               <button onClick={() => onSort(c.key)} className="w-full px-3 py-2.5 text-left">
                 {c.label}
@@ -851,23 +882,32 @@ function TableView({
               {syncingIds.has(item.id) && <SyncDot />}
               <span className="truncate">{item.name}</span>
             </button>
-            <div style={colStyle("manufacturer")} className="truncate px-3 py-2.5 text-muted">
-              {item.manufacturer}
-            </div>
-            <div style={colStyle("category")} className="truncate px-3 py-2.5 text-muted">
-              {item.category}
-            </div>
-            <div style={colStyle("date")} className="px-3 py-2.5 text-muted">
-              {formatDate(item.date)}
-            </div>
-            <div style={colStyle("rating")} className="px-3 py-2.5">
-              <Stars
-                value={item.rating}
-                max={RATING_SCALE[item.type].max}
-                starCount={RATING_SCALE[item.type].starCount}
-                className="text-[12px]"
-              />
-            </div>
+            {restCols.map((c) => (
+              <div
+                key={c.key}
+                style={colStyle(c.key)}
+                className={c.key === "rating" ? "px-3 py-2.5" : "truncate px-3 py-2.5 text-muted"}
+              >
+                {c.key === "manufacturer" ? (
+                  item.manufacturer
+                ) : c.key === "category" ? (
+                  item.category
+                ) : c.key === "abv" ? (
+                  fmtAbv(item.abv)
+                ) : c.key === "ibu" ? (
+                  fmtIbu(item.ibu)
+                ) : c.key === "date" ? (
+                  formatDate(item.date)
+                ) : (
+                  <Stars
+                    value={item.rating}
+                    max={RATING_SCALE[item.type].max}
+                    starCount={RATING_SCALE[item.type].starCount}
+                    className="text-[12px]"
+                  />
+                )}
+              </div>
+            ))}
             {showActionsCol && (
               <div className="flex w-20 shrink-0 justify-end gap-1 px-3 py-2.5">
                 {item.canEdit && (
