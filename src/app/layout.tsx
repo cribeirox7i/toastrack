@@ -25,8 +25,6 @@ export const metadata: Metadata = {
   manifest: `${base}/manifest.webmanifest`,
   icons: {
     icon: [
-      // SVG primeiro - navegador moderno prefere; PNGs pra quem não aceita SVG.
-      { url: `${base}/icon.svg`, type: "image/svg+xml" },
       { url: `${base}/icons/icon-192.png`, sizes: "192x192", type: "image/png" },
       { url: `${base}/icons/icon-512.png`, sizes: "512x512", type: "image/png" },
     ],
