@@ -91,3 +91,19 @@ body {
   color: var(--text);
   font-family: var(--font-manrope), system-ui, sans-serif;
 }
+
+/* Splash: crossfade/pop usado pra alternar entre os ícones de bebida (AppShell.tsx). */
+@keyframes splash-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.6) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.1) rotate(3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
