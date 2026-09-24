@@ -322,7 +322,10 @@ export default function MainApp() {
 
       {/* Mobile bottom nav (main views) */}
       {main && (
-        <nav className="flex border-t border-border sm:hidden">
+        <nav
+          className="flex border-t border-border bg-bg sm:hidden"
+          style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        >
           {MAIN_TABS.map((t) => (
             <button
               key={t.key}

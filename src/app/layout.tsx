@@ -45,6 +45,12 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Sem isso, a faixa da área segura embaixo (indicador de gestos do iPhone) fica fora do nosso
+  // CSS e aparece com o branco padrão do navegador por trás - a "linha branca no rodapé" relatada
+  // pelo Carlos 2026-09-23. Com "cover" o conteúdo se estende até a borda física da tela, e cabe
+  // à gente pintar por baixo dela (ver padding-bottom: env(safe-area-inset-bottom) no rodapé
+  // mobile, MainApp.tsx).
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
