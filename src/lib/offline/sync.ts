@@ -220,7 +220,7 @@ export async function refreshAllNow(): Promise<RefreshTabResult[]> {
   if (!isOnline()) {
     return ITEM_TABS.map((tab) => ({ tab, linhas: 0, baixadas: 0, apagadas: 0, erro: "sem conexão" }));
   }
-  await pushOutbox().catch(() => {});
+  await pushOutbox({ force: true }).catch(() => {});
 
   const results = await Promise.all(
     ITEM_TABS.map(async (tab): Promise<RefreshTabResult> => {
@@ -310,6 +310,30 @@ export async function getCachedLookups(): Promise<LookupsResponse | null> {
 export const MAX_OUTBOX_ATTEMPTS = 5;
 let pushing = false;
 
+/** Pausa manual da sincronização automática (por aparelho, `localStorage` como o bloqueio por
+ *  biometria) - pedido do Carlos pra poder investigar uma fila travada sem o app ficar retentando
+ *  sozinho no meio tempo. Só afasta os gatilhos AUTOMÁTICOS (intervalo, online, foco/visibilidade -
+ *  ver `initSync`/`initPhotoOutbox`); o botão "Forçar sincronização agora" do Perfil chama
+ *  `pushOutbox`/`flushPhotoOutbox` com `force: true` e sempre funciona, pausado ou não. */
+const SYNC_PAUSED_KEY = "tt.syncPaused";
+
+export function isSyncPaused(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(SYNC_PAUSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setSyncPaused(paused: boolean): void {
+  try {
+    if (paused) localStorage.setItem(SYNC_PAUSED_KEY, "1");
+    else localStorage.removeItem(SYNC_PAUSED_KEY);
+  } catch {}
+  notifyChange();
+}
+
 /** Resultado de tentar mandar uma entrada da fila. `remap` só existe pra "createItem" quando o
  *  servidor devolveu um id diferente do que o cliente mandou - ver ITEM_ID_SEQUENCIAL abaixo. */
 type SendResult =
@@ -317,8 +341,9 @@ type SendResult =
   | { status: "network-error" }
   | { status: "error"; message: string };
 
-export async function pushOutbox(): Promise<void> {
+export async function pushOutbox(opts?: { force?: boolean }): Promise<void> {
   if (pushing || !isOnline()) return;
+  if (isSyncPaused() && !opts?.force) return;
   pushing = true;
   try {
     const entries = await listOutbox();

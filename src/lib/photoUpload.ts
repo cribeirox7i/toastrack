@@ -1,5 +1,5 @@
 import { IMG_URL_COL, TYPE_TAB, type ItemType } from "@/lib/catalog";
-import { applyServerPatch, syncEvents, waitForRealId, type ItemTab } from "@/lib/offline/sync";
+import { applyServerPatch, isSyncPaused, syncEvents, waitForRealId, type ItemTab } from "@/lib/offline/sync";
 import {
   listPhotoOutbox,
   putPhotoOutbox,
@@ -466,9 +466,10 @@ let flushing = false;
  * Tenta subir toda foto pendente na fila. Idempotente e reentrante-safe (`flushing`). Uma falha
  * numa foto não trava as outras - incrementa `attempts` e segue; a próxima rodada retenta.
  */
-export async function flushPhotoOutbox(): Promise<void> {
+export async function flushPhotoOutbox(opts?: { force?: boolean }): Promise<void> {
   if (flushing) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
+  if (isSyncPaused() && !opts?.force) return;
   flushing = true;
   try {
     const entries = await listPhotoOutbox();
@@ -522,6 +523,13 @@ export async function flushPhotoOutbox(): Promise<void> {
   } finally {
     flushing = false;
   }
+}
+
+/** Descarta uma foto travada na fila (ver MAX_PHOTO_ATTEMPTS) - mesmo papel do
+ *  `discardOutboxEntry` de texto em sync.ts, pro card "Fila de sincronização" do Perfil. */
+export async function discardPhotoOutbox(localId: string): Promise<void> {
+  await removePhotoOutbox(localId);
+  syncEvents.dispatchEvent(new Event("change"));
 }
 
 let inited = false;

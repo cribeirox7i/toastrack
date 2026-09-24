@@ -2,8 +2,9 @@
 
 /** Small shared UI primitives used across screens. */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { initialsFor } from "@/lib/utils";
+import Icon from "@/components/Icon";
 
 /** Avatar de usuário: foto (`url`) quando existir, senão as iniciais no círculo de accent. O
  *  tamanho e o tamanho da fonte das iniciais vêm por `className` (ex.: "size-9 text-[13px]").
@@ -105,6 +106,44 @@ export function Thumb({ label, src, className = "" }: { label: string; src?: str
       }}
     >
       <span className="line-clamp-3">Foto: {label}</span>
+    </div>
+  );
+}
+
+/** Seção recolhível simples (cabeçalho com contagem + seta, conteúdo só monta quando aberta). Sem
+ *  estado persistido - reabre fechada a cada visita à tela, é só pra não empurrar listas longas
+ *  (fila de sincronização, log de acesso) pra frente do resto do Perfil. */
+export function Accordion({
+  title,
+  count,
+  defaultOpen = false,
+  children,
+}: {
+  title: string;
+  count?: number;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-2 py-1 text-left"
+      >
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+          {title}
+          {count !== undefined ? ` (${count})` : ""}
+        </span>
+        <Icon
+          name="chevronDown"
+          size={16}
+          className={`shrink-0 text-muted transition-transform ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+      {open && <div className="mt-2">{children}</div>}
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
-import { Avatar } from "@/components/ui";
+import { Accordion, Avatar } from "@/components/ui";
 import { PALETTES, hueToPaletteEnum, type HueName } from "@/lib/theme";
 import { validatePassword } from "@/lib/auth";
 import {
@@ -14,7 +14,9 @@ import {
   isBiometricSupported,
 } from "@/lib/biometricLock";
 import { saveUserPrefs, changePassword, uploadProfilePhoto } from "@/lib/prefs";
-import { refreshAllNow } from "@/lib/offline/sync";
+import { discardOutboxEntry, isSyncPaused, pushOutbox, refreshAllNow, setSyncPaused } from "@/lib/offline/sync";
+import { discardPhotoOutbox, flushPhotoOutbox } from "@/lib/photoUpload";
+import { useOutboxQueue, type OutboxQueueRow } from "@/lib/offline/syncStatus";
 import { buildLabel } from "@/lib/version";
 import {
   fetchAllUsers,
@@ -36,6 +38,13 @@ const cardCls = "rounded-2xl border border-border bg-surface p-4";
 const cardLabel = "mb-3 text-[11px] font-bold uppercase tracking-wider text-muted";
 const inputCls =
   "w-full rounded-xl border border-border bg-bg px-3.5 py-2.5 text-[14px] outline-none focus:border-accent";
+
+const QUEUE_KIND_LABEL: Record<OutboxQueueRow["kind"], string> = {
+  createItem: "novo item",
+  updateItem: "edição",
+  deleteItem: "exclusão",
+  photo: "foto",
+};
 
 const LANGS: { code: "pt" | "en" | "es"; label: string }[] = [
   { code: "pt", label: "Português" },
@@ -125,6 +134,45 @@ export default function ProfileScreen() {
       showToast("Erro ao atualizar");
     } finally {
       setSyncing(false);
+    }
+  }
+
+  // Fila de sincronização (outbox de texto + fila de fotos) - card de diagnóstico pra achar/
+  // descartar uma escrita travada, ver syncStatus.ts useOutboxQueue.
+  const queue = useOutboxQueue();
+  const [paused, setPaused] = useState(false);
+  const [forcing, setForcing] = useState(false);
+  const [discarding, setDiscarding] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPaused(isSyncPaused());
+  }, []);
+
+  function togglePaused() {
+    const next = !paused;
+    setSyncPaused(next);
+    setPaused(next);
+  }
+
+  async function forceSyncNow() {
+    setForcing(true);
+    try {
+      await Promise.all([pushOutbox({ force: true }), flushPhotoOutbox({ force: true })]);
+      showToast("Envio forçado");
+    } finally {
+      setForcing(false);
+    }
+  }
+
+  async function discardQueueRow(row: OutboxQueueRow) {
+    if (!window.confirm(`Descartar "${row.label}" (${QUEUE_KIND_LABEL[row.kind]})? Essa mudança pendente será perdida.`)) return;
+    setDiscarding(row.localId);
+    try {
+      if (row.kind === "photo") await discardPhotoOutbox(row.localId);
+      else await discardOutboxEntry(row.localId);
+      showToast("Descartado");
+    } finally {
+      setDiscarding(null);
     }
   }
 
@@ -526,22 +574,84 @@ export default function ProfileScreen() {
         </button>
       </div>
 
+      {/* Fila de sincronização: outbox de texto + fila de fotos, pra achar/descartar uma escrita
+          travada (ex.: item que fica com a bolinha de "sincronizando" presa na lista, ver
+          syncStatus.ts). Independente do card acima, que é sobre PUXAR dados do servidor - este é
+          sobre MANDAR o que ainda está pendente. */}
+      <div className={cardCls}>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-[14px] font-bold">Sincronização automática</div>
+            <div className="mt-0.5 text-[12.5px] text-muted">
+              Pausar impede o app de retentar sozinho, pra investigar um item preso.
+            </div>
+          </div>
+          <button
+            onClick={togglePaused}
+            aria-pressed={paused}
+            className="relative h-7 w-12 shrink-0 rounded-full transition"
+            style={{ background: paused ? "var(--danger)" : "var(--track)" }}
+          >
+            <span
+              className="absolute top-0.5 size-6 rounded-full bg-surface shadow transition-transform"
+              style={{ transform: paused ? "translateX(22px)" : "translateX(2px)" }}
+            />
+          </button>
+        </div>
+        <button
+          onClick={() => void forceSyncNow()}
+          disabled={forcing}
+          className="w-full rounded-xl border border-border py-2.5 text-[13px] font-bold disabled:opacity-60"
+        >
+          {forcing ? "Enviando…" : "Forçar envio agora"}
+        </button>
+        <div className="mt-3 border-t border-border pt-3">
+          <Accordion title="Pendentes" count={queue.length}>
+            <div className="flex flex-col divide-y divide-border">
+              {queue.map((row) => (
+                <div key={row.localId} className="flex items-start justify-between gap-2 py-2.5 first:pt-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-semibold">{row.label}</div>
+                    <div className="mt-0.5 text-[11.5px] text-muted">
+                      {QUEUE_KIND_LABEL[row.kind]} · {formatTs(new Date(row.createdAt).toISOString())} ·{" "}
+                      {row.attempts} tentativa{row.attempts === 1 ? "" : "s"}
+                    </div>
+                    {row.lastError && (
+                      <div className="mt-0.5 text-[11.5px] font-semibold text-danger">{row.lastError}</div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => void discardQueueRow(row)}
+                    disabled={discarding === row.localId}
+                    className="shrink-0 rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted disabled:opacity-60"
+                  >
+                    Descartar
+                  </button>
+                </div>
+              ))}
+              {queue.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
+            </div>
+          </Accordion>
+        </div>
+      </div>
+
       {/* Admin: access log */}
       {isAdmin && (
         <div className={cardCls}>
-          <div className={cardLabel}>Log de acesso</div>
-          <div className="flex flex-col gap-2">
-            {logs.map((l) => (
-              <div key={l.log_id} className="flex items-baseline gap-2 text-[12.5px]">
-                <span className="shrink-0 font-mono text-[11px] text-muted">{formatTs(l.ts)}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-semibold">{userNameById(l.user_id)}</span>{" "}
-                  <span className="text-muted">{l.action}</span>
-                </span>
-              </div>
-            ))}
-            {logs.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
-          </div>
+          <Accordion title="Log de acesso" count={logs.length}>
+            <div className="flex flex-col gap-2">
+              {logs.map((l) => (
+                <div key={l.log_id} className="flex items-baseline gap-2 text-[12.5px]">
+                  <span className="shrink-0 font-mono text-[11px] text-muted">{formatTs(l.ts)}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold">{userNameById(l.user_id)}</span>{" "}
+                    <span className="text-muted">{l.action}</span>
+                  </span>
+                </div>
+              ))}
+              {logs.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
+            </div>
+          </Accordion>
         </div>
       )}
 
