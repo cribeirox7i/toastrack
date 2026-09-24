@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useState, type ReactNode } from "react";
 import Icon from "@/components/Icon";
 import { isBiometricLockEnabled, verifyBiometric } from "@/lib/biometricLock";
 
@@ -35,6 +35,15 @@ export default function BiometricLock({ children }: { children: ReactNode }) {
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
+
+  // Dispara o prompt biométrico sozinho assim que a tela de bloqueio aparece (load frio ou volta
+  // de segundo plano), sem exigir o toque em "Desbloquear" primeiro. O botão continua ali pra
+  // repetir se o usuário cancelar/errar, ou pra navegadores que exigem gesto do usuário no
+  // WebAuthn (aí o auto-disparo falha calado e o toque manual assume).
+  useEffect(() => {
+    if (locked) void tryUnlock();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locked]);
 
   async function tryUnlock() {
     setChecking(true);
