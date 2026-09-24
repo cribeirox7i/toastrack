@@ -35,6 +35,36 @@ export function Avatar({ url, name, className = "" }: { url?: string; name: stri
   );
 }
 
+/** Switch liga/desliga. A bolinha é posicionada por flexbox (`justify-content`), não por
+ *  `translateX` em pixel fixo - um pixel fixo não escala junto com o trilho em `rem` (`h-7 w-12`)
+ *  e desalinha se a fonte do sistema não estiver em 100% (Android "Tamanho da fonte" em
+ *  Configurações de Exibição escala `rem`, não `px` - relatado pelo Carlos 2026-09-24, a bolinha
+ *  saía do trilho). Com flexbox os dois escalam juntos, sempre encostando na borda certa. */
+export function Toggle({
+  on,
+  onToggle,
+  disabled = false,
+  activeColor = "var(--accent)",
+}: {
+  on: boolean;
+  onToggle: () => void;
+  disabled?: boolean;
+  activeColor?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={disabled}
+      aria-pressed={on}
+      className="flex h-7 w-12 shrink-0 items-center rounded-full p-0.5 transition disabled:opacity-60"
+      style={{ background: on ? activeColor : "var(--track)", justifyContent: on ? "flex-end" : "flex-start" }}
+    >
+      <span className="size-6 rounded-full bg-surface shadow transition-transform" />
+    </button>
+  );
+}
+
 /** Read-only star row, preenchimento contínuo por `%` (suporta fração, ex.: média). `max` é o
  *  teto real da nota (5 pra cerveja/destilado/drink, 100 pra vinho) e `starCount` é quantas
  *  estrelas a UI desenha (5 pra cerveja, 10 pra vinho - cada uma valendo `max/starCount` pontos,

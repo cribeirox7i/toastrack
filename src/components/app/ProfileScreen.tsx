@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
-import { Accordion, Avatar } from "@/components/ui";
+import { Accordion, Avatar, Toggle } from "@/components/ui";
 import { PALETTES, hueToPaletteEnum, type HueName } from "@/lib/theme";
 import { validatePassword } from "@/lib/auth";
 import {
@@ -438,18 +438,7 @@ export default function ProfileScreen() {
                 Pede a digital ou o rosto pra abrir o app neste aparelho.
               </div>
             </div>
-            <button
-              onClick={() => void toggleBioLock()}
-              disabled={bioBusy}
-              aria-pressed={bioEnabled}
-              className="relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-60"
-              style={{ background: bioEnabled ? "var(--accent)" : "var(--track)" }}
-            >
-              <span
-                className="absolute top-0.5 size-6 rounded-full bg-surface shadow transition-transform"
-                style={{ transform: bioEnabled ? "translateX(22px)" : "translateX(2px)" }}
-              />
-            </button>
+            <Toggle on={bioEnabled} onToggle={() => void toggleBioLock()} disabled={bioBusy} />
           </div>
           {bioError && <div className="mt-2 text-[12.5px] font-semibold text-danger">{bioError}</div>}
         </div>
@@ -586,17 +575,7 @@ export default function ProfileScreen() {
               Pausar impede o app de retentar sozinho, pra investigar um item preso.
             </div>
           </div>
-          <button
-            onClick={togglePaused}
-            aria-pressed={paused}
-            className="relative h-7 w-12 shrink-0 rounded-full transition"
-            style={{ background: paused ? "var(--danger)" : "var(--track)" }}
-          >
-            <span
-              className="absolute top-0.5 size-6 rounded-full bg-surface shadow transition-transform"
-              style={{ transform: paused ? "translateX(22px)" : "translateX(2px)" }}
-            />
-          </button>
+          <Toggle on={paused} onToggle={togglePaused} activeColor="var(--danger)" />
         </div>
         <button
           onClick={() => void forceSyncNow()}
