@@ -101,9 +101,11 @@ function api(action, payload) {
       case 'readByIds':        return ok(lerLinhasPorIds(abaValida(payload.tab), payload.ids || []));
       case 'append':           return ok(inserirLinhas(abaValida(payload.tab), payload.rows || []));
       case 'updateById':       return ok(atualizarPorId(abaValida(payload.tab), payload.id, payload.patch || {}));
+      case 'updateByIdChecked': return ok(atualizarPorIdChecado(abaValida(payload.tab), payload.id, payload.patch || {}, payload.userId));
       case 'updateManyById':   return ok(atualizarVariosPorId(abaValida(payload.tab), payload.updates || []));
       case 'updateByField':    return ok(atualizarPorCampo(abaValida(payload.tab), payload.campo, payload.valor, payload.patch || {}));
       case 'deleteById':       return ok(excluirPorId(abaValida(payload.tab), payload.id));
+      case 'deleteByIdChecked': return ok(excluirPorIdChecado(abaValida(payload.tab), payload.id, payload.userId));
       case 'deleteByField':    return ok(excluirPorCampo(abaValida(payload.tab), payload.campo, payload.valor));
       // 'resetTab' não entra no dispatcher (mesmo checklist de segurança do TravelTrack): é
       // destrutivo, não é usado por nenhuma rota do app e, com o segredo compartilhado sendo a
@@ -590,6 +592,82 @@ function excluirPorId(nome, id) {
   }
   tocarMeta(nome);
   return null;
+}
+
+/** Quebra "12;7; 33" em ["12","7","33"] - mesma regra de src/lib/sheets/permissions.ts
+ *  (parseIdList), duplicada aqui pra poder checar permissão SEM round-trip de volta ao Next.js. */
+function parseListaIds(bruto) {
+  return String(bruto == null ? '' : bruto)
+    .split(';')
+    .map(function (s) { return s.trim(); })
+    .filter(function (s) { return s.length > 0; });
+}
+
+/** Espelha canWrite de src/lib/sheets/permissions.ts: dono do item, ou presente em user_edit.
+ *  user_access NUNCA dá escrita. */
+function podeEscrever(row, userId) {
+  if (row.user_owner === userId) return true;
+  if (parseListaIds(row.user_edit).indexOf(userId) !== -1) return true;
+  return false;
+}
+
+/**
+ * Igual a atualizarPorId, mas checa a permissão (dono ou user_edit) DENTRO desta mesma chamada,
+ * na mesma linha já lida - evita o round-trip extra de um readById prévio (que dobrava o pior caso
+ * de latência do Apps Script, medido em minutos numa única edição - ver histórico do Carlos
+ * 2026-09-24). Devolve {status: 'ok'|'not_found'|'forbidden'} em vez de lançar, pra items.ts
+ * distinguir os 3 casos sem precisar de outra chamada.
+ */
+function atualizarPorIdChecado(nome, id, patch, userId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = getSheet(nome);
+    const headers = lerCabecalho(sh);
+    if (headers.indexOf('id') === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
+
+    const linha = localizarLinhaPorId(sh, headers, id);
+    if (linha === -1) return { status: 'not_found' };
+
+    const atual = sh.getRange(linha, 1, 1, headers.length).getValues()[0];
+    const atualObj = {};
+    headers.forEach(function (h, i) { if (h) atualObj[h] = sanitizarValor(atual[i]); });
+    if (!podeEscrever(atualObj, userId)) return { status: 'forbidden' };
+
+    const nova = headers.map(function (h, i) {
+      return (h in patch) ? patch[h] : sanitizarValor(atual[i]);
+    });
+    sh.getRange(linha, 1, 1, headers.length).setNumberFormat('@').setValues([nova]);
+  } finally {
+    lock.releaseLock();
+  }
+  tocarMeta(nome);
+  return { status: 'ok' };
+}
+
+/** Como excluirPorId, mas checa permissão dentro da mesma chamada - ver atualizarPorIdChecado. */
+function excluirPorIdChecado(nome, id, userId) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const sh = getSheet(nome);
+    const headers = lerCabecalho(sh);
+    if (headers.indexOf('id') === -1) throw new Error('Aba "' + nome + '" não tem coluna "id"');
+
+    const linha = localizarLinhaPorId(sh, headers, id);
+    if (linha === -1) return { status: 'not_found' };
+
+    const atual = sh.getRange(linha, 1, 1, headers.length).getValues()[0];
+    const atualObj = {};
+    headers.forEach(function (h, i) { if (h) atualObj[h] = sanitizarValor(atual[i]); });
+    if (!podeEscrever(atualObj, userId)) return { status: 'forbidden' };
+
+    sh.deleteRow(linha);
+  } finally {
+    lock.releaseLock();
+  }
+  tocarMeta(nome);
+  return { status: 'ok' };
 }
 
 /**

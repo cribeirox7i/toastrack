@@ -222,24 +222,30 @@ export type UpdateResult = "ok" | "not_found" | "forbidden";
  * acesso) mas NUNCA user_owner — trocar o dono não é suportado por esta função de propósito
  * (evita um vetor de "roubar" um item mudando o dono pra si).
  */
+/** Resultado de updateByIdChecked/deleteByIdChecked no Apps Script (Codigo.gs) - a checagem de
+ *  dono/user_edit roda LÁ, na mesma linha já lida, em vez de um readById prévio daqui: dois
+ *  round-trips sequenciais ao Apps Script (que já é lento por natureza, 3-60s por chamada) faziam
+ *  uma edição simples levar minutos (relato do Carlos 2026-09-24, "nota de cerveja: 5 a 10 min pra
+ *  sincronizar"). Ver [[project_toastrack]]. */
+interface ResultadoChecado {
+  status: "ok" | "not_found" | "forbidden";
+}
+
 export async function updateItem(
   tipo: ItemType,
   id: string,
   patch: Record<string, string>,
   sessionUserId: string
 ): Promise<UpdateResult> {
-  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
-  if (!row) return "not_found";
-  if (!canWrite(row, sessionUserId)) return "forbidden";
-
   const { user_owner: _ignoreOwner, ...patchSemDono } = patch;
   void _ignoreOwner;
-  await callAppsScript("updateById", {
+  const resultado = await callAppsScript<ResultadoChecado>("updateByIdChecked", {
     tab: ITEM_TAB[tipo],
     id,
     patch: { ...patchSemDono, updated_at: nowIso() },
+    userId: sessionUserId,
   });
-  return "ok";
+  return resultado.status;
 }
 
 export async function deleteItem(
@@ -247,12 +253,12 @@ export async function deleteItem(
   id: string,
   sessionUserId: string
 ): Promise<UpdateResult> {
-  const row = await callAppsScript<ItemRowBase | null>("readById", { tab: ITEM_TAB[tipo], id });
-  if (!row) return "not_found";
-  if (!canWrite(row, sessionUserId)) return "forbidden";
-
-  await callAppsScript("deleteById", { tab: ITEM_TAB[tipo], id });
-  return "ok";
+  const resultado = await callAppsScript<ResultadoChecado>("deleteByIdChecked", {
+    tab: ITEM_TAB[tipo],
+    id,
+    userId: sessionUserId,
+  });
+  return resultado.status;
 }
 
 interface DriveUploadResult {
