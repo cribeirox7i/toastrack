@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import AuthScreen from "@/components/auth/AuthScreen";
+import BiometricLock from "@/components/BiometricLock";
 import CatalogProvider from "@/components/CatalogProvider";
 import MainApp from "@/components/app/MainApp";
 import TrocarSenhaObrigatoria from "@/components/auth/TrocarSenhaObrigatoria";
@@ -100,7 +101,8 @@ function InactiveNotice({ onExit }: { onExit: () => void }) {
 }
 
 /**
- * Top-level router: splash → auth → conta inativa → troca de senha obrigatória → app.
+ * Top-level router: splash → auth → conta inativa → troca de senha obrigatória → bloqueio por
+ * biometria (opcional, ver BiometricLock) → app.
  * `deveTrocarSenha` vem da sessão JWT (definido no login); TrocarSenhaObrigatoria chama
  * `update()` do NextAuth ao trocar com sucesso, o que dispara o callback `jwt` de novo com
  * `trigger === "update"` e zera essa flag sem exigir logout/login (ver TODO em src/auth.ts).
@@ -116,8 +118,10 @@ export default function AppShell() {
     return <TrocarSenhaObrigatoria onDone={() => setForcarTrocaConcluida(true)} />;
   }
   return (
-    <CatalogProvider>
-      <MainApp />
-    </CatalogProvider>
+    <BiometricLock>
+      <CatalogProvider>
+        <MainApp />
+      </CatalogProvider>
+    </BiometricLock>
   );
 }

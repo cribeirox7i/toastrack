@@ -28,6 +28,9 @@ const ICON_PATHS: Record<string, string> = {
   folder: "M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z",
   scan: "M3 7V5a2 2 0 0 1 2-2h2 M17 3h2a2 2 0 0 1 2 2v2 M21 17v2a2 2 0 0 1-2 2h-2 M7 21H5a2 2 0 0 1-2-2v-2 M7 8h10 M7 12h8 M7 16h5",
   x: "M18 6 6 18 M6 6l12 12",
+  lock: "M5 11h14v9a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z M8 11V7a4 4 0 0 1 8 0v4",
+  fingerprint:
+    "M12 2a8 8 0 0 0-8 8c0 1.5.3 2.7.8 4 M12 2a8 8 0 0 1 8 8c0 4-1 7-2 9 M12 6a4 4 0 0 0-4 4c0 4-1 7-3 9 M12 6a4 4 0 0 1 4 4c0 2-.2 4-1 6 M12 10c0 3-.5 5.5-2 8",
 };
 
 export type IconName = keyof typeof ICON_PATHS;

@@ -7,6 +7,12 @@ import Icon from "@/components/Icon";
 import { Avatar } from "@/components/ui";
 import { PALETTES, hueToPaletteEnum, type HueName } from "@/lib/theme";
 import { validatePassword } from "@/lib/auth";
+import {
+  disableBiometricLock,
+  enableBiometricLock,
+  isBiometricLockEnabled,
+  isBiometricSupported,
+} from "@/lib/biometricLock";
 import { saveUserPrefs, changePassword, uploadProfilePhoto } from "@/lib/prefs";
 import { refreshAllNow } from "@/lib/offline/sync";
 import { buildLabel } from "@/lib/version";
@@ -53,6 +59,37 @@ export default function ProfileScreen() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
   const [pwError, setPwError] = useState("");
   const [pwBusy, setPwBusy] = useState(false);
+
+  // Bloqueio por biometria (ver biometricLock.ts) - por aparelho, não sincroniza com a conta.
+  // `bioSupported` só fica true depois do `isBiometricSupported()` assíncrono resolver, pra não
+  // piscar o card e sumir em aparelho sem sensor de plataforma.
+  const [bioSupported, setBioSupported] = useState(false);
+  const [bioEnabled, setBioEnabled] = useState(false);
+  const [bioBusy, setBioBusy] = useState(false);
+  const [bioError, setBioError] = useState("");
+
+  useEffect(() => {
+    isBiometricSupported().then(setBioSupported);
+    setBioEnabled(isBiometricLockEnabled());
+  }, []);
+
+  async function toggleBioLock() {
+    setBioError("");
+    if (bioEnabled) {
+      disableBiometricLock();
+      setBioEnabled(false);
+      return;
+    }
+    setBioBusy(true);
+    const res = await enableBiometricLock(name || email);
+    setBioBusy(false);
+    if (res.ok) {
+      setBioEnabled(true);
+      showToast("Bloqueio por biometria ativado");
+    } else {
+      setBioError(res.error ?? "Não foi possível ativar.");
+    }
+  }
 
   const fotoInputRef = useRef<HTMLInputElement | null>(null);
   const [fotoBusy, setFotoBusy] = useState(false);
@@ -341,6 +378,34 @@ export default function ProfileScreen() {
           {pwBusy ? "Alterando…" : "Alterar senha"}
         </button>
       </div>
+
+      {/* Bloqueio por biometria - só aparece se o aparelho tem sensor de plataforma configurado
+          (Face ID/Touch ID/digital); ver biometricLock.ts. */}
+      {bioSupported && (
+        <div className={cardCls}>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[14px] font-bold">Bloqueio por biometria</div>
+              <div className="mt-0.5 text-[12.5px] text-muted">
+                Pede a digital ou o rosto pra abrir o app neste aparelho.
+              </div>
+            </div>
+            <button
+              onClick={() => void toggleBioLock()}
+              disabled={bioBusy}
+              aria-pressed={bioEnabled}
+              className="relative h-7 w-12 shrink-0 rounded-full transition disabled:opacity-60"
+              style={{ background: bioEnabled ? "var(--accent)" : "var(--track)" }}
+            >
+              <span
+                className="absolute top-0.5 size-6 rounded-full bg-surface shadow transition-transform"
+                style={{ transform: bioEnabled ? "translateX(22px)" : "translateX(2px)" }}
+              />
+            </button>
+          </div>
+          {bioError && <div className="mt-2 text-[12.5px] font-semibold text-danger">{bioError}</div>}
+        </div>
+      )}
 
       {/* Admin: user management */}
       {isAdmin && (
