@@ -82,6 +82,15 @@ export interface BjcpRow {
   [campo: string]: string | undefined;
 }
 
+export interface LibRow {
+  lib_id: string;
+  lib_bebida: string;
+  lib_grupo: string;
+  lib_nom_conteudo: string;
+  lib_desc_conteudo: string;
+  lib_lnk_conteudo: string;
+}
+
 export interface LogRow {
   log_id: string;
   log_data: string;

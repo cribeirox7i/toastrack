@@ -50,10 +50,12 @@ export default function HomeScreen({
   searchQuery,
   onOpenStats,
   onOpenItem,
+  onOpenLibrary,
 }: {
   searchQuery: string;
   onOpenStats: (type: ItemType) => void;
   onOpenItem: (item: Item) => void;
+  onOpenLibrary: () => void;
 }) {
   const { catalog, loading } = useCatalog();
   const searching = searchQuery.trim().length > 0;
@@ -217,6 +219,25 @@ export default function HomeScreen({
             </button>
           ))}
         </div>
+      </section>
+
+      {/* Biblioteca: conteúdo de referência por tipo de bebida (pedido do Carlos 2026-09-25). */}
+      <section className="mt-6">
+        <button
+          onClick={onOpenLibrary}
+          className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface p-4 text-left transition active:scale-[.99]"
+        >
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+            <Icon name="book" size={18} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-bold">Biblioteca</div>
+            <div className="mt-0.5 truncate text-[12.5px] text-muted">
+              Artigos e links de referência
+            </div>
+          </div>
+          <Icon name="chevronDown" size={16} className="-rotate-90 shrink-0 text-muted" />
+        </button>
       </section>
     </div>
   );

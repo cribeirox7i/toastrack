@@ -18,9 +18,10 @@ import ListScreen, { type SearchField, type ViewMode } from "@/components/app/Li
 import DetailScreen from "@/components/app/DetailScreen";
 import StatsScreen from "@/components/app/StatsScreen";
 import CountryScreen from "@/components/app/CountryScreen";
+import LibraryScreen from "@/components/app/LibraryScreen";
 import GlobalPhotoToast from "@/components/app/GlobalPhotoToast";
 
-type View = "home" | ItemType | "profile" | "stats" | "detail" | "country";
+type View = "home" | ItemType | "profile" | "stats" | "detail" | "country" | "library";
 
 const MAIN_TABS: { key: "home" | ItemType; label: string; icon: string }[] = [
   { key: "home", label: "Home", icon: "home" },
@@ -98,7 +99,8 @@ export default function MainApp() {
   // Carlos 2026-09-09). Empurra uma entrada no histórico ao abrir a sobreposição; o `popstate`
   // devolve a view anterior. Os botões "Voltar" internos chamam `history.back()`, pra o histórico
   // desenrolar simétrico.
-  const overlay = view === "detail" || view === "profile" || view === "stats" || view === "country";
+  const overlay =
+    view === "detail" || view === "profile" || view === "stats" || view === "country" || view === "library";
   const prevViewRef = useRef(prevView);
   useEffect(() => {
     prevViewRef.current = prevView;
@@ -149,6 +151,10 @@ export default function MainApp() {
     if (isMainView(view)) setPrevView(view);
     setCountryName(name);
     setView("country");
+  }
+  function openLibrary() {
+    if (isMainView(view)) setPrevView(view);
+    setView("library");
   }
   function goBack() {
     closeOverlay();
@@ -247,13 +253,19 @@ export default function MainApp() {
           </div>
         </header>
       )}
-      {(view === "profile" || view === "stats" || view === "country") && (
+      {(view === "profile" || view === "stats" || view === "country" || view === "library") && (
         <header className="flex items-center border-b border-border px-5 py-3">
           <button onClick={goBack} className="text-[13px] font-bold text-accent">
             ← Voltar
           </button>
           <div className="mx-auto truncate px-3 text-[16px] font-extrabold">
-            {view === "profile" ? "Perfil" : view === "stats" ? TYPE_LABELS[statsType] : countryName}
+            {view === "profile"
+              ? "Perfil"
+              : view === "stats"
+                ? TYPE_LABELS[statsType]
+                : view === "library"
+                  ? "Biblioteca"
+                  : countryName}
           </div>
           <RefreshButton />
         </header>
@@ -263,7 +275,12 @@ export default function MainApp() {
       <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {view === "home" && (
           <PullToRefresh onRefresh={onPullRefresh} className="min-h-0 flex-1">
-            <HomeScreen searchQuery={query} onOpenStats={openStats} onOpenItem={openItem} />
+            <HomeScreen
+              searchQuery={query}
+              onOpenStats={openStats}
+              onOpenItem={openItem}
+              onOpenLibrary={openLibrary}
+            />
           </PullToRefresh>
         )}
         {isMainView(view) && view !== "home" && (
@@ -311,6 +328,11 @@ export default function MainApp() {
         {view === "country" && (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <CountryScreen countryName={countryName} />
+          </div>
+        )}
+        {view === "library" && (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <LibraryScreen />
           </div>
         )}
         {view === "profile" && (

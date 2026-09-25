@@ -1,6 +1,6 @@
 import "server-only";
 import { callAppsScript } from "./client";
-import type { BjcpRow, PaisRow } from "./types";
+import type { BjcpRow, LibRow, PaisRow } from "./types";
 
 /** `list_pais` e `list_bjcp_21` — tabelas de referência, leitura pura, sem checagem de permissão
  *  (visíveis a qualquer usuário logado, igual eram no Supabase). */
@@ -11,4 +11,9 @@ export async function fetchPaises(): Promise<PaisRow[]> {
 
 export async function fetchBjcp(): Promise<BjcpRow[]> {
   return callAppsScript<BjcpRow[]>("read", { tab: "list_bjcp_21" });
+}
+
+/** Conteúdo da Biblioteca — mesma regra de acesso (leitura pura, qualquer usuário logado). */
+export async function fetchLib(): Promise<LibRow[]> {
+  return callAppsScript<LibRow[]>("read", { tab: "lib" });
 }

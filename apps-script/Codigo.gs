@@ -38,6 +38,9 @@ const ESTRUTURA = {
   drink: ['id', 'user_owner', 'user_access', 'user_edit', 'drink_nome', 'drink_safra', 'drink_cor', 'drink_tipo', 'drink_produtor', 'pais_id', 'drink_regiao', 'drink_abv', 'drink_nota', 'drink_data_degustacao', 'drink_img_nome', 'drink_img_url', 'updated_at'],
   list_pais: ['pais_id', 'pais_nome', 'pais_img'],
   list_bjcp_21: ['bjcp21_id', 'bjcp21_cod'],
+  // Biblioteca de conteúdo (artigos/links por tipo de bebida e grupo) - leitura pura, igual
+  // list_pais/list_bjcp_21, aba real do Carlos já com dados (pedido 2026-09-25).
+  lib: ['lib_id', 'lib_bebida', 'lib_grupo', 'lib_nom_conteudo', 'lib_desc_conteudo', 'lib_lnk_conteudo'],
   // Aba real do Carlos, já com dados (log_id/log_data/etc.) - só append+read,
   // por isso não precisa de "id" literal nem de updateById/deleteById.
   log: ['log_id', 'log_data', 'user_id', 'user_mail', 'acao', 'tabela', 'registro_id', 'detalhe'],
