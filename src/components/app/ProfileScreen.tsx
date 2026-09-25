@@ -22,6 +22,7 @@ import {
   fetchAllUsers,
   setUserStatus,
   resetUserPassword,
+  createUser,
   fetchAccessLog,
   type AdminUser,
   type LogEntry,
@@ -185,11 +186,35 @@ export default function ProfileScreen() {
   const [resetResultado, setResetResultado] = useState<{ nome: string; senha: string } | null>(null);
   const [resetando, setResetando] = useState(false);
 
+  // Criar usuário: nome + e-mail + papel; a senha provisória gerada reaproveita o mesmo modal
+  // de "senha gerada, mostrada uma vez" do reset (resetResultado).
+  const [novoUser, setNovoUser] = useState({ nome: "", email: "", role: "user" as "user" | "admin" });
+  const [novoUserErro, setNovoUserErro] = useState("");
+  const [criandoUser, setCriandoUser] = useState(false);
+
   useEffect(() => {
     if (!isAdmin) return;
     fetchAllUsers().then(setUsers);
     fetchAccessLog().then(setLogs);
   }, [isAdmin]);
+
+  async function submitNovoUser() {
+    setNovoUserErro("");
+    if (!novoUser.nome.trim() || !novoUser.email.trim()) {
+      setNovoUserErro("Preencha nome e e-mail.");
+      return;
+    }
+    setCriandoUser(true);
+    const res = await createUser({ nome: novoUser.nome.trim(), email: novoUser.email.trim(), role: novoUser.role });
+    setCriandoUser(false);
+    if (!res) {
+      setNovoUserErro("Erro ao criar usuário.");
+      return;
+    }
+    setUsers(await fetchAllUsers());
+    setResetResultado({ nome: res.user.user_nome, senha: res.provisionalPassword });
+    setNovoUser({ nome: "", email: "", role: "user" });
+  }
 
   const userNameById = useMemo(() => {
     const m = new Map(users.map((u) => [u.user_id, u.user_mail]));
@@ -448,43 +473,87 @@ export default function ProfileScreen() {
       {isAdmin && (
         <div className={cardCls}>
           <div className={cardLabel}>Gestão de usuários</div>
-          <div className="flex flex-col divide-y divide-border">
-            {users.map((u) => (
-              <div key={u.user_id} className="flex flex-col gap-2 py-2.5 first:pt-0">
-                {/* Linha 1: nome, e-mail e status (pedido do Carlos 2026-09-07) */}
-                <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold">{u.user_nome}</div>
-                    <div className="truncate text-[11.5px] text-muted">{u.user_mail}</div>
+
+          {/* Criar usuário: gera senha provisória, mostrada no mesmo modal do reset. */}
+          <div className="flex flex-col gap-2">
+            <input
+              value={novoUser.nome}
+              onChange={(e) => setNovoUser((s) => ({ ...s, nome: e.target.value }))}
+              placeholder="Nome"
+              className={inputCls}
+            />
+            <input
+              value={novoUser.email}
+              onChange={(e) => setNovoUser((s) => ({ ...s, email: e.target.value }))}
+              placeholder="E-mail"
+              type="email"
+              className={inputCls}
+            />
+            <div className="flex gap-1 rounded-xl border border-border p-1">
+              {(["user", "admin"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setNovoUser((s) => ({ ...s, role: r }))}
+                  className={`flex-1 rounded-lg px-3 py-2 text-[12.5px] font-bold transition ${
+                    novoUser.role === r ? "bg-accent text-on-accent" : "text-muted"
+                  }`}
+                >
+                  {r === "admin" ? "Admin" : "Usuário"}
+                </button>
+              ))}
+            </div>
+            {novoUserErro && <div className="text-[12.5px] font-semibold text-danger">{novoUserErro}</div>}
+            <button
+              onClick={() => void submitNovoUser()}
+              disabled={criandoUser}
+              className="w-full rounded-xl bg-accent py-2.5 text-[13px] font-bold text-on-accent disabled:opacity-60"
+            >
+              {criandoUser ? "Criando…" : "Criar usuário"}
+            </button>
+          </div>
+
+          <div className="mt-3 border-t border-border pt-3">
+            <Accordion title="Usuários" count={users.length}>
+              <div className="flex flex-col divide-y divide-border">
+                {users.map((u) => (
+                  <div key={u.user_id} className="flex flex-col gap-2 py-2.5 first:pt-0">
+                    {/* Linha 1: nome, e-mail e status (pedido do Carlos 2026-09-07) */}
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-semibold">{u.user_nome}</div>
+                        <div className="truncate text-[11.5px] text-muted">{u.user_mail}</div>
+                      </div>
+                      <span
+                        className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold"
+                        style={{
+                          background: u.user_status === "S" ? "var(--accent-soft)" : "var(--track)",
+                          color: u.user_status === "S" ? "var(--accent)" : "var(--text-muted)",
+                        }}
+                      >
+                        {u.user_status === "S" ? "ativo" : "inativo"}
+                      </span>
+                    </div>
+                    {/* Linha 2: comandos */}
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setResetAlvo(u)}
+                        className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
+                      >
+                        Resetar senha
+                      </button>
+                      <button
+                        onClick={() => toggleStatus(u)}
+                        className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
+                      >
+                        {u.user_status === "S" ? "Desativar" : "Ativar"}
+                      </button>
+                    </div>
                   </div>
-                  <span
-                    className="shrink-0 rounded-full px-2 py-0.5 text-[10.5px] font-bold"
-                    style={{
-                      background: u.user_status === "S" ? "var(--accent-soft)" : "var(--track)",
-                      color: u.user_status === "S" ? "var(--accent)" : "var(--text-muted)",
-                    }}
-                  >
-                    {u.user_status === "S" ? "ativo" : "inativo"}
-                  </span>
-                </div>
-                {/* Linha 2: comandos */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setResetAlvo(u)}
-                    className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
-                  >
-                    Resetar senha
-                  </button>
-                  <button
-                    onClick={() => toggleStatus(u)}
-                    className="rounded-lg border border-border px-2.5 py-1 text-[11.5px] font-bold text-muted"
-                  >
-                    {u.user_status === "S" ? "Desativar" : "Ativar"}
-                  </button>
-                </div>
+                ))}
+                {users.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
               </div>
-            ))}
-            {users.length === 0 && <div className="py-2 text-center text-[13px] text-muted">—</div>}
+            </Accordion>
           </div>
         </div>
       )}

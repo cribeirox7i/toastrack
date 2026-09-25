@@ -45,6 +45,21 @@ export async function resetUserPassword(userId: string): Promise<string | null> 
   return provisionalPassword;
 }
 
+/** Cria usuário com senha provisória (só admin). A senha volta UMA vez, na resposta. */
+export async function createUser(data: {
+  nome: string;
+  email: string;
+  role?: "admin" | "user";
+}): Promise<{ user: AdminUser; provisionalPassword: string } | null> {
+  const res = await fetch("/api/admin/users", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) return null;
+  return (await res.json()) as { user: AdminUser; provisionalPassword: string };
+}
+
 /** Log de acesso recente (só admin) — mais novo primeiro. */
 export async function fetchAccessLog(limit = 50): Promise<LogEntry[]> {
   const res = await fetch(noCacheUrl("/api/admin/log"), { cache: "no-store" });
