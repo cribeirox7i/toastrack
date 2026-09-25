@@ -121,6 +121,8 @@ function api(action, payload) {
       case 'driveListFiles':   return ok(driveListFiles(payload));
       case 'driveDeleteFile':  return ok(driveDeleteFile(payload));
       case 'driveDownloadFile': return ok(driveDownloadFile(payload));
+      case 'libFileInfo':      return ok(libFileInfo(payload));
+      case 'libDownloadFile':  return ok(libDownloadFile(payload));
       default:                 return erro('Ação desconhecida: ' + action);
     }
   } catch (err) {
@@ -901,6 +903,44 @@ function driveDeleteFile(payload) {
  * plano de migração: guardar só as últimas fotos vistas, nunca as ~3600 de uma vez). */
 function driveDownloadFile(payload) {
   const file = arquivoDoUsuario(payload.fileId, payload.categoria, payload.userId);
+  const blob = file.getBlob();
+  return {
+    name: file.getName(),
+    mimeType: file.getMimeType(),
+    base64Data: Utilities.base64Encode(blob.getBytes())
+  };
+}
+
+/**
+ * Confere que `fileId` é de fato um dos arquivos referenciados em `lib_lnk_conteudo` - sem isso,
+ * `libFileInfo`/`libDownloadFile` virariam um oráculo pra ler qualquer arquivo do Drive do Carlos
+ * a partir só de um id vindo da rede (mesmo raciocínio de `arquivoDoUsuario`, mas aqui não há
+ * dono/categoria pra checar - a Biblioteca é de leitura livre pra qualquer usuário logado, então a
+ * única coisa que resta garantir é que o id pedido é um dos que a planilha realmente lista).
+ */
+function libFileIdReferenciado(fileId) {
+  const linhas = lerTabela('lib');
+  for (let i = 0; i < linhas.length; i++) {
+    if (String(linhas[i].lib_lnk_conteudo || '').indexOf(fileId) !== -1) return true;
+  }
+  return false;
+}
+
+/** Só nome + tipo (sem bytes) - usado pra decidir COMO abrir um item da Biblioteca antes de gastar
+ *  banda baixando um arquivo que a tela vai recusar (pedido do Carlos 2026-09-25: só PDF, DOCX,
+ *  XLSX, PNG, JPG ou BMP abrem; o resto é rejeitado sem nem baixar). */
+function libFileInfo(payload) {
+  const fileId = payload.fileId;
+  if (!fileId || !libFileIdReferenciado(fileId)) throw new Error('Arquivo não encontrado na Biblioteca');
+  const file = DriveApp.getFileById(fileId);
+  return { name: file.getName(), mimeType: file.getMimeType() };
+}
+
+/** Bytes do arquivo (base64) - só chamada depois que `libFileInfo` já confirmou um tipo aceito. */
+function libDownloadFile(payload) {
+  const fileId = payload.fileId;
+  if (!fileId || !libFileIdReferenciado(fileId)) throw new Error('Arquivo não encontrado na Biblioteca');
+  const file = DriveApp.getFileById(fileId);
   const blob = file.getBlob();
   return {
     name: file.getName(),

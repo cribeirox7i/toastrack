@@ -17,3 +17,16 @@ export async function fetchBjcp(): Promise<BjcpRow[]> {
 export async function fetchLib(): Promise<LibRow[]> {
   return callAppsScript<LibRow[]>("read", { tab: "lib" });
 }
+
+/** Nome + mimeType de um arquivo da Biblioteca, sem bytes — usado pra decidir se abre (PDF/PNG/
+ *  JPG/BMP/DOCX/XLSX) antes de baixar o conteúdo inteiro. */
+export async function fetchLibFileInfo(fileId: string): Promise<{ name: string; mimeType: string }> {
+  return callAppsScript("libFileInfo", { fileId });
+}
+
+/** Bytes (base64) de um arquivo da Biblioteca já aprovado por `fetchLibFileInfo`. */
+export async function downloadLibFile(
+  fileId: string,
+): Promise<{ name: string; mimeType: string; base64Data: string }> {
+  return callAppsScript("libDownloadFile", { fileId });
+}

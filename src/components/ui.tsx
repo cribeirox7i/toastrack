@@ -4,7 +4,7 @@
 
 import { useState, type ReactNode } from "react";
 import { initialsFor } from "@/lib/utils";
-import Icon from "@/components/Icon";
+import Icon, { type IconName } from "@/components/Icon";
 
 /** Avatar de usuário: foto (`url`) quando existir, senão as iniciais no círculo de accent. O
  *  tamanho e o tamanho da fonte das iniciais vêm por `className` (ex.: "size-9 text-[13px]").
@@ -147,11 +147,14 @@ export function Accordion({
   title,
   count,
   defaultOpen = false,
+  icon,
   children,
 }: {
   title: string;
   count?: number;
   defaultOpen?: boolean;
+  /** Ícone opcional antes do título — usado pela Biblioteca, um por grupo (ver LibraryScreen). */
+  icon?: IconName;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -163,7 +166,8 @@ export function Accordion({
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 py-1 text-left"
       >
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted">
+        <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-muted">
+          {icon && <Icon name={icon} size={14} className="shrink-0" />}
           {title}
           {count !== undefined ? ` (${count})` : ""}
         </span>

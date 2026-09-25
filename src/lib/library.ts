@@ -30,3 +30,10 @@ export async function fetchLibrary(): Promise<LibEntry[]> {
     link: r.lib_lnk_conteudo,
   }));
 }
+
+/** Extrai o fileId de um link de arquivo do Google Drive (`/file/d/{id}/...`). `null` quando o
+ *  link não é do Drive — nesse caso é uma URL comum (site/vídeo externo), aberta direto. */
+export function driveFileId(link: string): string | null {
+  const m = /drive\.google\.com\/file\/d\/([\w-]+)/.exec(link);
+  return m ? m[1] : null;
+}

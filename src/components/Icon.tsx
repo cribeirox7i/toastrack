@@ -12,6 +12,7 @@ const ICON_PATHS: Record<string, string> = {
   chevronDown: "m6 9 6 6 6-6",
   check: "M20 6 9 17l-5-5",
   plus: "M12 5v14 M5 12h14",
+  minus: "M5 12h14",
   refresh: "M23 4v6h-6 M1 20v-6h6 M3.51 9a9 9 0 0 1 14.85-3.36L23 10 M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
   deck: "M4 6h16 M4 12h16 M4 18h16",
   table: "M3 3h18v18H3z M3 9h18 M3 15h18 M9 3v18",
@@ -33,6 +34,11 @@ const ICON_PATHS: Record<string, string> = {
   link: "M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7.07-7.07l-1.14 1.13 M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7.07 7.07l1.14-1.13",
   fingerprint:
     "M12 2a8 8 0 0 0-8 8c0 1.5.3 2.7.8 4 M12 2a8 8 0 0 1 8 8c0 4-1 7-2 9 M12 6a4 4 0 0 0-4 4c0 4-1 7-3 9 M12 6a4 4 0 0 1 4 4c0 2-.2 4-1 6 M12 10c0 3-.5 5.5-2 8",
+  newspaper:
+    "M4 22a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2 M20 22a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2h16z M8 7h8 M8 11h8 M8 15h5",
+  play: "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M10 8.5v7l6-3.5z",
+  globe:
+    "M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z M2 12h20 M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
 };
 
 export type IconName = keyof typeof ICON_PATHS;
