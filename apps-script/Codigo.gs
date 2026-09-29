@@ -802,15 +802,50 @@ function findUserFolder(categoria, userId) {
   return userFolders.hasNext() ? userFolders.next() : null;
 }
 
-/** Recebe o arquivo em base64, salva na pasta IMG/{categoria}/{userId}/. */
+/**
+ * Procura, na pasta, um arquivo com este nome cuja descrição seja o `uploadId` - é o que torna o
+ * upload seguro de repetir: se a primeira tentativa criou o arquivo mas a resposta se perdeu (ou o
+ * cliente desistiu por timeout), a repetição encontra o mesmo arquivo em vez de criar uma cópia.
+ */
+function arquivoJaEnviado(folder, filename, uploadId) {
+  const candidatos = folder.getFilesByName(filename);
+  while (candidatos.hasNext()) {
+    const f = candidatos.next();
+    if (f.getDescription() === uploadId) return f;
+  }
+  return null;
+}
+
+/**
+ * Recebe o arquivo em base64, salva na pasta IMG/{categoria}/{userId}/.
+ *
+ * Idempotente quando `payload.uploadId` vem preenchido (o servidor Next gera um por chamada e o
+ * reusa em todas as retentativas): o lookup + criação rodam sob lock, então nem duas execuções
+ * simultâneas do mesmo upload (a que estourou o timeout do cliente e a retentativa) criam duas
+ * cópias. Sem `uploadId` o comportamento é o antigo (cada chamada cria um arquivo).
+ */
 function driveUploadFile(payload) {
   const folder = getUserFolder(payload.categoria, payload.userId);
-  const blob = Utilities.newBlob(
-    Utilities.base64Decode(payload.base64Data),
-    payload.mimeType || 'application/octet-stream',
-    payload.filename || 'foto'
-  );
-  const file = folder.createFile(blob);
+  const filename = payload.filename || 'foto';
+  const uploadId = payload.uploadId ? String(payload.uploadId) : '';
+
+  const lock = uploadId ? LockService.getScriptLock() : null;
+  if (lock) lock.waitLock(30000);
+  var file;
+  try {
+    file = uploadId ? arquivoJaEnviado(folder, filename, uploadId) : null;
+    if (!file) {
+      const blob = Utilities.newBlob(
+        Utilities.base64Decode(payload.base64Data),
+        payload.mimeType || 'application/octet-stream',
+        filename
+      );
+      file = folder.createFile(blob);
+      if (uploadId) file.setDescription(uploadId);
+    }
+  } finally {
+    if (lock) lock.releaseLock();
+  }
   // Link direto de imagem (funciona em <img src>, diferente do link "view" padrão do Drive) -
   // exige que o arquivo seja compartilhável por link, ver README passo de compartilhamento.
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);

@@ -412,7 +412,7 @@ const TAB_TYPE: Record<ItemTab, ItemType> = {
 /** Quantas vezes tentar antes de desistir. O Apps Script oscila muito (10s a 80s, às vezes
  *  HTTP 500) - ver seção 8.1 do MIGRACAO_SHEETS.md -, então vale insistir. Com o flush a cada 45s,
  *  são ~6 min de tentativas. */
-const MAX_PHOTO_ATTEMPTS = 8;
+const MAX_PHOTO_ATTEMPTS = 15;
 
 /** Envios em andamento, por `${tab}:${id}` - permite reabrir o MESMO item e ver "Enviando…" em vez
  *  da foto velha, e impede dois envios paralelos pro mesmo item. */
@@ -461,17 +461,52 @@ function stubDiagnostics(entry: PhotoOutboxEntry): PhotoDiagnostics {
 }
 
 let flushing = false;
+/** Pedido de envio que chegou com outro em andamento: roda de novo ao terminar, em vez de esperar
+ *  o ciclo de 45s. */
+let flushAgain = false;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+let retryDelay = 8_000;
+
+/** Falha de foto não espera o ciclo lento: retenta em segundos, com recuo até 60s (o Apps Script
+ *  erra ~10% das chamadas - ver MIGRACAO_SHEETS.md 8.23). */
+function agendarRetentativaFoto() {
+  if (retryTimer) return;
+  const delay = retryDelay;
+  retryDelay = Math.min(retryDelay * 2, 60_000);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    void flushPhotoOutbox();
+  }, delay);
+}
 
 /**
  * Tenta subir toda foto pendente na fila. Idempotente e reentrante-safe (`flushing`). Uma falha
  * numa foto não trava as outras - incrementa `attempts` e segue; a próxima rodada retenta.
  */
 export async function flushPhotoOutbox(opts?: { force?: boolean }): Promise<void> {
-  if (flushing) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
   if (isSyncPaused() && !opts?.force) return;
+  if (flushing) {
+    flushAgain = true;
+    return;
+  }
   flushing = true;
   try {
+    do {
+      flushAgain = false;
+      const retentar = await enviarFotos();
+      if (retentar) agendarRetentativaFoto();
+      else retryDelay = 8_000;
+    } while (flushAgain);
+  } finally {
+    flushing = false;
+  }
+}
+
+/** Uma passada pela fila de fotos. Devolve true se sobrou alguma que vale retentar sozinha. */
+async function enviarFotos(): Promise<boolean> {
+  let retentar = false;
+  {
     const entries = await listPhotoOutbox();
     for (const entry of entries) {
       if (entry.attempts >= MAX_PHOTO_ATTEMPTS) continue;
@@ -517,12 +552,13 @@ export async function flushPhotoOutbox(opts?: { force?: boolean }): Promise<void
           photoUploadEvents.dispatchEvent(
             new CustomEvent<PhotoUploadEventDetail>("done", { detail: { type, id: itemId, result } }),
           );
+        } else {
+          retentar = true;
         }
       }
     }
-  } finally {
-    flushing = false;
   }
+  return retentar;
 }
 
 /** Descarta uma foto travada na fila (ver MAX_PHOTO_ATTEMPTS) - mesmo papel do

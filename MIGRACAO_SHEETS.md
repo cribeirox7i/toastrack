@@ -1351,6 +1351,55 @@ Também: o reset de foto "ao trocar de item" em `DetailScreen` foi removido - er
 **Verificação:** `tsc`, lint (só os 4 pré-existentes) e build limpos; `test:beer-lookup` verde.
 Colunas de `list_bjcp_21` conferidas por sondagem (129 linhas, `bjcp21_id` único).
 
+## 8.23 Gravações que levam minutos e foto com erro 500 (2026-09-29)
+
+**Relato do Carlos:** mudar uma letra no nome de uma cerveja leva 10-20 min pra subir (às vezes
+nunca sobe, precisa "Forçar subida" 2-4 vezes); foto dá 500 repetidamente. No Glide, que usa as
+mesmas contas do Google, era quase em tempo real.
+
+**Medição (30 chamadas a uma ação que nem abre a planilha, contra a produção):** a maioria
+responde em ~1s, mas 20-30% levam 10-50s e ~10% terminam numa página HTML de erro do Google
+("Função de script não encontrada: doGet") depois de 35-50s. 8 chamadas em paralelo não pioram:
+não é peso da planilha nem congestionamento nosso, é o Web App do Apps Script em si. O Glide não
+passa por Apps Script (fala direto com a API do Sheets), por isso não sofre disso.
+
+**O app amplificava:** (1) edição feita durante um envio em andamento esperava o próximo gatilho
+(o ciclo virou 5 min em 2026-09-29, por causa da cota da Vercel); (2) uma falha esperava esse
+mesmo ciclo, e 5 falhas travavam a entrada; (3) a foto tinha uma tentativa só (repetir duplicava
+o arquivo no Drive), com ~10% de chance de erro por chamada e duas chamadas por foto; (4) o teto
+de 60s por tentativa fazia uma chamada já travada custar 1 min antes de retentar, sendo que a
+retentativa quase sempre volta em ~1s.
+
+**Passo 1 (feito):**
+- `client.ts`: teto por tentativa 60s → 15s, 3 → 4 tentativas. Leituras que varrem a aba
+  (`readIndex`/`readByIds`/`readSince`/`read`, `libDownloadFile`) mantêm 60s x 3 (`LEITURA_GRANDE`).
+- `sync.ts`: `pushOutbox` reroda se alguém pediu envio durante o anterior (`pushAgain`); falha
+  retenta sozinha em 8s, dobrando até 60s; falha transitória (5xx/408/429) conta 1 tentativa,
+  definitiva (4xx) conta 5, teto 20 (~15 min); `fetch` da fila com timeout de 90s.
+- `photoUpload.ts`: mesma lógica (`flushAgain`, retentativa em 8-60s, teto 15).
+- Foto retentável: `driveUploadFile` aceita `uploadId` (o Next gera um por chamada e reusa nas
+  retentativas); o Apps Script grava o id na descrição do arquivo e, se já existir um com aquele
+  nome + descrição, devolve o mesmo (`arquivoJaEnviado`), sob lock. **Exige reimplantar o
+  `Codigo.gs`.**
+
+Risco conhecido, anterior a isto: `createItem` não é idempotente do lado do cliente. Se a
+resposta se perder depois de o servidor ter criado a linha, a retentativa da fila cria outra
+(id novo, o servidor ignora o do cliente). Corrigir mandando a chave de idempotência do outbox
+(`localId`) e guardando-a na linha - fica pra depois.
+
+**Passo 2 (melhoria futura, a correção de verdade): sair do Apps Script.** Fazer as rotas do
+Next falarem direto com a Google Sheets API v4 e a Drive API v3, autenticadas com OAuth da conta
+dona da planilha (refresh token guardado em env var da Vercel), como o Glide faz. Espera-se
+gravação em <1s e sem a página de erro intermitente. Grátis (cotas da API são folgadas pra esse
+uso). Pré-requisito único: o Carlos criar um projeto no Google Cloud Console, ativar as duas APIs
+e gerar um client OAuth + refresh token (~10 min guiado). O que muda no código: `client.ts`
+deixa de chamar o Web App e vira uma camada com as mesmas operações (read/readById/append/
+updateByIdChecked/deleteByIdChecked/readIndex/readByIds/upload) sobre `spreadsheets.values`,
+`batchUpdate` e `drive.files.create`; o restante do app (rotas, sync offline) não muda. Pontos
+de atenção: o lock de escrita hoje é o `LockService` do Apps Script (na API precisa de outra
+estratégia, ex. append com `insertDataOption` e checagem de id depois, ou serializar por aba
+via a própria função), e o hash do índice (`hashLinha`) passa a ser calculado no Next.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

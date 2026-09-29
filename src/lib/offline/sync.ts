@@ -307,8 +307,33 @@ export async function getCachedLookups(): Promise<LookupsResponse | null> {
 
 // ---------- Fila de escrita (outbox) ----------
 
-export const MAX_OUTBOX_ATTEMPTS = 5;
+/** Teto de tentativas de uma entrada. Falha transitória (5xx/timeout - o Apps Script erra ~10% das
+ *  chamadas, ver MIGRACAO_SHEETS.md 8.23) conta 1; falha definitiva (4xx: sem permissão, dado
+ *  inválido) conta `PESO_ERRO_DEFINITIVO`, então trava em poucas tentativas como antes. Com o
+ *  recuo de `agendarRetentativa` (8s → 60s) as 20 tentativas cobrem ~15 min. */
+export const MAX_OUTBOX_ATTEMPTS = 20;
+const PESO_ERRO_DEFINITIVO = 5;
 let pushing = false;
+/** Alguém pediu um envio enquanto outro estava em andamento - o laço roda de novo ao terminar,
+ *  em vez de a edição nova ficar esperando o próximo gatilho (antes: até 5 min). */
+let pushAgain = false;
+
+/** Recuo da retentativa automática: uma falha não espera o ciclo lento de 5 min, tenta de novo em
+ *  segundos, dobrando até 60s. Zera quando a fila esvazia. */
+const RETRY_MIN_MS = 8_000;
+const RETRY_MAX_MS = 60_000;
+let retryDelay = RETRY_MIN_MS;
+let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+function agendarRetentativa() {
+  if (retryTimer || typeof window === "undefined") return;
+  const delay = retryDelay;
+  retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    pushOutbox().catch(() => {});
+  }, delay);
+}
 
 /** Pausa manual da sincronização automática (por aparelho, `localStorage` como o bloqueio por
  *  biometria) - pedido do Carlos pra poder investigar uma fila travada sem o app ficar retentando
@@ -339,29 +364,47 @@ export function setSyncPaused(paused: boolean): void {
 type SendResult =
   | { status: "ok"; remap?: { tab: ItemTab; oldId: string; newId: string } }
   | { status: "network-error" }
-  | { status: "error"; message: string };
+  | { status: "error"; message: string; transient: boolean };
 
 export async function pushOutbox(opts?: { force?: boolean }): Promise<void> {
-  if (pushing || !isOnline()) return;
+  if (!isOnline()) return;
   if (isSyncPaused() && !opts?.force) return;
+  if (pushing) {
+    pushAgain = true;
+    return;
+  }
   pushing = true;
   try {
-    const entries = await listOutbox();
-    for (const entry of entries) {
-      if (entry.attempts >= MAX_OUTBOX_ATTEMPTS) continue;
-      const result = await sendOutboxEntry(entry);
-      if (result.status === "network-error") break; // provavelmente caiu o sinal - tenta depois
-      if (result.status === "ok") {
-        await removeOutboxEntry(entry.localId);
-        if (result.remap) await remapItemId(result.remap.tab, result.remap.oldId, result.remap.newId, entries);
-      } else {
-        await updateOutboxEntry({ ...entry, attempts: entry.attempts + 1, lastError: result.message });
-      }
-      notifyChange();
-    }
+    do {
+      pushAgain = false;
+      const precisaRetentar = await enviarFila();
+      if (precisaRetentar) agendarRetentativa();
+      else retryDelay = RETRY_MIN_MS;
+    } while (pushAgain);
   } finally {
     pushing = false;
   }
+}
+
+/** Uma passada pela fila. Devolve true se sobrou algo que vale a pena retentar sozinho. */
+async function enviarFila(): Promise<boolean> {
+  let retentar = false;
+  const entries = await listOutbox();
+  for (const entry of entries) {
+    if (entry.attempts >= MAX_OUTBOX_ATTEMPTS) continue;
+    const result = await sendOutboxEntry(entry);
+    if (result.status === "network-error") return true; // provavelmente caiu o sinal - tenta depois
+    if (result.status === "ok") {
+      await removeOutboxEntry(entry.localId);
+      if (result.remap) await remapItemId(result.remap.tab, result.remap.oldId, result.remap.newId, entries);
+    } else {
+      const attempts = entry.attempts + (result.transient ? 1 : PESO_ERRO_DEFINITIVO);
+      await updateOutboxEntry({ ...entry, attempts, lastError: result.message });
+      if (attempts < MAX_OUTBOX_ATTEMPTS) retentar = true;
+    }
+    notifyChange();
+  }
+  return retentar;
 }
 
 /**
@@ -399,6 +442,10 @@ async function remapItemId(tab: ItemTab, oldId: string, newId: string, pendingEn
   notifyRemap({ tab, oldId, newId });
 }
 
+/** A rota pode gastar até ~60s nas retentativas ao Apps Script (ver client.ts); passar disso é
+ *  requisição pendurada - vira "network-error" e a fila retenta em vez de travar em `pushing`. */
+const ENVIO_TIMEOUT_MS = 90_000;
+
 async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
   try {
     let res: Response;
@@ -408,6 +455,7 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(entry.payload),
+          signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS),
         });
         break;
       case "updateItem":
@@ -415,15 +463,17 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(entry.payload),
+          signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS),
         });
         break;
       case "deleteItem":
-        res = await fetch(`/api/items/${entry.tab}/${entry.itemId}`, { method: "DELETE" });
+        res = await fetch(`/api/items/${entry.tab}/${entry.itemId}`, { method: "DELETE", signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS) });
         break;
     }
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      return { status: "error", message: body.error ?? `Erro ${res.status}` };
+      const transient = res.status >= 500 || res.status === 408 || res.status === 429;
+      return { status: "error", message: body.error ?? `Erro ${res.status}`, transient };
     }
     if (entry.kind === "createItem") {
       const row = (await res.json().catch(() => null)) as RawItemRow | null;

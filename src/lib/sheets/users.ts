@@ -178,9 +178,9 @@ export async function updateOwnProfile(
  * infra é `DRIVE_ROOT_FOLDERS.USER` preenchido em `Config.gs` (se faltar, o Apps Script devolve
  * "Pasta do Drive não configurada", que a rota repassa como erro legível).
  *
- * `tentativas: 1` pelo mesmo motivo do upload de foto de item (ver `uploadItemPhoto`):
- * `driveUploadFile` não é idempotente, repetir cria cópia. Trocar a foto não apaga a anterior do
- * Drive - fica órfã, mesma postura aceita pras fotos de item.
+ * Retentável porque manda um `uploadId` (o Apps Script reaproveita o arquivo já criado com aquele
+ * id, ver `arquivoJaEnviado`) - mesmo esquema do upload de foto de item (`uploadItemPhoto`).
+ * Trocar a foto não apaga a anterior do Drive - fica órfã, mesma postura aceita pras fotos de item.
  */
 export async function uploadProfilePhoto(
   userId: string,
@@ -195,8 +195,9 @@ export async function uploadProfilePhoto(
       base64Data: foto.base64Data,
       mimeType: foto.mimeType,
       filename: `perfil.${ext}`,
+      uploadId: crypto.randomUUID(),
     },
-    { tentativas: 1, timeoutMs: 120_000 },
+    { tentativas: 3, timeoutMs: 60_000 },
   );
   await updateOwnProfile(userId, { user_url_img: enviado.url });
   return { url: enviado.url };

@@ -19,15 +19,17 @@ function getConfig() {
   return { url, secret };
 }
 
-const MAX_TENTATIVAS = 3;
+const MAX_TENTATIVAS = 4;
 
 /**
- * Teto por tentativa. Sem isso uma execução travada do lado do Google segurava a rota até a
- * função da Vercel morrer — medido em 2026-09-03: a mesma chamada ao Apps Script varia de 3s a
- * 60s conforme o humor do Google, e a rota de foto encadeia três delas. É melhor falhar com
- * mensagem clara do que ficar 3 minutos no "Enviando...".
+ * Teto por tentativa. Medido em 2026-09-29 (30 chamadas a uma ação que nem abre a planilha): a
+ * maioria responde em ~1s, mas de 20% a 30% levam de 10s a 50s e ~10% terminam numa página de erro
+ * do Google. Esperar 60s por uma chamada que já travou é o pior negócio: uma nova tentativa quase
+ * sempre volta em ~1s. Por isso o teto é curto e as tentativas são mais numerosas - só vale para
+ * ações idempotentes; leituras grandes (índice/lotes da aba `beer`) pedem um teto maior por
+ * `timeoutMs`, porque nelas a demora é trabalho real e não travamento.
  */
-const TIMEOUT_PADRAO_MS = 60_000;
+const TIMEOUT_PADRAO_MS = 15_000;
 
 export interface CallOpcoes {
   /** Quantas tentativas no total (1 = sem retentativa). Ver comentário de idempotência abaixo. */
@@ -53,9 +55,10 @@ function sleep(ms: number) {
  * sucesso do lado do script. Por isso todas as ações em Codigo.gs (append/updateById/deleteById)
  * são feitas para serem seguras de repetir (idempotentes) antes de reintentar.
  *
- * `driveUploadFile` é a exceção: ela NÃO é idempotente (cada repetição cria um arquivo novo no
- * Drive), então quem a chama passa `{ tentativas: 1 }` — repetir ali criava cópias invisíveis da
- * mesma foto justamente no caso em que o Google respondeu errado tendo executado certo.
+ * `driveUploadFile` só é seguro de repetir quando recebe um `uploadId` (o Apps Script reaproveita o
+ * arquivo já criado com aquele id, ver `arquivoJaEnviado` em Codigo.gs). Sem `uploadId`, quem a
+ * chama deve passar `{ tentativas: 1 }` — repetir criava cópias invisíveis da mesma foto
+ * justamente no caso em que o Google respondeu errado tendo executado certo.
  */
 export async function callAppsScript<T>(
   action: string,
@@ -97,7 +100,7 @@ export async function callAppsScript<T>(
     } catch (err) {
       ultimoErro = err;
       if (tentativa < maxTentativas) {
-        await sleep(500 * tentativa);
+        await sleep(300 * tentativa);
       }
     }
   }

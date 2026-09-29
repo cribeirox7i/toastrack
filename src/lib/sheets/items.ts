@@ -20,6 +20,10 @@ import {
 
 const nowIso = () => new Date().toISOString();
 
+/** Leituras que varrem a aba inteira (`readIndex`/`readByIds` na `beer`, ~3600 linhas) levam de
+ *  verdade dezenas de segundos - o teto curto padrão de `callAppsScript` (15s) as mataria. */
+const LEITURA_GRANDE = { timeoutMs: 60_000, tentativas: 3 };
+
 /**
  * Nome do arquivo de foto = o id sequencial do item, com 4 dígitos (pedido do Carlos 2026-09-04:
  * "item 3400, imagem 3400.jpg") - substitui QUALQUER nome que o cliente mande (nome de arquivo do
@@ -47,7 +51,7 @@ async function proximoId(tipo: ItemType): Promise<string> {
   try {
     return await callAppsScript<string>("proximoIdSequencial", { tab });
   } catch {
-    const linhas = await callAppsScript<Record<string, string>[]>("read", { tab });
+    const linhas = await callAppsScript<Record<string, string>[]>("read", { tab }, LEITURA_GRANDE);
     let maior = 0;
     for (const l of linhas) {
       const n = Number(l.id);
@@ -62,7 +66,7 @@ export async function listVisibleItems(
   tipo: ItemType,
   sessionUserId: string
 ): Promise<ItemRowBase[]> {
-  const linhas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
+  const linhas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] }, LEITURA_GRANDE);
   return linhas.filter((row) => canRead(row, sessionUserId));
 }
 
@@ -78,10 +82,11 @@ export async function listVisibleItemsSince(
   sessionUserId: string,
   since: string
 ): Promise<ItemRowBase[]> {
-  const linhas = await callAppsScript<ItemRowBase[]>("readSince", {
-    tab: ITEM_TAB[tipo],
-    desde: since,
-  });
+  const linhas = await callAppsScript<ItemRowBase[]>(
+    "readSince",
+    { tab: ITEM_TAB[tipo], desde: since },
+    LEITURA_GRANDE
+  );
   return linhas.filter((row) => canRead(row, sessionUserId));
 }
 
@@ -107,15 +112,17 @@ export async function listVisibleIndex(
 ): Promise<ItemIndexEntry[]> {
   let linhas: (ItemIndexEntry & ItemRowBase)[];
   try {
-    linhas = await callAppsScript<(ItemIndexEntry & ItemRowBase)[]>("readIndex", {
-      tab: ITEM_TAB[tipo],
-    });
+    linhas = await callAppsScript<(ItemIndexEntry & ItemRowBase)[]>(
+      "readIndex",
+      { tab: ITEM_TAB[tipo] },
+      LEITURA_GRANDE
+    );
   } catch {
     // Enquanto o Codigo.gs com `readIndex` não estiver publicado, cai pra ler a aba e calcular o
     // hash aqui. Não traz o ganho nenhum (a resposta grande do Apps Script é justamente o
     // problema), mas mantém o app funcionando entre o deploy do código e o do script — foi
     // exatamente essa lacuna que quebrou a criação de item no 7d220f4.
-    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
+    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] }, LEITURA_GRANDE);
     linhas = todas.map((row) => ({ ...row, h: hashRow(row) }) as ItemIndexEntry & ItemRowBase);
   }
   return linhas.filter((row) => canRead(row, sessionUserId)).map(({ id, h }) => ({ id, h }));
@@ -132,10 +139,10 @@ export async function listVisibleItemsByIds(
   const pedidos = new Set(ids.map(String));
   let linhas: ItemRowBase[];
   try {
-    linhas = await callAppsScript<ItemRowBase[]>("readByIds", { tab: ITEM_TAB[tipo], ids });
+    linhas = await callAppsScript<ItemRowBase[]>("readByIds", { tab: ITEM_TAB[tipo], ids }, LEITURA_GRANDE);
   } catch {
     // Mesmo motivo do fallback de listVisibleIndex.
-    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] });
+    const todas = await callAppsScript<ItemRowBase[]>("read", { tab: ITEM_TAB[tipo] }, LEITURA_GRANDE);
     linhas = todas.filter((row) => pedidos.has(String(row.id)));
   }
   return linhas.filter((row) => canRead(row, sessionUserId));
@@ -293,9 +300,10 @@ export async function uploadItemPhoto(
   // Script leva de 3s a 60s conforme o humor do Google (medido em 2026-09-03), juntar as duas é
   // o que tira essa rota da faixa em que ela estourava o tempo da função.
   //
-  // `tentativas: 1` de propósito: repetir um upload que talvez já tenha funcionado cria uma
-  // cópia da foto no Drive (ver comentário de idempotência em client.ts). Timeout mais folgado
-  // que o padrão porque aqui trafega o arquivo inteiro.
+  // Retentável porque o `uploadId` é o mesmo em todas as tentativas desta chamada: se a anterior
+  // já criou o arquivo, o Apps Script devolve o mesmo em vez de duplicar (`arquivoJaEnviado`).
+  // Até a implantação nova do Codigo.gs isso é ignorado lá e uma repetição duplicaria a foto -
+  // por isso o push só sai depois do probe. Timeout mais folgado que o padrão: trafega o arquivo.
   const uploaded = await callAppsScript<DriveUploadResult>(
     "itemFotoUpload",
     {
@@ -309,8 +317,9 @@ export async function uploadItemPhoto(
       colUrl: ITEM_IMG_URL_COL[tipo],
       colNome: ITEM_IMG_NOME_COL[tipo],
       updatedAt: nowIso(),
+      uploadId: crypto.randomUUID(),
     },
-    { tentativas: 1, timeoutMs: 120_000 },
+    { tentativas: 3, timeoutMs: 60_000 },
   );
 
   return { ok: true, url: uploaded.url, imgNome: uploaded.name };

@@ -28,5 +28,6 @@ export async function fetchLibFileInfo(fileId: string): Promise<{ name: string; 
 export async function downloadLibFile(
   fileId: string,
 ): Promise<{ name: string; mimeType: string; base64Data: string }> {
-  return callAppsScript("libDownloadFile", { fileId });
+  // PDF grande (~25MB) leva de verdade dezenas de segundos - o teto curto padrão mataria.
+  return callAppsScript("libDownloadFile", { fileId }, { timeoutMs: 60_000, tentativas: 3 });
 }
