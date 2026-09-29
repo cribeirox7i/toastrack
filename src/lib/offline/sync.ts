@@ -518,14 +518,20 @@ export function initSync(): void {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && isOnline()) {
       pushOutbox().catch(() => {});
-    }
-  });
-  setInterval(() => {
-    if (isOnline()) {
-      pushOutbox().catch(() => {});
       Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
     }
-  }, 60_000);
+  });
+  // `pullItemsIfStale` já é barato quando nada mudou (só checa `/meta`), mas cada checagem ainda
+  // é uma função serverless - rodando a cada 60s com a aba em segundo plano (comum numa
+  // degustação em grupo, várias pessoas com o app aberto no bolso) isso vira o maior consumidor
+  // de "Fluid Provisioned Memory" da conta Vercel (86% da cota do time em 2026-09-29, contra 5%
+  // do FinTrack, que tinha o mesmo padrão - ver commit 8ff0b78 lá). Só roda com a aba visível;
+  // intervalo maior porque o pull ao voltar pra aba/reconectar já cobre o caso comum.
+  setInterval(() => {
+    if (!isOnline() || document.visibilityState !== "visible") return;
+    pushOutbox().catch(() => {});
+    Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
+  }, 5 * 60_000);
 }
 
 export type { ItemTab, RawItemRow } from "./db";
