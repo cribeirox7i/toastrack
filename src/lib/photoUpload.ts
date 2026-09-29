@@ -475,6 +475,7 @@ function agendarRetentativaFoto() {
   retryDelay = Math.min(retryDelay * 2, 60_000);
   retryTimer = setTimeout(() => {
     retryTimer = null;
+    if (document.visibilityState !== "visible") return; // volta pelo visibilitychange
     void flushPhotoOutbox();
   }, delay);
 }
@@ -580,7 +581,12 @@ export function initPhotoOutbox(): void {
     if (document.visibilityState === "visible") void flushPhotoOutbox();
   });
   syncEvents.addEventListener("remap", () => void flushPhotoOutbox());
-  setInterval(() => void flushPhotoOutbox(), 45_000);
+  // Só com a tela visível: em segundo plano cada rodada reenviava a foto inteira (~400 KB) a uma
+  // função serverless que espera o Apps Script - consumo sem ninguém olhando. Ao voltar pra aba o
+  // `visibilitychange` acima já esvazia a fila.
+  setInterval(() => {
+    if (document.visibilityState === "visible") void flushPhotoOutbox();
+  }, 45_000);
 }
 
 /** Laudo em texto, pro botão "Detalhes" do erro - é isto que o Carlos me manda por print quando

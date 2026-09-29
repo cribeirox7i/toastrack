@@ -113,6 +113,27 @@ async function postJson<T>(url: string, body: unknown): Promise<T | null> {
 const syncedAtKey = (tab: ItemTab) => `syncedAt:${tab}`;
 
 /**
+ * Carimbo de uma aba, via UMA chamada que traz as 4 (`/api/items/meta`). Os `pullItemsIfStale` das
+ * 4 abas disparam juntos; antes cada um pedia o seu, o que eram 4 funções serverless por ciclo,
+ * cada uma parada esperando o Apps Script (Fluid Provisioned Memory cobra o tempo parado). A
+ * promessa é compartilhada por alguns segundos, o bastante pra os 4 pedidos simultâneos caírem
+ * na mesma requisição e curto o bastante pra nunca servir um carimbo velho ao ciclo seguinte.
+ */
+let stampsEmVoo: { promessa: Promise<Record<string, string> | null>; em: number } | null = null;
+
+async function getStamp(tab: ItemTab): Promise<{ updatedAt: string } | null> {
+  if (!stampsEmVoo || Date.now() - stampsEmVoo.em > 5_000) {
+    stampsEmVoo = { promessa: getJson<Record<string, string>>("/api/items/meta"), em: Date.now() };
+  }
+  const todos = await stampsEmVoo.promessa;
+  if (!todos || typeof todos[tab] !== "string") {
+    stampsEmVoo = null; // falhou: o próximo pedido tenta de novo em vez de reaproveitar o vazio
+    return null;
+  }
+  return { updatedAt: todos[tab] };
+}
+
+/**
  * Atualiza o cache local de uma aba de item se (e só se) o servidor tiver algo mais novo.
  * 1. Sem carimbo local → busca tudo (`GET /api/items/[tab]`), grava, carimba com o valor de
  *    `/api/items/[tab]/meta` (nunca calculado a partir das linhas — o servidor é quem sabe).
@@ -129,13 +150,13 @@ export async function pullItemsIfStale(tab: ItemTab): Promise<void> {
     // vezes — ver syncTabByIndex). Em lotes, um lote que falhe não derruba a carga inteira.
     const r = await syncTabByIndex(tab);
     if (r.erro) return;
-    const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
+    const meta = await getStamp(tab);
     if (meta) await setMeta(syncedAtKey(tab), meta.updatedAt);
     notifyChange();
     return;
   }
 
-  const meta = await getJson<{ updatedAt: string }>(`/api/items/${tab}/meta`);
+  const meta = await getStamp(tab);
   if (!meta || meta.updatedAt === local) return; // já em dia, não gasta a chamada de delta
 
   const delta = await getJson<RawItemRow[]>(`/api/items/${tab}?since=${encodeURIComponent(local)}`);
@@ -331,6 +352,8 @@ function agendarRetentativa() {
   retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS);
   retryTimer = setTimeout(() => {
     retryTimer = null;
+    // Em segundo plano espera: o `visibilitychange` esvazia a fila ao voltar pra aba.
+    if (document.visibilityState !== "visible") return;
     pushOutbox().catch(() => {});
   }, delay);
 }

@@ -1400,6 +1400,19 @@ de atenção: o lock de escrita hoje é o `LockService` do Apps Script (na API p
 estratégia, ex. append com `insertDataOption` e checagem de id depois, ou serializar por aba
 via a própria função), e o hash do índice (`hashLinha`) passa a ser calculado no Next.
 
+## 8.24 Fluid Provisioned Memory subindo sem ninguém usando (2026-09-29)
+
+Sem acesso aos logs da Vercel daqui (CLI sem login), o diagnóstico foi por leitura de código. Fluid
+Provisioned Memory cobra o tempo em que a função está ativa, INCLUSIVE parada esperando o Apps
+Script (que trava 10-50s em 20-30% das chamadas, ver 8.23). Corrigido o que gerava invocação sem
+ninguém olhando: (1) o `setInterval` de 45s da fila de fotos e os timers de retentativa (texto e
+foto) agora só rodam com a aba visível; (2) os 4 carimbos por ciclo viraram UMA chamada
+(`/api/items/meta`, 4 leituras em paralelo dentro de uma função) em vez de 4 funções
+(`/api/items/[tipo]/meta`, que continua existindo pro `refreshAllNow`). Suspeita não confirmada:
+aparelhos com o app aberto rodando um bundle antigo (o PWA só troca de versão ao recarregar), ainda
+com o ciclo de 60s sem checar visibilidade. O passo 2 de 8.23 (sair do Apps Script) é o que
+realmente encolhe o tempo por invocação.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade
