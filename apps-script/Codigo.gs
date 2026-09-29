@@ -441,14 +441,20 @@ function inserirLinhas(nome, rows) {
   try {
     const sh = getSheet(nome);
     const headers = sh.getRange(1, 1, 1, sh.getLastColumn() || ESTRUTURA[nome].length).getValues()[0];
-    const idCol = headers.indexOf('id');
+    // Coluna que identifica a linha pra não duplicar num reenvio: "id" nas abas de item; nas demais
+    // (log, user) a primeira coluna de ESTRUTURA (log_id / user_id). Sem isso o `log` não tinha
+    // deduplicação nenhuma e cada retentativa gravava a linha de novo (achado 2026-09-29: a mesma
+    // linha de log 4x, uma por tentativa).
+    var idCol = headers.indexOf('id');
+    if (idCol === -1) idCol = headers.indexOf(ESTRUTURA[nome][0]);
+    const idChave = idCol === -1 ? 'id' : headers[idCol];
     const qtdLinhasDados = sh.getLastRow() - 1;
     const idsExistentes = (idCol === -1 || qtdLinhasDados < 1)
       ? []
       : sh.getRange(2, idCol + 1, qtdLinhasDados).getValues().map(function (r) { return String(r[0]); });
 
     const novasLinhas = rows.filter(function (obj) {
-      return idCol === -1 || idsExistentes.indexOf(String(obj.id)) === -1;
+      return idCol === -1 || idsExistentes.indexOf(String(obj[idChave])) === -1;
     });
     if (!novasLinhas.length) return null;
 
@@ -1047,6 +1053,41 @@ function corrigirCompartilhamentoDeUmaAba(aba) {
   });
   Logger.log(aba + ': ' + corrigidas + ' corrigidas, ' + jaEstavamOk + ' já estavam ok, ' +
     semFoto + ' sem foto, ' + falharam + ' falharam');
+}
+
+/**
+ * Remove da aba `log` as linhas repetidas (mesmo log_id), mantendo a primeira de cada. Limpa o
+ * estrago das retentativas anteriores à deduplicação de `inserirLinhas` (2026-09-29). Rodar
+ * manualmente no editor; idempotente. Loga quantas removeu.
+ */
+function removerLogsDuplicados() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const sh = getSheet('log');
+    const values = sh.getDataRange().getValues();
+    const headers = (values[0] || []).map(String);
+    const col = headers.indexOf('log_id');
+    if (col === -1) throw new Error('Aba log sem coluna log_id');
+    const vistos = {};
+    const mantidas = [];
+    for (let r = 1; r < values.length; r++) {
+      const chave = String(values[r][col]);
+      if (chave && vistos[chave]) continue;
+      vistos[chave] = true;
+      mantidas.push(values[r]);
+    }
+    const removidas = (values.length - 1) - mantidas.length;
+    if (removidas > 0) {
+      sh.getRange(2, 1, values.length - 1, headers.length).clearContent();
+      sh.getRange(2, 1, mantidas.length, headers.length)
+        .setNumberFormat('@')
+        .setValues(mantidas.map(function (l) { return l.map(sanitizarValor); }));
+    }
+    Logger.log('log: ' + removidas + ' linhas duplicadas removidas, ' + mantidas.length + ' mantidas');
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 // ---------- TESTE DE AUTORIZAÇÃO (executar no editor para conceder os escopos) ----------
