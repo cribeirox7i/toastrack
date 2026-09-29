@@ -1413,6 +1413,29 @@ aparelhos com o app aberto rodando um bundle antigo (o PWA só troca de versão 
 com o ciclo de 60s sem checar visibilidade. O passo 2 de 8.23 (sair do Apps Script) é o que
 realmente encolhe o tempo por invocação.
 
+## 8.25 `dest` recarregando a aba inteira a cada abertura do app (2026-09-29)
+
+Achado por dado, não palpite: o Carlos mandou um trecho dos logs da Vercel (19:06, app abrindo de
+verdade) em que, das 4 abas de item, só `dest` chamava `/sync-index` (carga completa, cara) em vez
+de só `/meta` (checagem barata). Sondado `metaGet` das 4 abas contra a planilha real: `beer`/
+`wine`/`drink` tinham carimbo, `dest` tinha `""` - porque NENHUMA escrita jamais tocou a aba `dest`
+desde que SyncMeta existe (metaGet devolve `''` quando a chave não existe, ver Codigo.gs).
+
+Causa: `getMeta` (IndexedDB) devolve `undefined` quando a chave não existe e a própria string `""`
+depois de gravada - ambos "falsy" em JS. `pullItemsIfStale` testava `if (!local)` pra decidir "essa
+aba nunca sincronizou aqui, faz carga completa". Depois da carga completa ele grava o carimpo do
+servidor (`""`, porque `dest` nunca foi escrita) no IndexedDB - e na PRÓXIMA abertura do app, `""`
+também é falsy, então repete a carga completa. Todo aparelho, toda abertura, pra sempre (até
+alguém escrever em `dest` pela primeira vez, cujo carimbo deixa de ser vazio).
+
+**Fix:** `local === undefined` em vez de `!local` - string vazia é um carimbo válido ("sincronizei,
+servidor não tinha nada mais novo"), só a ausência da chave é "nunca sincronizei aqui".
+
+Vale como suspeito pro consumo de Fluid Provisioned Memory relatado nesta mesma data (ver 8.23/
+8.24): não é o maior gasto por chamada (a aba `dest`, ao contrário da `beer`, não é gigante), mas é
+uma chamada cara repetida em TODA abertura de app, em TODO aparelho, sem exceção - o tipo de
+multiplicador que passa despercebido numa medição pontual.
+
 ## 9. O que se perde e o que se ganha
 
 **Perde:** RLS (a segurança passa a depender de código nosso), transações, integridade

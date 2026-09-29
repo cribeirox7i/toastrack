@@ -144,7 +144,12 @@ export async function pullItemsIfStale(tab: ItemTab): Promise<void> {
   if (!isOnline()) return;
   const local = (await getMeta(syncedAtKey(tab))) as string | undefined;
 
-  if (!local) {
+  // `=== undefined`, não `!local`: uma aba sem NENHUMA escrita desde sempre (achado 2026-09-29,
+  // `dest`) tem carimbo remoto "" - uma string vazia é um carimbo válido ("já sincronizei, e o
+  // servidor não tem nada mais novo"), não "nunca sincronizei". Tratar como falsy fazia o
+  // aparelho refazer a carga completa (`syncTabByIndex`, a chamada mais cara) TODA VEZ que o app
+  // abria, porque nunca conseguia gravar um carimbo "verdadeiro" no IndexedDB.
+  if (local === undefined) {
     // Primeira carga neste aparelho: vai pelo índice + lotes, nunca por um `read` da aba inteira
     // (o `beer` real são 1,84 MB numa resposta só, que chegou a levar 2min38 e a falhar 1 em 5
     // vezes — ver syncTabByIndex). Em lotes, um lote que falhe não derruba a carga inteira.
