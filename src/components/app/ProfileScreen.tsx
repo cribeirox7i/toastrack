@@ -639,14 +639,14 @@ export default function ProfileScreen() {
       <div className={cardCls}>
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <div className="text-[14px] font-bold">Pausar sincronização automática</div>
+            <div className="text-[14px] font-bold">Sincronização automática</div>
             <div className={`mt-0.5 text-[12.5px] ${paused ? "font-bold text-danger" : "text-muted"}`}>
               {paused
-                ? "PAUSADA: nada sobe sozinho. Desligue pra voltar a enviar."
-                : "Desligada = o app envia sozinho. Ligue só pra investigar um item preso."}
+                ? "Desligada: nada sobe sozinho. Use o botão abaixo pra enviar."
+                : "Ligada: o app envia e atualiza sozinho."}
             </div>
           </div>
-          <Toggle on={paused} onToggle={togglePaused} />
+          <Toggle on={!paused} onToggle={togglePaused} />
         </div>
         <button
           onClick={() => void forceSyncNow()}
