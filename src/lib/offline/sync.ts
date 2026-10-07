@@ -391,7 +391,7 @@ export function setSyncPaused(paused: boolean): void {
  *  servidor devolveu um id diferente do que o cliente mandou - ver ITEM_ID_SEQUENCIAL abaixo. */
 type SendResult =
   | { status: "ok"; remap?: { tab: ItemTab; oldId: string; newId: string } }
-  | { status: "network-error" }
+  | { status: "network-error"; message: string }
   | { status: "error"; message: string; transient: boolean };
 
 export async function pushOutbox(opts?: { force?: boolean }): Promise<void> {
@@ -421,7 +421,12 @@ async function enviarFila(): Promise<boolean> {
   for (const entry of entries) {
     if (entry.attempts >= MAX_OUTBOX_ATTEMPTS) continue;
     const result = await sendOutboxEntry(entry);
-    if (result.status === "network-error") return true; // provavelmente caiu o sinal - tenta depois
+    if (result.status === "network-error") {
+      // Provavelmente caiu o sinal - tenta depois. Não conta tentativa (rede não é culpa da
+      // entrada), mas grava o motivo pra aparecer no card da fila do Perfil.
+      if (entry.lastError !== result.message) await updateOutboxEntry({ ...entry, lastError: result.message });
+      return true;
+    }
     if (result.status === "ok") {
       await removeOutboxEntry(entry.localId);
       if (result.remap) await remapItemId(result.remap.tab, result.remap.oldId, result.remap.newId, entries);
@@ -474,6 +479,13 @@ async function remapItemId(tab: ItemTab, oldId: string, newId: string, pendingEn
  *  requisição pendurada - vira "network-error" e a fila retenta em vez de travar em `pushing`. */
 const ENVIO_TIMEOUT_MS = 90_000;
 
+/** `AbortSignal.timeout` não existe em WebView/Safari antigos - chamá-lo direto lançava TypeError
+ *  ANTES do fetch sair, e o `catch` tratava como "sem rede": nada subia e não ficava pista do
+ *  motivo (mesma ressalva já registrada em photoUpload.ts). Sem suporte, o envio segue sem teto. */
+function sinalDeTimeout(ms: number): AbortSignal | undefined {
+  return "timeout" in AbortSignal ? AbortSignal.timeout(ms) : undefined;
+}
+
 async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
   try {
     let res: Response;
@@ -483,7 +495,7 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(entry.payload),
-          signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS),
+          signal: sinalDeTimeout(ENVIO_TIMEOUT_MS),
         });
         break;
       case "updateItem":
@@ -491,11 +503,11 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(entry.payload),
-          signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS),
+          signal: sinalDeTimeout(ENVIO_TIMEOUT_MS),
         });
         break;
       case "deleteItem":
-        res = await fetch(`/api/items/${entry.tab}/${entry.itemId}`, { method: "DELETE", signal: AbortSignal.timeout(ENVIO_TIMEOUT_MS) });
+        res = await fetch(`/api/items/${entry.tab}/${entry.itemId}`, { method: "DELETE", signal: sinalDeTimeout(ENVIO_TIMEOUT_MS) });
         break;
     }
     if (!res.ok) {
@@ -511,8 +523,12 @@ async function sendOutboxEntry(entry: OutboxEntry): Promise<SendResult> {
       }
     }
     return { status: "ok" };
-  } catch {
-    return { status: "network-error" };
+  } catch (err) {
+    // O motivo vai pro card "Fila de sincronização" do Perfil (lastError): antes uma falha de rede
+    // - ou qualquer exceção antes do fetch sair - não deixava rastro nenhum.
+    const nome = err instanceof Error ? err.name : "Erro";
+    const msg = err instanceof Error ? err.message : String(err);
+    return { status: "network-error", message: `${nome}: ${msg}` };
   }
 }
 
@@ -581,6 +597,19 @@ export async function deleteItemOffline(tab: ItemTab, id: string): Promise<void>
 
 let initialized = false;
 
+// Intervalo mínimo entre pulls automáticos. Evita que alternar entre apps (visibilitychange
+// disparando várias vezes em sequência) gere uma chamada serverless a /api/items/meta por
+// alternância - o que acumulava custo de Fluid Provisioned Memory mesmo sem nada mudando.
+// O pull ao voltar online não tem throttle (reconexão é sinal explícito de "pode ter mudado").
+const MIN_PULL_INTERVALO_MS = 60_000;
+let ultimoPullEm = 0;
+
+function pullSeNaoRecente() {
+  if (Date.now() - ultimoPullEm < MIN_PULL_INTERVALO_MS) return;
+  ultimoPullEm = Date.now();
+  Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
+}
+
 /** Chamar uma vez no boot client-side (ver CatalogProvider). Sincroniza ao voltar online, ao
  *  focar a aba, e periodicamente — mesmo padrão do TravelTrack. */
 export function initSync(): void {
@@ -589,6 +618,7 @@ export function initSync(): void {
 
   window.addEventListener("online", () => {
     pushOutbox().catch(() => {});
+    ultimoPullEm = Date.now();
     Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
     notifyChange();
   });
@@ -596,18 +626,18 @@ export function initSync(): void {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && isOnline()) {
       pushOutbox().catch(() => {});
-      Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
+      // Throttle: evita uma chamada a /api/items/meta a cada vez que o usuário alterna entre apps
+      // ou desliga/liga a tela. O evento `online` e o setInterval abaixo cobrem os casos em que
+      // o pull realmente importa; aqui o custo serverless era maior que o benefício.
+      pullSeNaoRecente();
     }
   });
-  // `pullItemsIfStale` já é barato quando nada mudou (só checa `/meta`), mas cada checagem ainda
-  // é uma função serverless - rodando a cada 60s com a aba em segundo plano (comum numa
-  // degustação em grupo, várias pessoas com o app aberto no bolso) isso vira o maior consumidor
-  // de "Fluid Provisioned Memory" da conta Vercel (86% da cota do time em 2026-09-29, contra 5%
-  // do FinTrack, que tinha o mesmo padrão - ver commit 8ff0b78 lá). Só roda com a aba visível;
-  // intervalo maior porque o pull ao voltar pra aba/reconectar já cobre o caso comum.
+  // Só roda com a aba visível (mesmo padrão do fix de 2026-09-29). Atualiza ultimoPullEm pra
+  // que o próximo visibilitychange não dispare um pull redundante logo em seguida.
   setInterval(() => {
     if (!isOnline() || document.visibilityState !== "visible") return;
     pushOutbox().catch(() => {});
+    ultimoPullEm = Date.now();
     Promise.all(ITEM_TABS.map((t) => pullItemsIfStale(t))).catch(() => {});
   }, 5 * 60_000);
 }
