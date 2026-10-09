@@ -10,10 +10,11 @@ import {
 } from "react";
 import Icon from "@/components/Icon";
 
-type Categoria = "imagem" | "pdf" | "docx" | "xlsx" | "nao-suportado";
+type Categoria = "imagem" | "pdf" | "docx" | "xlsx" | "epub" | "nao-suportado";
 
-/** Decide o tipo pelo mimeType (principal) com fallback na extensão do nome — só os 6 aceitos
- *  pela Biblioteca (pedido do Carlos 2026-09-25); qualquer outro é recusado antes de baixar bytes. */
+/** Decide o tipo pelo mimeType (principal) com fallback na extensão do nome — só os 7 aceitos
+ *  pela Biblioteca (6 de 2026-09-25 + EPUB, pedido do Carlos 2026-10-09, só pra baixar);
+ *  qualquer outro é recusado antes de baixar bytes. */
 function categorizar(mimeType: string, nome: string): Categoria {
   const ext = nome.toLowerCase().split(".").pop() ?? "";
   if (mimeType === "application/pdf" || ext === "pdf") return "pdf";
@@ -26,6 +27,7 @@ function categorizar(mimeType: string, nome: string): Categoria {
     return "docx";
   if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ext === "xlsx")
     return "xlsx";
+  if (mimeType === "application/epub+zip" || ext === "epub") return "epub";
   return "nao-suportado";
 }
 
@@ -308,8 +310,8 @@ export function LibraryViewer({
 
         {estado.fase === "recusado" && (
           <p className="p-6 text-center text-sm text-white/80">
-            Tipo de arquivo não suportado pela Biblioteca — só abrem PDF, DOCX, XLSX, PNG, JPG ou
-            BMP.
+            Tipo de arquivo não suportado pela Biblioteca — só abrem PDF, DOCX, XLSX, EPUB, PNG,
+            JPG ou BMP.
           </p>
         )}
 
@@ -333,11 +335,16 @@ export function LibraryViewer({
           <PdfCanvas blob={estado.blob} url={estado.url} zoom={zoom} />
         )}
 
-        {estado.fase === "pronto" && (estado.categoria === "docx" || estado.categoria === "xlsx") && (
+        {estado.fase === "pronto" &&
+          (estado.categoria === "docx" || estado.categoria === "xlsx" || estado.categoria === "epub") && (
           <div className="flex flex-col items-center gap-3 p-6 text-center text-sm text-white/80">
             <p>
-              {estado.categoria === "docx" ? "Documento do Word" : "Planilha do Excel"} — não abre
-              aqui, mas pode baixar ou compartilhar.
+              {estado.categoria === "docx"
+                ? "Documento do Word"
+                : estado.categoria === "xlsx"
+                  ? "Planilha do Excel"
+                  : "Livro digital (EPUB)"}{" "}
+              — não abre aqui, mas pode baixar ou compartilhar.
             </p>
             <button
               type="button"
