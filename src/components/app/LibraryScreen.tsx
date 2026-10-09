@@ -5,8 +5,46 @@ import Icon, { type IconName } from "@/components/Icon";
 import { Accordion } from "@/components/ui";
 import { fetchLibrary, driveFileId, type LibEntry } from "@/lib/library";
 import { LibraryViewer } from "@/components/app/LibraryViewer";
+import capasJson from "@/lib/capas.json";
 
 const cardCls = "rounded-2xl border border-border bg-surface p-4";
+
+/** Ids de arquivo do Drive que têm capa gerada (`scripts/gerar-capas.mjs` grava `public/capas/{id}
+ *  .webp` e este índice). Estático: a capa sai da CDN, sem função serverless nem Apps Script. */
+const COM_CAPA = new Set<string>(capasJson);
+
+/** Capa de um item: retrato pra revista/livro, paisagem pra vídeo. Quem não tem capa (ou cuja
+ *  imagem falhar ao carregar) simplesmente não mostra nada - o título segue sendo o conteúdo. */
+function Capa({
+  fileId,
+  grupo,
+  titulo,
+  onOpen,
+}: {
+  fileId: string;
+  grupo: string;
+  titulo: string;
+  onOpen: () => void;
+}) {
+  const [falhou, setFalhou] = useState(false);
+  if (!COM_CAPA.has(fileId) || falhou) return null;
+  const paisagem = grupo === "Videos";
+  return (
+    <button onClick={onOpen} aria-label={`Abrir ${titulo}`} className="shrink-0 self-start">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={`/capas/${fileId}.webp`}
+        alt=""
+        loading="lazy"
+        decoding="async"
+        onError={() => setFalhou(true)}
+        className={`rounded-lg border border-border bg-accent-soft object-cover ${
+          paisagem ? "aspect-video w-24" : "aspect-[3/4] w-16"
+        }`}
+      />
+    </button>
+  );
+}
 
 /** Lista canônica de grupos (pedido do Carlos 2026-09-25) — define ordem de exibição e ícone; só
  *  esses 5 vão existir por enquanto. Um `lib_grupo` fora dessa lista ainda funciona (cai no fim,
@@ -110,29 +148,40 @@ export default function LibraryScreen() {
               <div className="flex flex-col divide-y divide-border">
                 {items.map((item) => {
                   const clicavel = Boolean(item.link);
+                  const fileId = item.link ? driveFileId(item.link) : null;
                   return (
-                    <div key={item.id} className="flex flex-col gap-1.5 py-3 first:pt-0">
-                      {clicavel ? (
-                        <button
-                          onClick={() => abrirItem(item)}
-                          className="flex items-center gap-2 text-left"
-                        >
-                          <div className="min-w-0 flex-1 text-[13.5px] font-bold text-accent">
-                            {item.titulo}
+                    <div key={item.id} className="flex gap-3 py-3 first:pt-0">
+                      {fileId && (
+                        <Capa
+                          fileId={fileId}
+                          grupo={grupo}
+                          titulo={item.titulo}
+                          onOpen={() => abrirItem(item)}
+                        />
+                      )}
+                      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                        {clicavel ? (
+                          <button
+                            onClick={() => abrirItem(item)}
+                            className="flex items-center gap-2 text-left"
+                          >
+                            <div className="min-w-0 flex-1 text-[13.5px] font-bold text-accent">
+                              {item.titulo}
+                            </div>
+                            <Icon name="chevronDown" size={14} className="shrink-0 -rotate-90 text-muted" />
+                          </button>
+                        ) : (
+                          <div className="text-[13.5px] font-bold">{item.titulo}</div>
+                        )}
+                        {item.descricao && (
+                          <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
+                            {item.descricao}
                           </div>
-                          <Icon name="chevronDown" size={14} className="shrink-0 -rotate-90 text-muted" />
-                        </button>
-                      ) : (
-                        <div className="text-[13.5px] font-bold">{item.titulo}</div>
-                      )}
-                      {item.descricao && (
-                        <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-muted">
-                          {item.descricao}
-                        </div>
-                      )}
-                      {!item.link && !item.descricao && (
-                        <div className="text-[12.5px] text-muted">Sem conteúdo cadastrado ainda.</div>
-                      )}
+                        )}
+                        {!item.link && !item.descricao && (
+                          <div className="text-[12.5px] text-muted">Sem conteúdo cadastrado ainda.</div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

@@ -123,6 +123,7 @@ function api(action, payload) {
       case 'driveDownloadFile': return ok(driveDownloadFile(payload));
       case 'libFileInfo':      return ok(libFileInfo(payload));
       case 'libDownloadFile':  return ok(libDownloadFile(payload));
+      case 'libThumbnails':    return ok(libThumbnails(payload));
       default:                 return erro('Ação desconhecida: ' + action);
     }
   } catch (err) {
@@ -975,6 +976,38 @@ function libFileInfo(payload) {
   if (!fileId || !libFileIdReferenciado(fileId)) throw new Error('Arquivo não encontrado na Biblioteca');
   const file = DriveApp.getFileById(fileId);
   return { name: file.getName(), mimeType: file.getMimeType() };
+}
+
+/**
+ * Miniaturas ("capas") de vários arquivos da Biblioteca de uma vez. Usa `getThumbnail()` do Drive,
+ * que funciona mesmo com o arquivo privado (o script roda como o dono) - o endereço público de
+ * miniatura do Drive NÃO serve aqui: os arquivos são privados e ele redireciona pro login.
+ *
+ * Em lote (o chamador manda poucos ids por vez) porque `libFileIdReferenciado` lê a aba `lib`
+ * inteira; fazer isso uma vez por lote em vez de uma por arquivo corta a maior parte do tempo.
+ * Chamada só pelo script de geração de capas (`scripts/gerar-capas.mjs`), nunca pelo app em uso.
+ * Devolve { fileId: {mimeType, base64Data} | null } - null quando o Drive não tem miniatura.
+ */
+function libThumbnails(payload) {
+  const ids = (payload.fileIds || []).slice(0, 10);
+  const permitidos = {};
+  lerTabela('lib').forEach(function (l) {
+    const m = /\/d\/([\w-]+)/.exec(String(l.lib_lnk_conteudo || ''));
+    if (m) permitidos[m[1]] = true;
+  });
+  const out = {};
+  ids.forEach(function (fileId) {
+    if (!permitidos[fileId]) { out[fileId] = null; return; }
+    try {
+      const blob = DriveApp.getFileById(fileId).getThumbnail();
+      out[fileId] = blob
+        ? { mimeType: blob.getContentType(), base64Data: Utilities.base64Encode(blob.getBytes()) }
+        : null;
+    } catch (err) {
+      out[fileId] = null;
+    }
+  });
+  return out;
 }
 
 /** Bytes do arquivo (base64) - só chamada depois que `libFileInfo` já confirmou um tipo aceito. */
