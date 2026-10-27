@@ -15,7 +15,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   // JWT sem estado: sem Redis/DB rápido, invalidação real cross-device não é viável nesta stack —
   // a mitigação é maxAge curto + senhaVersao no token (atualizado via update() após troca de
   // senha; validação futura pode comparar com o valor no Sheets em rotas sensíveis).
-  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
+  session: { strategy: "jwt", maxAge: 15 * 24 * 60 * 60 },
   pages: { signIn: "/login" },
   providers: [
     Credentials({
