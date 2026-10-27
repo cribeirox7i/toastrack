@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { errorResponse, requireSession } from "@/lib/apiHelpers";
+import { excedeuLimite } from "@/lib/rateLimit";
 import { changeOwnPassword } from "@/lib/sheets/users";
 import { logAccess } from "@/lib/sheets/log";
 import { senhaSchema } from "@/lib/senhaSchema";
@@ -14,10 +15,15 @@ export async function POST(req: NextRequest) {
   const auth = await requireSession();
   if ("error" in auth) return auth.error;
 
+  const { user } = auth.session;
+
+  if (excedeuLimite(`troca-senha:${user.id}`, { limite: 5, janelaMs: 15 * 60 * 1000 })) {
+    return errorResponse("Muitas tentativas de troca de senha - aguarde 15 minutos.", 429);
+  }
+
   const parsed = bodySchema.safeParse(await req.json());
   if (!parsed.success) return errorResponse(parsed.error.issues[0].message);
 
-  const { user } = auth.session;
   const resultado = await changeOwnPassword(user.id, parsed.data.senhaAtual, parsed.data.senhaNova);
   if (!resultado.ok) return errorResponse(resultado.error, 400);
 
