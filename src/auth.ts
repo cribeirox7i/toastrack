@@ -11,7 +11,11 @@ const LOGIN_LIMITE = 10;
 const LOGIN_JANELA_MS = 10 * 60 * 1000;
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
+  // maxAge de 7 dias (em vez dos 30 do padrão) reduz a janela de exposição de tokens furtados.
+  // JWT sem estado: sem Redis/DB rápido, invalidação real cross-device não é viável nesta stack —
+  // a mitigação é maxAge curto + senhaVersao no token (atualizado via update() após troca de
+  // senha; validação futura pode comparar com o valor no Sheets em rotas sensíveis).
+  session: { strategy: "jwt", maxAge: 7 * 24 * 60 * 60 },
   pages: { signIn: "/login" },
   providers: [
     Credentials({
@@ -43,24 +47,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           email: user.user_mail,
           role: (user.user_role || "user") as "admin" | "user",
           deveTrocarSenha: user.deve_trocar_senha === "true",
+          senhaVersao: (user.senha_hash ?? "").slice(0, 8),
         };
       },
     }),
   ],
   callbacks: {
-    // TODO(etapa 4): quando a rota de troca de senha existir, ela precisa chamar
-    // `update()` do lado do cliente (useSession) pra este callback rodar de novo com
-    // `trigger === "update"` e zerar `deveTrocarSenha` no token — sessão JWT não
-    // reflete sozinha uma mudança feita no Sheets no meio da sessão; sem isso a tela
-    // de "troca obrigatória" continuaria bloqueando até a pessoa deslogar e logar de novo.
     jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id as string;
         token.role = (user as { role: "admin" | "user" }).role;
         token.deveTrocarSenha = (user as { deveTrocarSenha: boolean }).deveTrocarSenha;
+        token.senhaVersao = (user as { senhaVersao: string }).senhaVersao;
       }
-      if (trigger === "update" && session?.deveTrocarSenha === false) {
-        token.deveTrocarSenha = false;
+      if (trigger === "update") {
+        if (session?.deveTrocarSenha === false) token.deveTrocarSenha = false;
+        if (session?.senhaVersao) token.senhaVersao = session.senhaVersao as string;
       }
       return token;
     },
@@ -69,6 +71,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.id as string;
         session.user.role = token.role as "admin" | "user";
         session.user.deveTrocarSenha = token.deveTrocarSenha as boolean;
+        session.user.senhaVersao = token.senhaVersao as string;
       }
       return session;
     },

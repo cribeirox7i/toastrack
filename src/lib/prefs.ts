@@ -53,17 +53,22 @@ export async function uploadProfilePhoto(
   }
 }
 
-/** Troca a senha do usuário logado (a rota reautentica com a senha atual antes de trocar). */
+/** Troca a senha do usuário logado (a rota reautentica com a senha atual antes de trocar).
+ *  Retorna `senhaVersao` no sucesso — chamar `update({ senhaVersao })` do useSession logo depois
+ *  pra o token JWT refletir a troca sem precisar de logout. */
 export async function changePassword(
   senhaAtual: string,
   senhaNova: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: true; senhaVersao: string } | { ok: false; error: string }> {
   const res = await fetch("/api/profile/senha", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ senhaAtual, senhaNova }),
   });
-  if (res.ok) return { ok: true };
+  if (res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { ok: true, senhaVersao: (body.senhaVersao as string) ?? "" };
+  }
   const body = await res.json().catch(() => ({}));
-  return { ok: false, error: body.error ?? "Erro ao alterar senha." };
+  return { ok: false, error: (body.error as string) ?? "Erro ao alterar senha." };
 }

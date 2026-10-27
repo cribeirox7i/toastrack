@@ -28,7 +28,5 @@ export async function POST(req: NextRequest) {
   if (!resultado.ok) return errorResponse(resultado.error, 400);
 
   void logAccess({ userId: user.id, userMail: user.email ?? "", acao: "alterou a senha" });
-  // Front precisa chamar update({ deveTrocarSenha: false }) do useSession logo depois desta
-  // resposta OK — ver TODO em src/auth.ts sobre a sessão JWT não se atualizar sozinha.
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, senhaVersao: resultado.senhaVersao });
 }

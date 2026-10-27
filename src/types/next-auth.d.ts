@@ -5,15 +5,17 @@ declare module "next-auth" {
     user: {
       id: string;
       role: "admin" | "user";
-      /** Espelha user.deve_trocar_senha da aba `user` no momento do login — ver TODO em
-       *  src/auth.ts sobre atualizar isso no meio da sessão. */
       deveTrocarSenha: boolean;
+      /** Prefixo do senha_hash atual — atualizado via update() após troca de senha.
+       *  Permite detectar, no futuro, tokens de sessões que não refletem a troca. */
+      senhaVersao: string;
     } & DefaultSession["user"];
   }
 
   interface User {
     role: "admin" | "user";
     deveTrocarSenha: boolean;
+    senhaVersao: string;
   }
 }
 
@@ -22,5 +24,6 @@ declare module "next-auth/jwt" {
     id: string;
     role: "admin" | "user";
     deveTrocarSenha: boolean;
+    senhaVersao: string;
   }
 }

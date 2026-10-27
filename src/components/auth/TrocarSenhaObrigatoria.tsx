@@ -47,10 +47,11 @@ export default function TrocarSenhaObrigatoria({ onDone }: { onDone: () => void 
     setBusy(false);
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(body.error ?? "Erro ao trocar a senha.");
+      setError((body.error as string) ?? "Erro ao trocar a senha.");
       return;
     }
-    await update({ deveTrocarSenha: false });
+    const body = await res.json().catch(() => ({}));
+    await update({ deveTrocarSenha: false, senhaVersao: body.senhaVersao });
     onDone();
   }
 

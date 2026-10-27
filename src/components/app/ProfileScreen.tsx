@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useSession } from "next-auth/react";
 import { useAuth } from "@/components/AuthProvider";
 import { useTheme } from "@/components/ThemeProvider";
 import Icon from "@/components/Icon";
@@ -55,6 +56,7 @@ const LANGS: { code: "pt" | "en" | "es"; label: string }[] = [
 
 export default function ProfileScreen() {
   const { userId: sessionUserId, userEmail, appUser, signOut, refreshAppUser } = useAuth();
+  const { update } = useSession();
   const { hue, mode, mounted, setHue, setMode } = useTheme();
 
   const userId = sessionUserId ?? "";
@@ -295,9 +297,10 @@ export default function ProfileScreen() {
     const res = await changePassword(pw.current, pw.next);
     setPwBusy(false);
     if (!res.ok) {
-      setPwError(res.error ?? "Erro ao alterar senha.");
+      setPwError(res.error);
       return;
     }
+    void update({ senhaVersao: res.senhaVersao });
     setPw({ current: "", next: "", confirm: "" });
     showToast("Senha alterada");
   }

@@ -117,24 +117,26 @@ export async function verifyCredentials(email: string, senha: string): Promise<U
 }
 
 /** Troca a senha do próprio usuário (reautentica com a senha atual antes) e limpa
- *  `deve_trocar_senha`. */
+ *  `deve_trocar_senha`. Retorna `senhaVersao` (prefixo do novo hash) pra o cliente atualizar
+ *  o token JWT sem precisar de logout — ver src/auth.ts. */
 export async function changeOwnPassword(
   userId: string,
   senhaAtual: string,
   senhaNova: string
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; senhaVersao: string } | { ok: false; error: string }> {
   const user = await fetchUserById(userId);
   if (!user) return { ok: false, error: "Usuário não encontrado." };
   if (!verifyPassword(senhaAtual, user.senha_hash)) {
     return { ok: false, error: "Senha atual incorreta." };
   }
+  const novoHash = hashPassword(senhaNova);
   await callAppsScript("updateByField", {
     tab: "user",
     campo: "user_id",
     valor: userId,
-    patch: { senha_hash: hashPassword(senhaNova), deve_trocar_senha: "false" },
+    patch: { senha_hash: novoHash, deve_trocar_senha: "false" },
   });
-  return { ok: true };
+  return { ok: true, senhaVersao: novoHash.slice(0, 8) };
 }
 
 /**
