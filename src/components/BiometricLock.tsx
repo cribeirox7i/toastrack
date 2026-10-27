@@ -19,7 +19,6 @@ import { isBiometricLockEnabled, verifyBiometric } from "@/lib/biometricLock";
 export default function BiometricLock({ children }: { children: ReactNode }) {
   const [locked, setLocked] = useState(false);
   const [checking, setChecking] = useState(false);
-  const [error, setError] = useState("");
 
   useLayoutEffect(() => {
     setLocked(isBiometricLockEnabled());
@@ -29,7 +28,6 @@ export default function BiometricLock({ children }: { children: ReactNode }) {
     function onVisibility() {
       if (document.visibilityState === "hidden" && isBiometricLockEnabled()) {
         setLocked(true);
-        setError("");
       }
     }
     document.addEventListener("visibilitychange", onVisibility);
@@ -47,11 +45,9 @@ export default function BiometricLock({ children }: { children: ReactNode }) {
 
   async function tryUnlock() {
     setChecking(true);
-    setError("");
     const ok = await verifyBiometric();
     setChecking(false);
     if (ok) setLocked(false);
-    else setError("Não foi possível confirmar. Toque para tentar de novo.");
   }
 
   return (
@@ -73,7 +69,6 @@ export default function BiometricLock({ children }: { children: ReactNode }) {
           >
             {checking ? "Confirmando…" : "Desbloquear"}
           </button>
-          {error && <div className="text-center text-[12.5px] font-semibold text-danger">{error}</div>}
         </div>
       )}
     </>
