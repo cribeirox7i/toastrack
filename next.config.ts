@@ -17,7 +17,7 @@ import type { NextConfig } from "next";
 // flagcdn.com: SVGs de bandeira de país (src/lib/flags.ts).
 const CSP = [
   "default-src 'self'",
-  "img-src 'self' data: https://lh3.googleusercontent.com https://flagcdn.com",
+  "img-src 'self' data: blob: https://lh3.googleusercontent.com https://flagcdn.com",
   // Next.js App Router injeta scripts inline de hidratação — sem nonce explícito, unsafe-inline
   // é necessário. Ainda assim bloqueia scripts de origens externas não listadas.
   "script-src 'self' 'unsafe-inline'",
